@@ -1,0 +1,12 @@
+questions:
+  - id: deploy-vercel-static
+    question: How do I deploy my docs site to Vercel?
+    expected:
+      - the build command is blume build
+      - the output directory is dist
+    routes: /docs/deployment
+  - id: fail-build-on-broken-links
+    question: How do I make CI fail when my docs contain broken internal links?
+    expected:
+      - run blume validate
+    routes: /docs/reference/cli

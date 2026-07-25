@@ -9,19 +9,20 @@ blume <command> [options]
 
 ## Commands
 
-| Command            | Description                                      |
-| ------------------ | ------------------------------------------------ |
-| `blume init [dir]` | Scaffold a project (interactive by default).     |
-| `blume dev`        | Start the dev server with hot reload.            |
-| `blume build`      | Build the static (or server) site.               |
-| `blume preview`    | Preview the last build.                          |
-| `blume add <item>` | Install a source component from the registry.    |
-| `blume sync`       | Re-fetch remote content sources and regenerate.  |
-| `blume eject`      | Promote the runtime into a standalone Astro app. |
-| `blume check`      | Type-check the site with `astro check`.          |
-| `blume doctor`     | Diagnose config and content problems.            |
-| `blume validate`   | Validate links across your content.              |
-| `blume audit`      | Audit the built site for SEO and health issues.  |
+| Command | Description |
+| --- | --- |
+| `blume init [dir]` | Scaffold a project (interactive by default). |
+| `blume dev` | Start the dev server with hot reload. |
+| `blume build` | Build the static (or server) site. |
+| `blume preview` | Preview the last build. |
+| `blume add <item>` | Install a source component from the registry. |
+| `blume sync` | Re-fetch remote content sources and regenerate. |
+| `blume eject` | Promote the runtime into a standalone Astro app. |
+| `blume check` | Type-check the site with `astro check`. |
+| `blume doctor` | Diagnose config and content problems. |
+| `blume validate` | Validate links across your content. |
+| `blume audit` | Audit the built site for SEO and health issues. |
+| `blume eval` | Test the docs: an agent answers your questions using only the documentation. |
 
 ## Common flags
 
@@ -58,6 +59,9 @@ blume <command> [options]
 - `blume audit --verbose` — list every affected page instead of the first few.
 - `blume audit --json` — emit the report as JSON on stdout.
 - `blume audit --claude` / `--codex` — hand the findings to Claude Code or Codex to fix interactively.
+- `blume eval` — run the questions in `evals.yaml` through an agent that reads only your docs; see [Evals](/docs/reference/eval).
+- `blume eval init` — have the agent draft a starter `evals.yaml` from your docs.
+- `blume eval --agent claude|codex --threshold <0..1> --timeout <seconds> --json --fix --verbose` — see [Evals](/docs/reference/eval) for each flag.
 
 ## Verifying while the dev server runs
 
