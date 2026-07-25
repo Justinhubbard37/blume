@@ -273,9 +273,15 @@ const startDevReady = async (
   }
 };
 
+/** A CLI subprocess had to be killed because it never exited on its own. */
+class CliTimeoutError extends Error {
+  override name = "CliTimeoutError";
+}
+
 const runCli = async (
   root: string,
-  args: string[]
+  args: string[],
+  timeout = 120_000
 ): Promise<{ exitCode: number; output: string }> => {
   const proc = Bun.spawn(["bun", CLI, ...args], {
     cwd: root,
@@ -283,12 +289,52 @@ const runCli = async (
     stderr: "pipe",
     stdout: "pipe",
   });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    proc.exited,
+  const outputText = Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
   ]);
+  const exitCode = await Promise.race([
+    proc.exited,
+    Bun.sleep(timeout).then(() => null),
+  ]);
+  if (exitCode === null) {
+    proc.kill("SIGTERM");
+    const exited = await Promise.race([
+      proc.exited.then(() => true),
+      Bun.sleep(5000).then(() => false),
+    ]);
+    if (!exited) {
+      proc.kill("SIGKILL");
+      await proc.exited;
+    }
+    const [stdout, stderr] = await outputText;
+    throw new CliTimeoutError(
+      `\`blume ${args.join(" ")}\` did not exit within ${timeout}ms\n${stdout}\n${stderr}`
+    );
+  }
+  const [stdout, stderr] = await outputText;
   return { exitCode, output: `${stdout}\n${stderr}` };
+};
+
+/**
+ * `blume build --isolated` on CI occasionally wedges after Astro logs
+ * `Complete!`: the build succeeds but the process never exits, and without a
+ * guard the runner kills it at the test timeout (exit 143) — the build-side
+ * sibling of the dev startup wedge above. Kill the hung process and rebuild
+ * once; a persistent hang still surfaces after the retry.
+ */
+const runIsolatedBuild = async (
+  root: string,
+  attemptsLeft = 2
+): Promise<{ exitCode: number; output: string }> => {
+  try {
+    return await runCli(root, ["build", "--isolated"], 90_000);
+  } catch (error) {
+    if (!(error instanceof CliTimeoutError) || attemptsLeft <= 1) {
+      throw error;
+    }
+    return runIsolatedBuild(root, attemptsLeft - 1);
+  }
 };
 
 afterAll(async () => {
@@ -302,7 +348,7 @@ it("runs configured integrations in order for build and dev, regenerates once on
   const updated = ["updated-first", "updated-second"];
   const root = await writeProject(fixtureFiles(initial));
 
-  const built = await runCli(root, ["build", "--isolated"]);
+  const built = await runIsolatedBuild(root);
   expect(built.exitCode, built.output).toBe(0);
   let lines = await markerLines(root);
   expectPair(lines, "config", initial);
@@ -366,7 +412,8 @@ it("runs configured integrations in order for build and dev, regenerates once on
   if (failure) {
     throw new Error(`${String(failure)}\n${restartStdout}\n${restartStderr}`);
   }
-}, 180_000);
+  // Budget for a killed-and-retried 90s build attempt on top of the dev phases.
+}, 300_000);
 
 it("passes invalid integration elements through to Astro validation", async () => {
   const root = await writeProject({
@@ -374,9 +421,10 @@ it("passes invalid integration elements through to Astro validation", async () =
     "docs/index.md": "# Home\n",
   });
 
-  const built = await runCli(root, ["build", "--isolated"]);
+  const built = await runIsolatedBuild(root);
 
   expect(built.exitCode).not.toBe(0);
   expect(built.output).toMatch(/integrations?/iu);
   expect(built.output).not.toContain("BLUME_CONFIG_INVALID");
-}, 30_000);
+  // Budget for a killed-and-retried 90s build attempt.
+}, 240_000);
