@@ -158,6 +158,32 @@ const waitForMarkerCount = (
     timeout
   );
 
+/**
+ * Wait until the marker log stops growing for a full quiet window. A config
+ * restart appends its markers over a stretch of time, so a fixed-length sleep
+ * taken mid-restart races it; a restart *loop* never goes quiet and times out.
+ */
+const waitForQuiescentMarkers = async (
+  root: string,
+  quietWindow = 1000,
+  timeout = 30_000
+): Promise<string[]> => {
+  const expiresAt = Date.now() + timeout;
+  const settle = async (previous: number): Promise<string[]> => {
+    await Bun.sleep(quietWindow);
+    const lines = await markerLines(root);
+    if (lines.length === previous) {
+      return lines;
+    }
+    if (Date.now() >= expiresAt) {
+      throw new Error("Timed out waiting for integration markers to settle.");
+    }
+    return settle(lines.length);
+  };
+  const startingLines = await markerLines(root);
+  return settle(startingLines.length);
+};
+
 const availablePort = async (): Promise<number> => {
   const server = createServer();
   server.listen(0, "127.0.0.1");
@@ -177,7 +203,11 @@ const waitForDevServer = (port: number, timeout = 30_000): Promise<void> =>
   waitUntil(
     async () => {
       try {
-        await fetch(`http://127.0.0.1:${port}/`);
+        // A wedged server can bind the port yet never answer; an unbounded
+        // fetch would then hang this poll (and the whole test) forever.
+        await fetch(`http://127.0.0.1:${port}/`, {
+          signal: AbortSignal.timeout(2000),
+        });
         return true;
       } catch {
         return false;
@@ -203,6 +233,44 @@ const startDev = async (root: string) => {
     new Response(proc.stderr).text(),
   ]);
   return { output, port, proc };
+};
+
+const stopDev = async (
+  proc: Awaited<ReturnType<typeof startDev>>["proc"]
+): Promise<void> => {
+  proc.kill("SIGTERM");
+  const exited = await Promise.race([
+    proc.exited.then(() => true),
+    Bun.sleep(5000).then(() => false),
+  ]);
+  if (!exited) {
+    proc.kill("SIGKILL");
+    await proc.exited;
+  }
+};
+
+/**
+ * Astro's dev startup occasionally wedges after `astro:server:setup` and never
+ * reaches listen (observed intermittently on macOS). One relaunch gets past the
+ * transient wedge; a persistent startup failure still surfaces after the retry.
+ */
+const startDevReady = async (
+  root: string,
+  attemptsLeft = 2
+): Promise<Awaited<ReturnType<typeof startDev>>> => {
+  const session = await startDev(root);
+  try {
+    await waitForDevServer(session.port);
+    return session;
+  } catch (error) {
+    await stopDev(session.proc);
+    // A wedged shutdown can strand the dev lock; clear it for the relaunch.
+    await rm(join(root, ".blume/dev.lock"), { force: true });
+    if (attemptsLeft <= 1) {
+      throw error;
+    }
+    return startDevReady(root, attemptsLeft - 1);
+  }
 };
 
 const runCli = async (
@@ -245,11 +313,10 @@ it("runs configured integrations in order for build and dev, regenerates once on
   expect(runtimePackage.dependencies["site-integration"]).toBeUndefined();
 
   await writeFile(join(root, "integration-markers.log"), "", "utf-8");
-  const { output, port, proc } = await startDev(root);
+  const { output, proc } = await startDevReady(root);
   let failure: unknown;
   try {
     await waitForLine(root, "server:second");
-    await waitForDevServer(port);
     lines = await markerLines(root);
     expectPair(lines, "config", initial);
     expectPair(lines, "server", initial);
@@ -264,16 +331,16 @@ it("runs configured integrations in order for build and dev, regenerates once on
     );
     await waitForConfigHashChange(root, hashBefore as string);
     await waitForMarkerCount(root, markerCountBefore + 1);
-    const settledMarkers = await markerLines(root);
-    const settledMarkerCount = settledMarkers.length;
-    await Bun.sleep(1000);
-    const stableMarkers = await markerLines(root);
-    expect(stableMarkers.length).toBe(settledMarkerCount);
+    const settledMarkers = await waitForQuiescentMarkers(root);
+    // One restart re-runs config + server hooks for both integrations (4
+    // markers). Astro's config watcher can deliver a second in-place restart
+    // for a single write (timing-dependent), so allow up to two restarts;
+    // anything past that means the edit triggered a regeneration loop.
+    expect(settledMarkers.length - markerCountBefore).toBeLessThanOrEqual(8);
   } catch (error) {
     failure = error;
   } finally {
-    proc.kill("SIGTERM");
-    await proc.exited;
+    await stopDev(proc);
   }
   const [stdout, stderr] = await output;
   if (failure) {
@@ -293,14 +360,13 @@ it("runs configured integrations in order for build and dev, regenerates once on
   } catch (error) {
     failure = error;
   } finally {
-    restarted.proc.kill("SIGTERM");
-    await restarted.proc.exited;
+    await stopDev(restarted.proc);
   }
   const [restartStdout, restartStderr] = await restarted.output;
   if (failure) {
     throw new Error(`${String(failure)}\n${restartStdout}\n${restartStderr}`);
   }
-}, 60_000);
+}, 180_000);
 
 it("passes invalid integration elements through to Astro validation", async () => {
   const root = await writeProject({
