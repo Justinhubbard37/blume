@@ -78,6 +78,11 @@ const searchMetaSchema = z.strictObject({
   tags: z.array(z.string()).optional(),
 });
 
+const aiMetaSchema = z.strictObject({
+  /** Exclude this page from llms.txt and llms-full.txt. */
+  exclude: z.boolean().default(false),
+});
+
 const changelogMetaSchema = z.strictObject({
   category: z.string().optional(),
   date: dateSchema.optional(),
@@ -105,6 +110,7 @@ const authorSchema = z.union([
 
 /** Frontmatter accepted on any content page. */
 const pageMetaBaseSchema = z.strictObject({
+  ai: aiMetaSchema.default({}),
   /** Post author(s) for blog/changelog content; preserved, not yet rendered. */
   authors: z.union([authorSchema, z.array(authorSchema)]).optional(),
   changelog: changelogMetaSchema.optional(),
@@ -575,18 +581,44 @@ const mcpConfigSchema = z.strictObject({
   route: z.string().default("/mcp").transform(normalizeRoute),
 });
 
+const askEndpointSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .refine(
+    (value) => {
+      if (value.startsWith("/") && !value.startsWith("//")) {
+        return true;
+      }
+      try {
+        const url = new URL(value);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch {
+        return false;
+      }
+    },
+    {
+      message:
+        "ai.ask.endpoint must be an HTTP(S) URL or a root-relative path.",
+    }
+  );
+
 const aiConfigSchema = z.strictObject({
   ask: z
     .strictObject({
       // Name of the env var holding the provider's API key; each provider has
       // a sensible default, so this only needs setting to override it.
       apiKeyEnv: z.string().optional(),
-      // Base URL of the backend. Required for `openai-compatible`; for the
-      // named providers it overrides the built-in preset.
+      // Base URL of the backend. Required for `openai-compatible` only when no
+      // external endpoint is supplied; for named providers it overrides the preset.
       // blume bundles Zod 3; top-level `z.url()` is undefined at runtime.
       // oxlint-disable-next-line react-doctor/zod-v4-prefer-top-level-string-formats
       baseUrl: z.string().url().optional(),
       enabled: z.boolean().default(false),
+      // Optional external endpoint for projects that keep their docs static
+      // and host Ask AI in an existing backend. Absolute URLs and root-relative
+      // paths are both valid; the built-in request/stream contract is unchanged.
+      endpoint: askEndpointSchema.optional(),
       model: z.string().default("openai/gpt-5.5"),
       provider: z.enum(askAiProviders).default("gateway"),
       // Empty-state prompts shown before the first question. Each renders as a
@@ -603,7 +635,10 @@ const aiConfigSchema = z.strictObject({
     .superRefine((value, ctx) => {
       // A generic OpenAI-compatible backend has no preset URL, so the user
       // must supply one; the named providers fall back to their preset.
-      if (value.provider === "openai-compatible" && !value.baseUrl) {
+      if (
+        value.provider === "openai-compatible" &&
+        !(value.baseUrl || value.endpoint)
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:
@@ -1118,15 +1153,21 @@ const reactConfigSchema = z.strictObject({
  * `http(s)` URL (OpenAPI for the Blume renderer; OpenAPI or AsyncAPI for Scalar).
  */
 const openapiSourceSchema = z.strictObject({
+  /** Include generated pages from this spec in llms.txt/llms-full.txt. */
+  includeInLlms: z.boolean().default(true),
+  /** Include generated pages from this spec in site search. */
+  includeInSearch: z.boolean().default(true),
   /** Nav/section label for this source. */
   label: z.string().optional(),
+  /** Emit noindex metadata and omit generated pages from the sitemap. */
+  noindex: z.boolean().default(false),
   /** Per-source route; defaults to the block's `route` (or a derived path). */
   route: z.string().optional(),
   /** Local path or `http(s)` URL to the spec. */
   spec: z.string(),
 });
 
-export type OpenApiSource = z.infer<typeof openapiSourceSchema>;
+export type OpenApiSource = z.input<typeof openapiSourceSchema>;
 
 /**
  * Arbitrary Scalar API-reference options forwarded verbatim to the generated
