@@ -129,29 +129,43 @@ const initialId =
       </div>
       {panels.map((panel) => (
         <div data-nav-panel={panel.id} hidden={panel.id !== initialId}>
-          <div class="mb-3 flex items-center gap-1.5">
-            <button
-              aria-label={n.back}
-              class="-ml-1 flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              data-nav-back={panel.parentId}
-              type="button"
-            >
-              <Icon class="rtl:-scale-x-100" name="arrow-left" size={16} />
-            </button>
-            {panel.route ? (
+          {/* The title is the only sidebar link to the section's own page, so
+              a routed panel keeps it as a link; without a route the whole row
+              becomes the back button. Either way every part of the row is
+              interactive. */}
+          {panel.route ? (
+            <div class="mb-3 flex items-center gap-0.5">
+              <button
+                aria-label={n.back}
+                class="-ml-1 flex shrink-0 items-center justify-center self-stretch rounded px-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                data-nav-back={panel.parentId}
+                type="button"
+              >
+                <Icon class="rtl:-scale-x-100" name="arrow-left" size={16} />
+              </button>
               <a
                 aria-current={panel.route === currentRoute ? "page" : undefined}
-                class="flex-1 truncate font-semibold text-foreground text-sm hover:underline"
+                class="flex-1 truncate rounded px-1 py-1 font-semibold text-foreground text-sm transition-colors hover:bg-muted"
                 href={withBase(panel.route)}
               >
                 {panel.label}
               </a>
-            ) : (
-              <span class="flex-1 truncate font-semibold text-foreground text-sm">
-                {panel.label}
-              </span>
-            )}
-          </div>
+            </div>
+          ) : (
+            <button
+              aria-label={`${n.back}: ${panel.label}`}
+              class="-ml-1 mb-3 flex w-full items-center gap-1.5 rounded p-1 text-left font-semibold text-foreground text-sm transition-colors hover:bg-muted"
+              data-nav-back={panel.parentId}
+              type="button"
+            >
+              <Icon
+                class="shrink-0 text-muted-foreground rtl:-scale-x-100"
+                name="arrow-left"
+                size={16}
+              />
+              <span class="flex-1 truncate">{panel.label}</span>
+            </button>
+          )}
           <Self
             currentRoute={currentRoute}
             depth={1}
