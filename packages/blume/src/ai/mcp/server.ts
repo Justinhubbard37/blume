@@ -134,10 +134,26 @@ const text = (value: string, isError = false) => ({
   ...(isError ? { isError: true } : {}),
 });
 
+/** Lazily builds the Orama index over a snapshot's documents, once. */
+export type OramaIndexProvider = () => Promise<
+  Awaited<ReturnType<typeof buildOramaIndex>>
+>;
+
+/** Memoize the search index so every server built from a snapshot shares it. */
+export const createIndexProvider = (
+  documents: OramaDoc[]
+): OramaIndexProvider => {
+  let dbPromise: ReturnType<OramaIndexProvider> | null = null;
+  return () => {
+    dbPromise ??= buildOramaIndex(documents);
+    return dbPromise;
+  };
+};
+
 /** Construct a fresh MCP server with Blume's read-only docs tools registered. */
-const buildServer = (
+export const buildServer = (
   data: McpData,
-  index: () => Promise<Awaited<ReturnType<typeof buildOramaIndex>>>
+  index: OramaIndexProvider
 ): Server => {
   const server = new Server(
     { name: data.name, version: data.version },
@@ -224,12 +240,7 @@ const buildServer = (
 export const createMcpFetchHandler = (
   data: McpData
 ): ((request: Request) => Promise<Response>) => {
-  let dbPromise: Promise<Awaited<ReturnType<typeof buildOramaIndex>>> | null =
-    null;
-  const index = () => {
-    dbPromise ??= buildOramaIndex(data.documents);
-    return dbPromise;
-  };
+  const index = createIndexProvider(data.documents);
 
   return async (request: Request): Promise<Response> => {
     if (request.method === "OPTIONS") {

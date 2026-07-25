@@ -9,6 +9,7 @@ import { devCommand } from "./commands/dev.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { ejectCommand } from "./commands/eject.ts";
 import { initCommand } from "./commands/init.ts";
+import { mcpStdioCommand } from "./commands/mcp-stdio.ts";
 import { previewCommand } from "./commands/preview.ts";
 import { syncCommand } from "./commands/sync.ts";
 import { validateCommand } from "./commands/validate.ts";
@@ -30,6 +31,7 @@ const main = defineCommand({
     doctor: doctorCommand,
     eject: ejectCommand,
     init: initCommand,
+    "mcp-stdio": mcpStdioCommand,
     preview: previewCommand,
     sync: syncCommand,
     validate: validateCommand,
