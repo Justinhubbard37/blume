@@ -854,7 +854,56 @@ describe("astroConfigTemplate", () => {
       themePath: THEME_PATH,
     });
     expect(out).toContain('import adapter from "@astrojs/cloudflare"');
-    expect(out).toContain('adapter: adapter({ prerenderEnvironment: "node" })');
+    expect(out).toContain(
+      'adapter: adapter({ prerenderEnvironment: "node", imageService: "compile" })'
+    );
+  });
+
+  it("opts cloudflare builds out of the adapter's KV session and Images bindings", () => {
+    const cloudflareConfig = blumeConfigSchema.parse({
+      deployment: { adapter: "cloudflare", output: "server" },
+    });
+    const out = astroConfigTemplate({
+      askPath: ASK_PATH,
+      config: cloudflareConfig,
+      contentRoutes: [],
+      context: context(),
+      dataPath: DATA_PATH,
+      examplesPath: EXAMPLES_PATH,
+      examplesThemePath: EXAMPLES_THEME_PATH,
+      needsReact: false,
+      openapiPath: OPENAPI_PATH,
+      pages: [],
+      searchClientPath: SEARCH_CLIENT_PATH,
+      themePath: THEME_PATH,
+    });
+    expect(out).toContain(
+      'import { defineConfig, fontProviders, sessionDrivers } from "astro/config";'
+    );
+    expect(out).toContain("session: { driver: sessionDrivers.memory() },");
+    expect(out).toContain('imageService: "compile"');
+  });
+
+  it("leaves sessions alone for non-cloudflare server adapters", () => {
+    const nodeConfig = blumeConfigSchema.parse({
+      deployment: { adapter: "node", output: "server" },
+    });
+    const out = astroConfigTemplate({
+      askPath: ASK_PATH,
+      config: nodeConfig,
+      contentRoutes: [],
+      context: context(),
+      dataPath: DATA_PATH,
+      examplesPath: EXAMPLES_PATH,
+      examplesThemePath: EXAMPLES_THEME_PATH,
+      needsReact: false,
+      openapiPath: OPENAPI_PATH,
+      pages: [],
+      searchClientPath: SEARCH_CLIENT_PATH,
+      themePath: THEME_PATH,
+    });
+    expect(out).not.toContain("sessionDrivers");
+    expect(out).not.toContain("session:");
   });
 
   it("points the cloudflare adapter configPath at a project-root wrangler config so the dev workerd runtime picks up nodejs_compat", async () => {
@@ -885,7 +934,7 @@ describe("astroConfigTemplate", () => {
         themePath: THEME_PATH,
       });
       expect(out).toContain(
-        'adapter: adapter({ prerenderEnvironment: "node", configPath: "../wrangler.toml" })'
+        'adapter: adapter({ prerenderEnvironment: "node", imageService: "compile", configPath: "../wrangler.toml" })'
       );
     } finally {
       await rm(root, { force: true, recursive: true });

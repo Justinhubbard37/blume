@@ -87,7 +87,14 @@ const WRANGLER_CONFIG_FILES = [
 ];
 
 const resolveCloudflareAdapterArgs = (context: ProjectContext): string => {
-  const args: string[] = ['prerenderEnvironment: "node"'];
+  // Every Blume HTML route prerenders (the only server routes are API
+  // endpoints), so images are optimized at build time with sharp. The
+  // adapter's default (`cloudflare-binding`) would instead declare a runtime
+  // `IMAGES` binding in the generated wrangler config that nothing uses.
+  const args: string[] = [
+    'prerenderEnvironment: "node"',
+    'imageService: "compile"',
+  ];
   const wranglerPath = WRANGLER_CONFIG_FILES.map((file) =>
     join(context.root, file)
   ).find((file) => existsSync(file));
@@ -102,6 +109,37 @@ const resolveCloudflareAdapterArgs = (context: ProjectContext): string => {
     args.push(`configPath: ${JSON.stringify(configPath)}`);
   }
   return `{ ${args.join(", ")} }`;
+};
+
+/**
+ * Without a configured driver, `@astrojs/cloudflare` force-enables KV-backed
+ * sessions and declares a `SESSION` kv_namespaces entry in the generated
+ * wrangler config — which `wrangler deploy` then requires a real KV namespace
+ * for, even though Blume never reads `Astro.session`. An explicit in-memory
+ * driver keeps the binding out. Swap for Astro's session opt-out once
+ * withastro/astro#16871 ships in the supported range.
+ */
+const resolveSessionOption = (deployment: {
+  adapter: string | null;
+  output: string;
+}): string =>
+  deployment.output === "server" && deployment.adapter === "cloudflare"
+    ? "\n  session: { driver: sessionDrivers.memory() },"
+    : "";
+
+/** The named imports the generated config pulls from `astro/config`. */
+const astroConfigImportLine = (options: {
+  hasFonts: boolean;
+  hasSession: boolean;
+}): string => {
+  const names = ["defineConfig"];
+  if (options.hasFonts) {
+    names.push("fontProviders");
+  }
+  if (options.hasSession) {
+    names.push("sessionDrivers");
+  }
+  return `import { ${names.join(", ")} } from "astro/config";`;
 };
 
 /**
@@ -367,6 +405,8 @@ export const astroConfigTemplate = (options: {
   const adapterOption =
     server && deployment.adapter ? `\n  adapter: ${adapterExpr},` : "";
 
+  const sessionOption = resolveSessionOption(deployment);
+
   const siteOption = deployment.site
     ? `\n  site: ${JSON.stringify(deployment.site)},`
     : "";
@@ -424,9 +464,10 @@ export const astroConfigTemplate = (options: {
         )
         .join(", ")}],`
     : "";
-  const defineConfigImport = fontEntries.length
-    ? `import { defineConfig, fontProviders } from "astro/config";`
-    : `import { defineConfig } from "astro/config";`;
+  const defineConfigImport = astroConfigImportLine({
+    hasFonts: fontEntries.length > 0,
+    hasSession: sessionOption.length > 0,
+  });
 
   // Framework renderers are only wired in when an island (or Ask AI, for React)
   // needs them. The core theme is Astro-first and ships no client JS.
@@ -498,7 +539,7 @@ export default defineConfig({
   srcDir: ${JSON.stringify(`${context.outDir}/src`)},
   outDir: ${JSON.stringify(astroOutDir(context))},
   publicDir: ${JSON.stringify(`${context.root}/public`)},
-  output: ${JSON.stringify(deployment.output)},${adapterOption}${siteOption}${baseOption}${redirectsOption}${i18nOption}${fontsOption}
+  output: ${JSON.stringify(deployment.output)},${adapterOption}${sessionOption}${siteOption}${baseOption}${redirectsOption}${i18nOption}${fontsOption}
   integrations: [${integrations.join(", ")}],
   markdown: {
     processor: blumeMarkdownProcessor(${JSON.stringify({
