@@ -10,3 +10,75 @@ questions:
     expected:
       - run blume validate
     routes: /docs/reference/cli
+  - id: install-node-version
+    question: What do I need installed to use Blume?
+    expected:
+      - Node.js 22.12 or newer
+      - a folder with at least one .md or .mdx file
+    routes:
+      - /docs/quickstart
+  - id: scaffold-new-project
+    question: How do I scaffold a new Blume project?
+    expected:
+      - run blume init
+      - pass --yes to skip the prompts and take the defaults
+    routes:
+      - /docs/quickstart
+  - id: config-file-basics
+    question: Where does Blume's configuration live?
+    expected:
+      - blume.config.ts at the project root
+      - wrap the config in defineConfig for autocomplete and type-checking
+      - every field is optional with a sensible default
+    routes:
+      - /docs/configuration
+  - id: change-accent-color
+    question: How do I change the site's accent color?
+    expected:
+      - set theme.accent in blume.config.ts
+      - accepts a named preset or any CSS color
+    routes:
+      - /docs/configuration/theming
+  - id: subpath-deploy
+    question: How do I serve my docs under a subpath like example.com/docs on GitHub Pages?
+    expected:
+      - set deployment.base in blume.config.ts
+      - internal links and assets are rewritten to include the base
+    routes:
+      - /docs/deployment
+  - id: site-url-detection
+    question: Do I have to configure my site URL for sitemaps and Open Graph images?
+    expected:
+      - on Vercel, Netlify, and Cloudflare Pages the site URL is detected automatically at build time
+      - set deployment.site to override it or on hosts that don't expose it
+    routes:
+      - /docs/deployment
+  - id: llms-txt-default
+    question: Does Blume generate llms.txt for AI tools?
+    expected:
+      - llms.txt generation is on by default
+      - the build writes both llms.txt and llms-full.txt
+    routes:
+      - /docs/configuration/ai
+  - id: raw-markdown-urls
+    question: How can an LLM fetch a page's raw Markdown?
+    expected:
+      - append .md to the page's URL
+      - works for every page with no configuration
+    routes:
+      - /docs/configuration/ai
+  - id: ask-ai-server-output
+    question: Can I enable the Ask AI assistant on a static build?
+    expected:
+      - Ask AI requires server output
+      - set deployment.output to server and pick an adapter
+    routes:
+      - /docs/configuration/ai
+  - id: default-search-provider
+    question: What search does Blume ship by default, and does it need API keys?
+    expected:
+      - Orama is the default provider
+      - runs client-side with no API keys or hosted service
+      - works in both blume dev and blume build
+    routes:
+      - /docs/configuration/search
