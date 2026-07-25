@@ -6,8 +6,11 @@ import { dirname } from "pathe";
 import {
   evalReportJson,
   formatEvalReport,
+  headerLine,
   questionLine,
+  startLine,
   summaryLine,
+  warningLines,
   writeEvalReport,
 } from "../src/eval/report.ts";
 import type { EvalResult, QuestionResult } from "../src/eval/run.ts";
@@ -135,6 +138,24 @@ describe("questionLine and summaryLine", () => {
         durationMs: 59_000,
       })
     ).toBe("3 passed · 59.0s");
+  });
+});
+
+describe("progress lines", () => {
+  it("announces the run and each question as it starts", () => {
+    expect(strip(headerLine(4, "claude"))).toBe(
+      "blume eval  4 question(s) · Claude Code"
+    );
+    expect(strip(startLine("deploy-vercel", 1, 4))).toBe(
+      "  ▸ deploy-vercel (2/4)"
+    );
+  });
+
+  it("renders stale route hints as warnings with their evals-file line", () => {
+    const warnings = warningLines(result, "/root").map(strip);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("⚠ evals.yaml:12");
+    expect(warnings[0]).toContain("matches no page");
   });
 });
 

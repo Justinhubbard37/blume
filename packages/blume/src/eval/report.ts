@@ -69,7 +69,11 @@ export const questionLine = (result: QuestionResult): string => {
   return `  ${glyph} ${id} ${cells}`;
 };
 
-const detailLines = (result: QuestionResult, verbose: boolean): string[] => {
+/** Indented context under a question's line: missing facts, error detail. */
+export const questionDetails = (
+  result: QuestionResult,
+  verbose: boolean
+): string[] => {
   const lines: string[] = [];
   if (result.status === "fail") {
     for (const fact of result.missing) {
@@ -103,40 +107,55 @@ export const summaryLine = (result: EvalResult): string => {
   return parts.join(" · ");
 };
 
+/** The header line the command prints before the first question runs. */
+export const headerLine = (total: number, agent: EvalResult["agent"]): string =>
+  `${COLORS.bold}blume eval${COLORS.reset}  ${total} question(s) · ${AGENTS[agent].name}`;
+
+/** The dim announce line while a question's agents run. */
+export const startLine = (id: string, index: number, total: number): string =>
+  `  ${COLORS.dim}▸ ${id} (${index + 1}/${total})${COLORS.reset}`;
+
+/** `fix:` pointers for failed questions, naming the file that resolves each. */
+export const fixLines = (result: EvalResult, root: string): string[] =>
+  result.diagnostics
+    .filter((diagnostic) => diagnostic.code !== "BLUME_EVAL_ROUTE_UNKNOWN")
+    .map((finding) => {
+      const site = finding.file
+        ? `${relative(root, finding.file)}${finding.line ? `:${finding.line}` : ""}`
+        : "";
+      return `  ${COLORS.cyan}fix:${COLORS.reset} ${site} ${COLORS.dim}${finding.message}${COLORS.reset}`;
+    });
+
+/** Dim warnings for route hints that no longer match a page. */
+export const warningLines = (result: EvalResult, root: string): string[] =>
+  result.diagnostics
+    .filter((diagnostic) => diagnostic.code === "BLUME_EVAL_ROUTE_UNKNOWN")
+    .map((finding) => {
+      const site = finding.file
+        ? ` ${relative(root, finding.file)}${finding.line ? `:${finding.line}` : ""}`
+        : "";
+      return `  ${COLORS.yellow}⚠${COLORS.reset}${site} ${COLORS.dim}${finding.message}${COLORS.reset}`;
+    });
+
 /** The human report, written to stderr by the command. */
 export const formatEvalReport = (
   result: EvalResult,
   root: string,
   options: { verbose?: boolean } = {}
 ): string => {
-  const lines: string[] = [];
-  const agent = AGENTS[result.agent];
-  const total = result.results.length;
-  lines.push(
-    `${COLORS.bold}blume eval${COLORS.reset}  ${total} question(s) · ${agent.name}`,
-    ""
-  );
+  const lines: string[] = [headerLine(result.results.length, result.agent), ""];
 
   for (const question of result.results) {
     lines.push(
       questionLine(question),
-      ...detailLines(question, Boolean(options.verbose))
+      ...questionDetails(question, Boolean(options.verbose))
     );
   }
   lines.push("");
 
   // The finding tells the author which file fixes which failure.
-  const failures = result.diagnostics.filter(
-    (diagnostic) => diagnostic.code !== "BLUME_EVAL_ROUTE_UNKNOWN"
-  );
-  for (const finding of failures) {
-    const site = finding.file
-      ? `${relative(root, finding.file)}${finding.line ? `:${finding.line}` : ""}`
-      : "";
-    lines.push(
-      `  ${COLORS.cyan}fix:${COLORS.reset} ${site} ${COLORS.dim}${finding.message}${COLORS.reset}`
-    );
-  }
+  const failures = fixLines(result, root);
+  lines.push(...failures);
   if (failures.length > 0) {
     lines.push("");
   }

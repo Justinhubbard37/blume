@@ -8,6 +8,7 @@ import { checkCommand } from "./commands/check.ts";
 import { devCommand } from "./commands/dev.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { ejectCommand } from "./commands/eject.ts";
+import { evalCommand } from "./commands/eval.ts";
 import { initCommand } from "./commands/init.ts";
 import { mcpStdioCommand } from "./commands/mcp-stdio.ts";
 import { previewCommand } from "./commands/preview.ts";
@@ -30,6 +31,7 @@ const main = defineCommand({
     dev: devCommand,
     doctor: doctorCommand,
     eject: ejectCommand,
+    eval: evalCommand,
     init: initCommand,
     "mcp-stdio": mcpStdioCommand,
     preview: previewCommand,
