@@ -394,11 +394,11 @@ describe("buildRssFeeds — pages without a date", () => {
   });
 });
 
+const componentSource = (path: string): Promise<string> =>
+  readFile(new URL(`../src/components/${path}`, import.meta.url), "utf-8");
+
 const layoutSource = (name: string): Promise<string> =>
-  readFile(
-    new URL(`../src/components/layout/${name}`, import.meta.url),
-    "utf-8"
-  );
+  componentSource(`layout/${name}`);
 
 describe("layout chrome sources", () => {
   it("toggles the search dialog on ⌘K and guards re-entrant opens", async () => {
@@ -443,6 +443,24 @@ describe("layout chrome sources", () => {
     expect(source).toContain(
       'class="shrink-0 text-muted-foreground rtl:-scale-x-100"'
     );
+  });
+
+  it("rotates a collapsible disclosure's indicator from its own details only", async () => {
+    // `group-open:` matches any descendant of an open `.group`, and each of
+    // these disclosures nests inside others of the same kind (sidebar groups,
+    // tree folders, accordions in MDX, object schemas), so a collapsed child's
+    // indicator reflected an open ancestor's state instead of its own.
+    const disclosures = [
+      "layout/NavTree.astro",
+      "content/TreeFolder.astro",
+      "content/AccordionItem.astro",
+      "openapi/SchemaProperty.astro",
+    ];
+    const sources = await Promise.all(disclosures.map(componentSource));
+    for (const source of sources) {
+      expect(source).not.toContain("group-open:");
+      expect(source).toContain("[details[open]>summary_&]:");
+    }
   });
 
   it("gives the reference shell lang/dir and a skip link", async () => {
