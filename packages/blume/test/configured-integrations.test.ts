@@ -96,10 +96,19 @@ const waitUntil = (
 ): Promise<void> => {
   const expiresAt = Date.now() + timeout;
   const poll = async (): Promise<void> => {
-    if (await predicate()) {
+    // Race the predicate against the deadline: a probe that never settles
+    // would otherwise disable this timeout AND every retry built on it,
+    // wedging the test until its outer budget with no error (#121).
+    const result = await Promise.race([
+      Promise.resolve().then(predicate),
+      Bun.sleep(Math.max(expiresAt - Date.now(), 0)).then(
+        () => "deadline" as const
+      ),
+    ]);
+    if (result === true) {
       return;
     }
-    if (Date.now() >= expiresAt) {
+    if (result === "deadline" || Date.now() >= expiresAt) {
       throw new Error(timeoutMessage);
     }
     await Bun.sleep(50);
@@ -107,6 +116,26 @@ const waitUntil = (
   };
   return poll();
 };
+
+/**
+ * Await a child's piped output without trusting the pipe to close. A
+ * toolchain grandchild (e.g. an esbuild service) inherits the write end and
+ * can outlive even a SIGKILLed parent, so the stream never reaches EOF and a
+ * bare await hangs the test to its full budget — swallowing the error the
+ * output was meant to annotate (#121). `Bun.spawn` offers no process-group
+ * kill to reap such orphans, so give up on the drain instead.
+ */
+const drainOutput = (
+  output: Promise<[string, string]>,
+  timeout = 5000
+): Promise<[string, string]> =>
+  Promise.race([
+    output,
+    Bun.sleep(timeout).then((): [string, string] => [
+      "<output unavailable: pipe still held after drain timeout>",
+      "",
+    ]),
+  ]);
 
 const waitForLine = (
   root: string,
@@ -267,7 +296,10 @@ const startDevReady = async (
     // A wedged shutdown can strand the dev lock; clear it for the relaunch.
     await rm(join(root, ".blume/dev.lock"), { force: true });
     if (attemptsLeft <= 1) {
-      throw error;
+      const [stdout, stderr] = await drainOutput(session.output);
+      throw new Error(`${String(error)}\n${stdout}\n${stderr}`, {
+        cause: error,
+      });
     }
     return startDevReady(root, attemptsLeft - 1);
   }
@@ -307,12 +339,12 @@ const runCli = async (
       proc.kill("SIGKILL");
       await proc.exited;
     }
-    const [stdout, stderr] = await outputText;
+    const [stdout, stderr] = await drainOutput(outputText);
     throw new CliTimeoutError(
       `\`blume ${args.join(" ")}\` did not exit within ${timeout}ms\n${stdout}\n${stderr}`
     );
   }
-  const [stdout, stderr] = await outputText;
+  const [stdout, stderr] = await drainOutput(outputText);
   return { exitCode, output: `${stdout}\n${stderr}` };
 };
 
@@ -388,7 +420,7 @@ it("runs configured integrations in order for build and dev, regenerates once on
   } finally {
     await stopDev(proc);
   }
-  const [stdout, stderr] = await output;
+  const [stdout, stderr] = await drainOutput(output);
   if (failure) {
     throw new Error(`${String(failure)}\n${stdout}\n${stderr}`);
   }
@@ -408,7 +440,7 @@ it("runs configured integrations in order for build and dev, regenerates once on
   } finally {
     await stopDev(restarted.proc);
   }
-  const [restartStdout, restartStderr] = await restarted.output;
+  const [restartStdout, restartStderr] = await drainOutput(restarted.output);
   if (failure) {
     throw new Error(`${String(failure)}\n${restartStdout}\n${restartStderr}`);
   }
