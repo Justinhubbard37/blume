@@ -67,9 +67,24 @@ search: {
 }
 ```
 
+#### Languages written without spaces
+
+Orama's standard tokenizer splits on word boundaries that only exist in space-separated scripts, so Japanese, Chinese, Korean, and Thai text would otherwise produce no matches at all. Blume handles this for you: when [`i18n.defaultLocale`](/docs/content/i18n) is one of those languages, the index switches to a word-segmenting tokenizer (built on the browser- and Node-native `Intl.Segmenter`). Declaring your site's language is all it takes:
+
+```ts blume.config.ts lineNumbers
+i18n: {
+  defaultLocale: "ja",
+  locales: [{ code: "ja", label: "日本語" }],
+}
+```
+
+The same tokenizer serves the search dialog, the MCP server's `search_docs` tool, and Ask AI grounding. On a mixed-language site the whole index shares the default locale's tokenizer — that's safe, because Latin words survive segmentation intact, so pages in English (or any spaced language) stay searchable alongside the default language.
+
 ### FlexSearch
 
 A second keyless, client-side option. It reuses the same `/blume-search.json` index Orama ships and builds a [FlexSearch](https://github.com/nextapps-de/flexsearch) document index in the browser. Works in `blume dev` and `blume build`.
+
+FlexSearch has no equivalent segmentation hook, so for sites in Japanese, Chinese, Korean, or Thai prefer Orama (the default) or [Pagefind](#pagefind), whose `pagefind_extended` binary segments those languages natively.
 
 ```ts blume.config.ts lineNumbers
 search: {

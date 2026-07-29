@@ -10,14 +10,17 @@ import type { IndexedDocument, SearchFn } from "./types.ts";
  * in-memory full-text database in the browser, and query it. Keyless and
  * available in both dev and the production build. A generous match pool is
  * pulled so the section pills can count across the whole result set before the
- * active filter and display limit are applied.
+ * active filter and display limit are applied. `locale` is the site's
+ * `i18n.defaultLocale`, baked into the generated client so unspaced scripts
+ * (Japanese, Chinese, Korean, Thai) get a word-segmenting tokenizer.
  */
 export const createSearch = async (opts: {
   indexUrl: string;
+  locale?: string;
 }): Promise<SearchFn> => {
   const response = await fetch(opts.indexUrl);
   const documents = (await response.json()) as IndexedDocument[];
-  const db = await buildOramaIndex(documents);
+  const db = await buildOramaIndex(documents, opts.locale);
 
   return async (query, options) => {
     const docs = await queryOramaIndex(db, query, RESULT_POOL, options?.locale);

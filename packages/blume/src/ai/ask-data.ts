@@ -19,6 +19,7 @@ export const buildAskData = async (project: BlumeProject): Promise<AskData> => {
     includeWhenDisabled: true,
   });
   return {
+    defaultLocale: project.config.i18n?.defaultLocale,
     documents: documents.map((doc) => ({
       content: doc.content,
       description: doc.description,

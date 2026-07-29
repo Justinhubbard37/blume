@@ -698,6 +698,21 @@ describe("buildAskData", () => {
     expect(alpha?.title).toBe("Alpha");
     expect(alpha?.content).toContain("Body A.");
     expect(alpha).toHaveProperty("locale", "");
+    // Without i18n there is no default locale to derive a tokenizer from.
+    expect(data.defaultLocale).toBeUndefined();
+  });
+
+  it("carries i18n.defaultLocale so retrieval can pick a tokenizer", async () => {
+    const proj = askDataProject();
+    proj.config = blumeConfigSchema.parse({
+      i18n: {
+        defaultLocale: "ja",
+        locales: [{ code: "ja", label: "日本語" }],
+      },
+      title: "Docs",
+    });
+    const data = await buildAskData(proj);
+    expect(data.defaultLocale).toBe("ja");
   });
 
   it("resolves <Visibility> for the agents audience", async () => {
@@ -803,6 +818,31 @@ describe("createAskContext", () => {
     });
     expect(system).toContain("Install FR");
     expect(system).not.toContain("Install EN");
+  });
+
+  it("grounds a CJK question when the snapshot carries a default locale", async () => {
+    const documents = [
+      {
+        content: "退会するとポイントは失効します。",
+        description: "",
+        locale: "ja",
+        route: "/ja/points",
+        title: "ポイントの扱い",
+      },
+    ];
+    // Without the locale, the default tokenizer finds nothing to ground on.
+    const unsegmented = createAskContext({ documents, site: null });
+    expect(
+      await unsegmented([{ content: "ポイント", role: "user" }])
+    ).toBeUndefined();
+
+    const ground = createAskContext({
+      defaultLocale: "ja",
+      documents,
+      site: null,
+    });
+    const system = await ground([{ content: "ポイント", role: "user" }]);
+    expect(system).toContain("ポイントの扱い (/ja/points)");
   });
 
   it("truncates long excerpts and returns undefined for an empty corpus", async () => {

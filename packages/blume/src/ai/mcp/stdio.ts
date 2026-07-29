@@ -28,7 +28,10 @@ export const serveMcpStdio = async (
   const stdin = streams.stdin ?? process.stdin;
   const stdout = streams.stdout ?? process.stdout;
   const transport = new StdioServerTransport(stdin, stdout);
-  const server = buildServer(data, createIndexProvider(data.documents));
+  const server = buildServer(
+    data,
+    createIndexProvider(data.documents, data.defaultLocale)
+  );
   await server.connect(transport);
   await once(stdin, "end");
   await transport.close();

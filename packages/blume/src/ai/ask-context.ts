@@ -19,6 +19,12 @@ export interface AskPage {
  * `generated/ask-data.json` and built by {@link buildAskData}.
  */
 export interface AskData {
+  /**
+   * The site's `i18n.defaultLocale`, when i18n is configured. Selects a
+   * word-segmenting Orama tokenizer for languages written without spaces, so
+   * retrieval can match CJK/Thai content.
+   */
+  defaultLocale?: string;
   documents: OramaDoc[];
   site: string | null;
 }
@@ -203,7 +209,7 @@ export const createAskContext = (
   let dbPromise: Promise<Awaited<ReturnType<typeof buildOramaIndex>>> | null =
     null;
   const index = () => {
-    dbPromise ??= buildOramaIndex(data.documents);
+    dbPromise ??= buildOramaIndex(data.documents, data.defaultLocale);
     return dbPromise;
   };
   const byRoute = new Map(data.documents.map((doc) => [doc.route, doc]));

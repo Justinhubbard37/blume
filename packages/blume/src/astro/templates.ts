@@ -976,12 +976,18 @@ const searchClientImport = (module: string): string =>
 const SEARCH_BASE_IMPORT =
   'import { joinBase } from "blume/components/islands/base-path.ts";\n';
 
-/** A client that loads a static `blume-search.json` index (Orama, FlexSearch). */
-const staticSearchClient = (module: string): string =>
+/**
+ * A client that loads a static `blume-search.json` index (Orama, FlexSearch).
+ * `locale` (Orama only) is the site's `i18n.defaultLocale`, which selects a
+ * word-segmenting tokenizer for languages written without spaces.
+ */
+const staticSearchClient = (module: string, locale?: string): string =>
   `${SEARCH_CLIENT_HEADER}${searchClientImport(module)}${SEARCH_BASE_IMPORT}
 const indexUrl = joinBase(import.meta.env.BASE_URL, "blume-search.json");
 
-export const createSearch = () => create({ indexUrl });
+export const createSearch = () => create({ indexUrl${
+    locale ? `, locale: ${JSON.stringify(locale)}` : ""
+  } });
 `;
 
 /** A client that passes public credentials straight to the provider SDK. */
@@ -1030,7 +1036,12 @@ export const searchClientTemplate = (config: ResolvedConfig): string => {
   const { search } = config;
 
   if (search.provider === "orama" || search.provider === "flexsearch") {
-    return staticSearchClient(search.provider);
+    // Only Orama derives a tokenizer from the locale; FlexSearch has no
+    // equivalent hook, so its client keeps the bare index URL.
+    return staticSearchClient(
+      search.provider,
+      search.provider === "orama" ? config.i18n?.defaultLocale : undefined
+    );
   }
 
   const hosted = hostedSearchOptions(search);

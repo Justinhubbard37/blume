@@ -178,6 +178,34 @@ describe("searchClientTemplate", () => {
     }
   });
 
+  it("bakes i18n.defaultLocale into the orama client for tokenizer selection", () => {
+    const config = blumeConfigSchema.parse({
+      i18n: {
+        defaultLocale: "ja",
+        locales: [{ code: "ja", label: "日本語" }],
+      },
+      search: { provider: "orama" },
+    });
+    expect(searchClientTemplate(config)).toContain(
+      'create({ indexUrl, locale: "ja" })'
+    );
+  });
+
+  it("omits the locale without i18n, and always for flexsearch", () => {
+    expect(searchClientTemplate(parse({ provider: "orama" }))).toContain(
+      "create({ indexUrl })"
+    );
+    // FlexSearch has no tokenizer hook, so its client never takes a locale.
+    const config = blumeConfigSchema.parse({
+      i18n: {
+        defaultLocale: "ja",
+        locales: [{ code: "ja", label: "日本語" }],
+      },
+      search: { provider: "flexsearch" },
+    });
+    expect(searchClientTemplate(config)).toContain("create({ indexUrl })");
+  });
+
   it("points orama-cloud at its endpoint and key", () => {
     const client = searchClientTemplate(
       parse({

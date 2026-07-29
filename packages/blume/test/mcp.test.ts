@@ -160,6 +160,43 @@ describe("MCP tools", () => {
     expect(hits[0]?.url).toBe("https://docs.example.com/guides/install");
   });
 
+  it("search_docs matches CJK content when the snapshot carries a default locale", async () => {
+    const jaHandler = createMcpFetchHandler({
+      ...DATA,
+      defaultLocale: "ja",
+      documents: [
+        {
+          content: "退会とポイントの扱いについて説明します。",
+          description: "個人情報の取り扱い",
+          route: "/ja/legal",
+          title: "法務に相談するときの準備リスト",
+        },
+      ],
+    });
+    const response = await jaHandler(
+      new Request("https://docs.example.com/mcp", {
+        body: JSON.stringify({
+          id: 1,
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: { arguments: { query: "ポイント" }, name: "search_docs" },
+        }),
+        headers: {
+          accept: "application/json, text/event-stream",
+          "content-type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+    const body = (await response.json()) as {
+      result?: { content?: { text: string }[] };
+    };
+    const hits = JSON.parse(body.result?.content?.[0]?.text ?? "[]") as {
+      route: string;
+    }[];
+    expect(hits.map((hit) => hit.route)).toEqual(["/ja/legal"]);
+  });
+
   it("get_page accepts a full page URL", async () => {
     const { text, isError } = await callTool("get_page", {
       route: "https://docs.example.com/guides/install",
@@ -389,6 +426,87 @@ describe("orama index helpers", () => {
     const all = await queryOramaIndex(db, "install", 5);
     expect(all.length).toBe(2);
   });
+
+  const JA_DOCS = [
+    {
+      content: "退会とポイントの扱いについて説明します。GDPRにも触れます。",
+      description: "個人情報の取り扱い",
+      locale: "ja",
+      route: "/ja/legal",
+      title: "法務に相談するときの準備リスト",
+    },
+    {
+      content: "Install the CLI and run the dev server.",
+      description: "",
+      locale: "en",
+      route: "/en/start",
+      title: "Getting started",
+    },
+  ];
+
+  it("matches unspaced-script content when the locale selects a segmenting tokenizer", async () => {
+    // Without a locale, Orama's default English tokenizer collapses Japanese
+    // text to zero tokens — the silent all-queries-miss failure this guards.
+    const unsegmented = await buildOramaIndex(JA_DOCS);
+    expect(await queryOramaIndex(unsegmented, "ポイント", 5)).toEqual([]);
+
+    const db = await buildOramaIndex(JA_DOCS, "ja");
+    const body = await queryOramaIndex(db, "ポイント", 5);
+    expect(body.map((doc) => doc.route)).toEqual(["/ja/legal"]);
+    const title = await queryOramaIndex(db, "準備", 5);
+    expect(title.map((doc) => doc.route)).toEqual(["/ja/legal"]);
+    // A region-qualified locale selects the same tokenizer.
+    const regional = await buildOramaIndex(JA_DOCS, "ja-JP");
+    const regionalHits = await queryOramaIndex(regional, "退会", 5);
+    expect(regionalHits.length).toBe(1);
+  });
+
+  it("keeps Latin terms matching case-insensitively on a segmented mixed-locale index", async () => {
+    const db = await buildOramaIndex(JA_DOCS, "ja");
+    // English pages on a ja-default site stay searchable...
+    const install = await queryOramaIndex(db, "install", 5);
+    expect(install.length).toBe(1);
+    // ...and ASCII terms inside Japanese text still fold case.
+    const gdpr = await queryOramaIndex(db, "gdpr", 5);
+    expect(gdpr.map((doc) => doc.route)).toEqual(["/ja/legal"]);
+    // The locale enum filter is unaffected by the custom tokenizer.
+    const en = await queryOramaIndex(db, "install", 5, "en");
+    expect(en.map((doc) => doc.route)).toEqual(["/en/start"]);
+  });
+
+  it("segments Chinese, Korean, and Thai content too", async () => {
+    const cases = [
+      { content: "修改搜索设置。", locale: "zh-Hans", term: "搜索" },
+      { content: "검색 설정을 변경합니다.", locale: "ko", term: "설정" },
+      { content: "เปลี่ยนการตั้งค่าการค้นหา", locale: "th", term: "ค้นหา" },
+    ];
+    const hits = await Promise.all(
+      cases.map(async ({ content, locale, term }) => {
+        const db = await buildOramaIndex(
+          [{ content, description: "", locale, route: "/x", title: "X" }],
+          locale
+        );
+        return await queryOramaIndex(db, term, 5);
+      })
+    );
+    expect(hits.map((found) => found.length)).toEqual([1, 1, 1]);
+  });
+
+  it("falls back to the default tokenizer when Intl.Segmenter is unavailable", async () => {
+    // Simulate a runtime without Intl.Segmenter (e.g. Firefox before 125).
+    const intl = Intl as { Segmenter?: typeof Intl.Segmenter };
+    const original = intl.Segmenter;
+    intl.Segmenter = undefined;
+    try {
+      const db = await buildOramaIndex(JA_DOCS, "ja");
+      // Degrades to today's behavior (no CJK matches) instead of throwing.
+      expect(await queryOramaIndex(db, "ポイント", 5)).toEqual([]);
+      const install = await queryOramaIndex(db, "install", 5);
+      expect(install.length).toBe(1);
+    } finally {
+      intl.Segmenter = original;
+    }
+  });
 });
 
 describe("discovery documents", () => {
@@ -567,5 +685,18 @@ describe("buildMcpData", () => {
     expect(data.instructions).toBeUndefined();
     expect(data.site).toBeNull();
     expect(data.base).toBe("");
+    // Without i18n there is no default locale to derive a tokenizer from.
+    expect(data.defaultLocale).toBeUndefined();
+  });
+
+  it("carries i18n.defaultLocale so search_docs can pick a tokenizer", async () => {
+    const project = await scanFixture({
+      "blume.config.ts":
+        'export default { i18n: { defaultLocale: "ja", locales: [{ code: "ja", label: "日本語" }] }, title: "Docs" };',
+      "docs/index.md": "---\ntitle: ホーム\n---\n# ホーム\n\nようこそ。\n",
+    });
+
+    const data = await buildMcpData(project);
+    expect(data.defaultLocale).toBe("ja");
   });
 });

@@ -139,13 +139,18 @@ export type OramaIndexProvider = () => Promise<
   Awaited<ReturnType<typeof buildOramaIndex>>
 >;
 
-/** Memoize the search index so every server built from a snapshot shares it. */
+/**
+ * Memoize the search index so every server built from a snapshot shares it.
+ * `locale` is the snapshot's `defaultLocale`, forwarded so unspaced scripts
+ * (Japanese, Chinese, Korean, Thai) get a word-segmenting tokenizer.
+ */
 export const createIndexProvider = (
-  documents: OramaDoc[]
+  documents: OramaDoc[],
+  locale?: string
 ): OramaIndexProvider => {
   let dbPromise: ReturnType<OramaIndexProvider> | null = null;
   return () => {
-    dbPromise ??= buildOramaIndex(documents);
+    dbPromise ??= buildOramaIndex(documents, locale);
     return dbPromise;
   };
 };
@@ -240,7 +245,7 @@ export const buildServer = (
 export const createMcpFetchHandler = (
   data: McpData
 ): ((request: Request) => Promise<Response>) => {
-  const index = createIndexProvider(data.documents);
+  const index = createIndexProvider(data.documents, data.defaultLocale);
 
   return async (request: Request): Promise<Response> => {
     if (request.method === "OPTIONS") {

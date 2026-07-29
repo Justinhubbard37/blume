@@ -1,5 +1,5 @@
 import { create, insertMultiple, search } from "@orama/orama";
-import type { AnyOrama } from "@orama/orama";
+import type { AnyOrama, Tokenizer } from "@orama/orama";
 
 /**
  * The minimal document shape both the client-side search dialog and the
@@ -32,14 +32,64 @@ const SCHEMA = {
 const BOOST = { description: 2, title: 3 };
 
 /**
+ * Scripts written without spaces between words. Orama's default tokenizer
+ * splits on a Latin-centric delimiter class, so text in these languages
+ * collapses to zero tokens and every query silently returns no hits. Keyed by
+ * the primary language subtag of `i18n.defaultLocale`.
+ */
+const SEGMENTED_LANGUAGES = new Set(["ja", "ko", "th", "zh"]);
+
+/**
+ * A word-segmenting tokenizer for languages the default splitter can't handle,
+ * built on `Intl.Segmenter` (the same engine `@orama/tokenizers` wraps).
+ * Input is lowercased before segmenting — unlike the upstream tokenizers —
+ * so Latin terms ("GDPR", English pages on a mixed-locale site) still match
+ * case-insensitively. Returns `undefined` for languages the default tokenizer
+ * already serves, and on runtimes without `Intl.Segmenter`, where the caller
+ * falls back to Orama's default.
+ */
+const segmentingTokenizer = (locale?: string): Tokenizer | undefined => {
+  const language = locale?.toLowerCase().split(/[-_]/u)[0] ?? "";
+  if (!SEGMENTED_LANGUAGES.has(language)) {
+    return;
+  }
+  if (typeof Intl.Segmenter !== "function") {
+    return;
+  }
+  const segmenter = new Intl.Segmenter(language, { granularity: "word" });
+  return {
+    language,
+    normalizationCache: new Map(),
+    tokenize: (raw: string): string[] => {
+      const tokens = new Set<string>();
+      for (const segment of segmenter.segment(raw.toLowerCase())) {
+        if (segment.isWordLike) {
+          tokens.add(segment.segment);
+        }
+      }
+      return [...tokens];
+    },
+  };
+};
+
+/**
  * Build an in-memory Orama full-text index from search documents. Shared by the
- * Orama client loader (browser) and the MCP server (Node), so ranking is
- * identical wherever docs are queried.
+ * Orama client loader (browser), the MCP server, and Ask AI grounding (Node),
+ * so ranking is identical wherever docs are queried. `locale` — the site's
+ * `i18n.defaultLocale` — swaps in a word-segmenting tokenizer for languages
+ * written without spaces (Japanese, Chinese, Korean, Thai); the tokenizer
+ * belongs to the database, so on a mixed-locale site it applies to every
+ * document, which is safe because Latin words survive segmentation intact.
  */
 export const buildOramaIndex = async (
-  documents: OramaDoc[]
+  documents: OramaDoc[],
+  locale?: string
 ): Promise<AnyOrama> => {
-  const db = create({ schema: SCHEMA });
+  const tokenizer = segmentingTokenizer(locale);
+  const db = create({
+    schema: SCHEMA,
+    ...(tokenizer ? { components: { tokenizer } } : {}),
+  });
   await insertMultiple(db, documents);
   return db;
 };

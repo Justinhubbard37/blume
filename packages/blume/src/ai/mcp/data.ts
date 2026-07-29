@@ -28,6 +28,12 @@ export interface McpData {
    * paths, matching the sitemap/llms.txt convention.
    */
   base: string;
+  /**
+   * The site's `i18n.defaultLocale`, when i18n is configured. Selects a
+   * word-segmenting Orama tokenizer for languages written without spaces, so
+   * `search_docs` can match CJK/Thai content.
+   */
+  defaultLocale?: string;
   documents: OramaDoc[];
   instructions?: string;
   name: string;
@@ -82,6 +88,7 @@ export const buildMcpData = async (project: BlumeProject): Promise<McpData> => {
 
   return {
     base: normalizeBasePath(config.deployment.base),
+    defaultLocale: config.i18n?.defaultLocale,
     documents: documents.map((doc) => ({
       content: doc.content,
       description: doc.description,
