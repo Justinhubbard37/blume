@@ -52,12 +52,12 @@ const TAG = /<[^>]*>?/gu;
  * artifact of the regex shape.
  */
 const plain = (html: string): string => {
-  let previous = html;
-  let stripped = html.replaceAll(TAG, "");
-  while (stripped !== previous) {
+  let stripped = html;
+  let previous: string;
+  do {
     previous = stripped;
     stripped = stripped.replaceAll(TAG, "");
-  }
+  } while (stripped !== previous);
   return stripped;
 };
 
