@@ -1,3 +1,7 @@
+import {
+  SIGNATURES_DIRECTORY_PATH,
+  SIGNATURES_DIRECTORY_TYPE,
+} from "../ai/web-bot-auth.ts";
 import { normalizeBasePath } from "../core/base-path.ts";
 import type { ResolvedConfig } from "../core/schema.ts";
 
@@ -72,6 +76,14 @@ export const buildNetlifyHeaders = (
   });
   if (homeLinkHeader) {
     rules.push(`${deployBase}/\n  Link: ${homeLinkHeader}`);
+  }
+  // The Web Bot Auth signature directory is extensionless, so without an
+  // explicit rule a static host serves its registered media type as
+  // octet-stream or text/plain.
+  if (config.ai.webBotAuth.keys.length > 0) {
+    rules.push(
+      `${deployBase}${SIGNATURES_DIRECTORY_PATH}\n  Content-Type: ${SIGNATURES_DIRECTORY_TYPE}`
+    );
   }
   return `${rules.join("\n")}\n`;
 };

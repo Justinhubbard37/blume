@@ -172,20 +172,32 @@ const isNegotiationRoute = (route: VercelRoute): boolean =>
  * given — a homepage `Link` header route for agent discovery (see
  * `ai/link-headers.ts`), applied the same way the `Vary` routes are: after
  * `handle: "filesystem"` with `continue`, so the header rides on the
- * prerendered homepage response. Returns the updated JSON text (tab-indented,
- * like the adapter's own output), or `null` when there is nothing to do or
- * nowhere safe to do it: nothing to inject, an unparsable config, no `routes`
- * array, or no `handle: "filesystem"` marker to anchor the splice.
+ * prerendered homepage response. `contentTypeOverrides` maps static-dir
+ * relative paths to media types via the Build Output `overrides` field — the
+ * platform's mechanism for extensionless static files (e.g. the Web Bot Auth
+ * signature directory). Returns the updated JSON text (tab-indented, like the
+ * adapter's own output), or `null` when there is nothing to do or nowhere
+ * safe to do it: nothing to inject, an unparsable config, no `routes` array,
+ * or no `handle: "filesystem"` marker to anchor the splice.
  */
 export const injectNegotiationRoutes = (
   configText: string,
   routePaths: readonly string[],
-  homeLinkHeader?: string | null
+  homeLinkHeader?: string | null,
+  contentTypeOverrides?: Record<string, string>
 ): string | null => {
-  if (routePaths.length === 0 && !homeLinkHeader) {
+  const overrideEntries = Object.entries(contentTypeOverrides ?? {});
+  if (
+    routePaths.length === 0 &&
+    !homeLinkHeader &&
+    overrideEntries.length === 0
+  ) {
     return null;
   }
-  let config: { routes?: VercelRoute[] };
+  let config: {
+    overrides?: Record<string, { contentType?: string; path?: string }>;
+    routes?: VercelRoute[];
+  };
   try {
     config = JSON.parse(configText);
   } catch {
@@ -193,6 +205,11 @@ export const injectNegotiationRoutes = (
   }
   if (!Array.isArray(config.routes)) {
     return null;
+  }
+  for (const [path, contentType] of overrideEntries) {
+    // Keyed assignment, so re-injection replaces rather than duplicates and a
+    // user's own override of the same path is simply refreshed.
+    config.overrides = { ...config.overrides, [path]: { contentType } };
   }
   const routes = config.routes.filter((route) => !isNegotiationRoute(route));
   const filesystemIndex = routes.findIndex(

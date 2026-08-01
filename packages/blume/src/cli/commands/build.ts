@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 
 import { build } from "astro";
 import { defineCommand } from "citty";
@@ -8,6 +8,11 @@ import { join } from "pathe";
 import { buildAgentReadability } from "../../ai/agent-readability.ts";
 import { buildHomeLinkHeader } from "../../ai/link-headers.ts";
 import { buildLlmsFiles } from "../../ai/llms.ts";
+import {
+  buildSignaturesDirectory,
+  SIGNATURES_DIRECTORY_PATH,
+  SIGNATURES_DIRECTORY_TYPE,
+} from "../../ai/web-bot-auth.ts";
 import { ensureGitignore } from "../../core/gitignore.ts";
 import type { BlumeProject } from "../../core/project-graph.ts";
 import type { ResolvedConfig } from "../../core/schema.ts";
@@ -162,7 +167,12 @@ const emitVercelNegotiation = async (
   const injected = injectNegotiationRoutes(
     await readFile(configPath, "utf-8"),
     routePaths,
-    buildHomeLinkHeader(config, routePaths)
+    buildHomeLinkHeader(config, routePaths),
+    config.ai.webBotAuth.keys.length > 0
+      ? {
+          [SIGNATURES_DIRECTORY_PATH.slice(1)]: SIGNATURES_DIRECTORY_TYPE,
+        }
+      : undefined
   );
   if (injected === null) {
     logger.warn(
@@ -420,6 +430,16 @@ const publishBuildArtifacts = async (
       "utf-8"
     );
     logger.success("Generated agent-readability.json");
+  }
+
+  const signaturesDirectory = buildSignaturesDirectory(project.config);
+  const signaturesPath = join(distDir, SIGNATURES_DIRECTORY_PATH.slice(1));
+  if (signaturesDirectory && !existsSync(signaturesPath)) {
+    await mkdir(join(distDir, ".well-known"), { recursive: true });
+    await writeFile(signaturesPath, signaturesDirectory, "utf-8");
+    logger.success(
+      "Generated .well-known/http-message-signatures-directory (Web Bot Auth)"
+    );
   }
 
   await emitRedirectFiles(project.config, distDir);

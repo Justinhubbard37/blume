@@ -338,6 +338,26 @@ Use the `HTTPS` record type if your provider offers it (Vercel DNS does; it does
 
 `blume audit --url <origin>` checks this for you: when [`deployment.site`](/docs/deployment) is set, the network tier queries the entrypoint over DNS-over-HTTPS and reports the exact record to publish if none exists, plus whether the answers are DNSSEC-authenticated. Set `BLUME_DOH_URL` to point the lookup at your own resolver if your network blocks the public ones (Google, Cloudflare).
 
+### Web Bot Auth
+
+[Web Bot Auth](https://datatracker.ietf.org/wg/webbotauth/about/) works in the other direction: it's not about agents reading your docs, but about **your organization's agents identifying themselves** when they make requests elsewhere. Your agents sign their requests with [HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421), and receiving sites verify them against a public-key directory published on your domain. If your org runs agents and your Blume site lives at the domain they identify as, publish their public keys:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  webBotAuth: {
+    keys: [{ kty: "OKP", crv: "Ed25519", x: "JrQLj5P_89iXES9-vFgrIy29c…" }],
+  },
+}
+```
+
+Blume then serves the JWKS at `/.well-known/http-message-signatures-directory` with its registered media type on every build surface. The directory is public by definition, so the config only admits public keys — a JWK containing private material (`d`, `p`, `q`, …) fails validation with an error rather than shipping a leaked credential. Generate an Ed25519 pair with:
+
+```bash
+node -e 'const { generateKeyPairSync } = require("node:crypto"); const { publicKey, privateKey } = generateKeyPairSync("ed25519"); console.log("public: ", JSON.stringify(publicKey.export({ format: "jwk" }))); console.log("private:", JSON.stringify(privateKey.export({ format: "jwk" })))'
+```
+
+The public JWK goes in the config above; the private one goes wherever your signing agent runs (a secret manager, never the repo). If your organization doesn't operate agents, skip this — an empty directory advertises nothing worth verifying.
+
 ## Agent skill
 
 Building a Blume site with the help of a coding agent? Install the Blume [agent skill](https://docs.claude.com/en/docs/claude-code/skills) so it knows how Blume works without you explaining it:

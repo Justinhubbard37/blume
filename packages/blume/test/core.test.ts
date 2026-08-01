@@ -1168,6 +1168,21 @@ describe("agent-readability.json", () => {
     expect(manifest?.repository).toBe("https://github.com/inthhq/leadtype");
   });
 
+  it("advertises the Web Bot Auth directory only when keys are configured", () => {
+    const key = { crv: "Ed25519", kty: "OKP", x: "abc" };
+    const manifest = buildAgentReadability(
+      makeProject([], { ai: { webBotAuth: { keys: [key] } } })
+    );
+    expect(manifest?.artifacts).toMatchObject({
+      httpMessageSignaturesDirectory:
+        "https://example.com/.well-known/http-message-signatures-directory",
+    });
+    const without = buildAgentReadability(makeProject([]));
+    expect(without?.artifacts).not.toHaveProperty(
+      "httpMessageSignaturesDirectory"
+    );
+  });
+
   it("echoes the content-usage policy by default and drops it when disabled", () => {
     const on = buildAgentReadability(makeProject([]));
     expect(on?.contentUsage).toStrictEqual({

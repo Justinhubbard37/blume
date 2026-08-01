@@ -97,6 +97,11 @@ export const buildAgentReadability = (
   if (config.ai.ask?.enabled) {
     artifacts.askApi = askApiUrl(config.ai.ask.endpoint, site, abs);
   }
+  if (config.ai.webBotAuth.keys.length > 0) {
+    artifacts.httpMessageSignaturesDirectory = abs(
+      "/.well-known/http-message-signatures-directory"
+    );
+  }
   if (site && config.seo.sitemap) {
     artifacts.sitemap = abs("/sitemap.xml");
   }

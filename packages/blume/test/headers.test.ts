@@ -4,9 +4,14 @@ import type { ResolvedConfig } from "../src/core/schema.ts";
 import { buildNetlifyHeaders } from "../src/deploy/headers.ts";
 
 const configWith = (
-  overrides: Partial<{ base?: string; basePath: string }>
+  overrides: Partial<{
+    base?: string;
+    basePath: string;
+    webBotAuthKeys: Record<string, unknown>[];
+  }>
 ): ResolvedConfig =>
   ({
+    ai: { webBotAuth: { keys: overrides.webBotAuthKeys ?? [] } },
     basePath: overrides.basePath ?? "",
     deployment: { base: overrides.base },
   }) as ResolvedConfig;
@@ -66,5 +71,17 @@ describe("buildNetlifyHeaders", () => {
   it("emits no Link rule without a link header", () => {
     expect(buildNetlifyHeaders(configWith({}))).not.toContain("Link:");
     expect(buildNetlifyHeaders(configWith({}), null)).not.toContain("Link:");
+  });
+
+  it("pins the Web Bot Auth directory media type when keys are configured", () => {
+    const out = buildNetlifyHeaders(
+      configWith({ base: "/base", webBotAuthKeys: [{ kty: "OKP" }] })
+    );
+    expect(out).toContain(
+      "/base/.well-known/http-message-signatures-directory\n  Content-Type: application/http-message-signatures-directory+json"
+    );
+    expect(buildNetlifyHeaders(configWith({}))).not.toContain(
+      "http-message-signatures-directory"
+    );
   });
 });

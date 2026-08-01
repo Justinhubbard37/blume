@@ -573,6 +573,37 @@ export const askAiProviders = [
   "openai-compatible",
 ] as const;
 
+/**
+ * JWK parameters that carry private or secret key material (RFC 7518): the
+ * private exponent/scalar, the RSA CRT parameters, and the symmetric key.
+ * A directory is public by definition, so any of these in a configured key is
+ * a leaked credential, not a config style choice — reject loudly.
+ */
+const PRIVATE_JWK_PARAMS = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"];
+
+/**
+ * A public JWK for the Web Bot Auth signature directory. Shape is left to the
+ * signing setup (Ed25519 `OKP` keys in current deployments) — validation only
+ * requires the mandatory `kty` and refuses private key material.
+ */
+const publicJwkSchema = z
+  .record(z.string(), z.unknown())
+  .superRefine((jwk, ctx) => {
+    if (typeof jwk.kty !== "string" || jwk.kty.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A JWK must declare its key type ("kty").',
+      });
+    }
+    const leaked = PRIVATE_JWK_PARAMS.filter((param) => param in jwk);
+    if (leaked.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `The JWK contains private key material ("${leaked.join('", "')}") — the signatures directory is public, so list only public keys and keep the private key where the signing agent runs.`,
+      });
+    }
+  });
+
 const mcpConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
   /** Optional system hint passed to connecting agents. */
@@ -687,6 +718,18 @@ const aiConfigSchema = z.strictObject({
     .default({}),
   /** Expose the docs as an MCP server for connecting agents. */
   mcp: mcpConfigSchema.default({}),
+  /**
+   * Web Bot Auth (IETF `webbotauth`): publish the org's HTTP Message
+   * Signature public keys at `/.well-known/http-message-signatures-directory`
+   * so sites receiving requests from the org's agents can verify them.
+   * Opt-in and public-keys-only — the private keys live wherever the signing
+   * agents run, never in the site.
+   */
+  webBotAuth: z
+    .strictObject({
+      keys: z.array(publicJwkSchema).default([]),
+    })
+    .default({}),
 });
 
 /**

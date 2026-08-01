@@ -242,10 +242,46 @@ describe("injectNegotiationRoutes", () => {
     );
   });
 
+  it("adds content-type overrides for extensionless well-known files", () => {
+    const overrides = {
+      ".well-known/http-message-signatures-directory":
+        "application/http-message-signatures-directory+json",
+    };
+    const once = injectNegotiationRoutes(
+      JSON.stringify({
+        ...baseConfig,
+        overrides: { "kept.html": { path: "kept" } },
+      }),
+      ["/docs/a"],
+      null,
+      overrides
+    );
+    const config = JSON.parse(once ?? "");
+    expect(config.overrides).toStrictEqual({
+      ".well-known/http-message-signatures-directory": {
+        contentType: "application/http-message-signatures-directory+json",
+      },
+      "kept.html": { path: "kept" },
+    });
+    // Re-injection replaces the keyed entry instead of duplicating anything.
+    expect(
+      injectNegotiationRoutes(once ?? "", ["/docs/a"], null, overrides)
+    ).toBe(once ?? "");
+    // Overrides alone are enough to warrant an injection.
+    const alone = injectNegotiationRoutes(
+      JSON.stringify(baseConfig),
+      [],
+      null,
+      overrides
+    );
+    expect(JSON.parse(alone ?? "").overrides).toBeDefined();
+  });
+
   it("returns null when there is nothing to do or nowhere to splice", () => {
     const text = JSON.stringify(baseConfig);
     expect(injectNegotiationRoutes(text, [])).toBeNull();
     expect(injectNegotiationRoutes(text, [], null)).toBeNull();
+    expect(injectNegotiationRoutes(text, [], null, {})).toBeNull();
     expect(injectNegotiationRoutes("not json", ["/docs/a"])).toBeNull();
     expect(injectNegotiationRoutes("{}", ["/docs/a"])).toBeNull();
     expect(

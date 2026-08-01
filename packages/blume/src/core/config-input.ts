@@ -605,6 +605,19 @@ export interface AiConfig {
   markdownComponents?: Record<string, ComponentMarkdown>;
   /** Expose the docs as an MCP server for agents. */
   mcp?: McpConfig;
+  /**
+   * Web Bot Auth: publish the org's HTTP Message Signature public keys at
+   * `/.well-known/http-message-signatures-directory`, so sites receiving
+   * requests from your agents can verify them. Public keys only — a key
+   * containing private material (`d`, `p`, `q`, …) is rejected.
+   */
+  webBotAuth?: WebBotAuthConfig;
+}
+
+/** Web Bot Auth signature directory. Off until at least one key is listed. */
+export interface WebBotAuthConfig {
+  /** Public JWKs to publish (e.g. an Ed25519 key: `kty: "OKP"`, `crv: "Ed25519"`, `x: …`). */
+  keys?: Record<string, unknown>[];
 }
 
 // ---------------------------------------------------------------------------
