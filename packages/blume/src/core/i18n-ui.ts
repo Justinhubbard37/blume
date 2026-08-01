@@ -31,7 +31,7 @@ const uiStringsObject = z.object({
       openInChat: z.string().default("Open in chat"),
       scrollToTop: z.string().default("Scroll to top"),
     })
-    .default({}),
+    .prefault({}),
   ask: z
     .object({
       ai: z.string().default("AI"),
@@ -47,12 +47,12 @@ const uiStringsObject = z.object({
       title: z.string().default("Ask AI"),
       you: z.string().default("You"),
     })
-    .default({}),
+    .prefault({}),
   banner: z
     .object({
       dismiss: z.string().default("Dismiss announcement"),
     })
-    .default({}),
+    .prefault({}),
   changelog: z
     .object({
       description: z
@@ -64,12 +64,12 @@ const uiStringsObject = z.object({
       showReleases: z.string().default("Show {version} releases"),
       title: z.string().default("Changelog"),
     })
-    .default({}),
+    .prefault({}),
   content: z
     .object({
       diagramError: z.string().default("Could not render this diagram."),
     })
-    .default({}),
+    .prefault({}),
   feedback: z
     .object({
       no: z.string().default("No"),
@@ -77,13 +77,13 @@ const uiStringsObject = z.object({
       thanks: z.string().default("Thanks for your feedback!"),
       yes: z.string().default("Yes"),
     })
-    .default({}),
+    .prefault({}),
   languageSwitcher: z
     .object({
       label: z.string().default("Language"),
       untranslated: z.string().default("Not translated"),
     })
-    .default({}),
+    .prefault({}),
   nav: z
     .object({
       back: z.string().default("Back"),
@@ -98,7 +98,7 @@ const uiStringsObject = z.object({
       toggleNavigation: z.string().default("Toggle navigation"),
       toggleTheme: z.string().default("Toggle color theme"),
     })
-    .default({}),
+    .prefault({}),
   notFound: z
     .object({
       description: z
@@ -107,7 +107,7 @@ const uiStringsObject = z.object({
       home: z.string().default("Back to home"),
       title: z.string().default("Page not found"),
     })
-    .default({}),
+    .prefault({}),
   page: z
     .object({
       lastUpdated: z.string().default("Last updated on"),
@@ -116,7 +116,7 @@ const uiStringsObject = z.object({
       previous: z.string().default("Previous"),
       skipToContent: z.string().default("Skip to content"),
     })
-    .default({}),
+    .prefault({}),
   search: z
     .object({
       all: z.string().default("All"),
@@ -137,36 +137,27 @@ const uiStringsObject = z.object({
       preview: z.string().default("preview"),
       results: z.string().default("Results"),
     })
-    .default({}),
+    .prefault({}),
   toc: z
     .object({
       title: z.string().default("On this page"),
     })
-    .default({}),
+    .prefault({}),
 });
 
-export const uiStringsSchema = uiStringsObject.default({});
+export const uiStringsSchema = uiStringsObject.prefault({});
 
 /** A fully-resolved dictionary; every key present. */
 export type UIStrings = z.infer<typeof uiStringsObject>;
 
 /**
- * The English baseline, derived from the schema defaults.
- *
- * Each group is passed explicitly as `{}` rather than parsing a bare `{}`: a
- * group's `.default({})` only re-applies its inner field defaults when the group
- * is *present but empty*. Zod 4 changed `.default()` to return the literal
- * default value without re-parsing it through the inner type, so a bare
- * `parse({})` leaves every group undefined and collapses each to `{}` there.
- * Because these components resolve Zod from the consuming project — which may be
- * on v4 while the CLI bundles v3 — the runtime baseline would silently render
- * blank (empty search labels, aria-labels, skip link). Naming every group keeps
- * the baseline fully populated on both Zod 3 and 4.
+ * The English baseline, derived from the schema defaults. The groups use
+ * `.prefault({})` (not `.default({})`) so an absent group is still parsed
+ * through its inner type and every field default applies — under Zod 4's
+ * `.default()` semantics a bare `parse({})` would collapse each group to a
+ * literal `{}` and the runtime would silently render blank chrome.
  */
-const EN_UI_INPUT: Record<string, unknown> = Object.fromEntries(
-  Object.keys(uiStringsObject.shape).map((group) => [group, {}])
-);
-export const EN_UI: UIStrings = uiStringsObject.parse(EN_UI_INPUT);
+export const EN_UI: UIStrings = uiStringsObject.parse({});
 
 /**
  * A partial override: `{ group: { key: "translation" } }`. Validated loosely

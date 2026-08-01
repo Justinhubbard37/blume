@@ -61,10 +61,7 @@ const sidebarMetaSchema = z.strictObject({
 const xHandleSchema = z.string().transform(normalizeXHandle).optional();
 
 const seoMetaSchema = z.strictObject({
-  // blume bundles Zod 3; top-level `z.url()` is undefined at runtime and
-  // schemas must stay dual-compatible with consumer projects on Zod 4.
-  // oxlint-disable-next-line react-doctor/zod-v4-prefer-top-level-string-formats
-  canonical: z.string().url().optional(),
+  canonical: z.url().optional(),
   description: z.string().optional(),
   image: z.string().optional(),
   noindex: z.boolean().default(false),
@@ -109,9 +106,14 @@ const authorSchema = z.union([
     .catchall(z.unknown()),
 ]);
 
+// Shorthand defaults use `.prefault()`, not `.default()`, wherever the value
+// must still be parsed — Zod 4's `.default()` returns the value as-is, so a
+// `.default({})` on an object with inner defaults (or a transform) would
+// resolve to a bare `{}` instead of the fully-defaulted shape.
+
 /** Frontmatter accepted on any content page. */
 const pageMetaBaseSchema = z.strictObject({
-  ai: aiMetaSchema.default({}),
+  ai: aiMetaSchema.prefault({}),
   /** Post author(s) for blog/changelog content; preserved, not yet rendered. */
   authors: z.union([authorSchema, z.array(authorSchema)]).optional(),
   changelog: changelogMetaSchema.optional(),
@@ -125,9 +127,9 @@ const pageMetaBaseSchema = z.strictObject({
   /** Overrides the git-derived last-modified date when `lastModified` is on. */
   lastModified: dateSchema.optional(),
   noindex: z.boolean().default(false),
-  search: searchMetaSchema.default({}),
-  seo: seoMetaSchema.default({}),
-  sidebar: sidebarMetaSchema.default({}),
+  search: searchMetaSchema.prefault({}),
+  seo: seoMetaSchema.prefault({}),
+  sidebar: sidebarMetaSchema.prefault({}),
   slug: z.string().optional(),
   title: z.string().optional(),
   // No default: an absent `type` must fall through to `content.defaultType`.
@@ -410,22 +412,26 @@ export type SidebarItemConfig =
       root?: string;
     };
 
-const sidebarItemSchema: z.ZodType<SidebarItemConfig> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.strictObject({
-      badge: z.string().optional(),
-      collapsed: z.boolean().optional(),
-      directory: directoryModeSchema.optional(),
-      display: sidebarDisplaySchema.optional(),
-      href: z.string().optional(),
-      icon: iconName.optional(),
-      items: z.array(sidebarItemSchema).optional(),
-      label: z.string(),
-      root: z.string().optional(),
-    }),
-  ])
-);
+// Zod 4's `ZodType` defaults its Input parameter to `unknown` (it no longer
+// mirrors Output), so the recursive annotation names both — otherwise
+// `z.input` of anything containing this schema degrades to `unknown`.
+const sidebarItemSchema: z.ZodType<SidebarItemConfig, SidebarItemConfig> =
+  z.lazy(() =>
+    z.union([
+      z.string(),
+      z.strictObject({
+        badge: z.string().optional(),
+        collapsed: z.boolean().optional(),
+        directory: directoryModeSchema.optional(),
+        display: sidebarDisplaySchema.optional(),
+        href: z.string().optional(),
+        icon: iconName.optional(),
+        items: z.array(sidebarItemSchema).optional(),
+        label: z.string(),
+        root: z.string().optional(),
+      }),
+    ])
+  );
 
 /** A curated Google Font slug (see `theme/fonts.ts`). */
 const fontSlug = z.string().superRefine((value, ctx) => {
@@ -474,7 +480,7 @@ const themeConfigSchema = z.strictObject({
       display: fontSlug.default("inter-tight"),
       mono: fontSlug.default("ibm-plex-mono"),
     })
-    .default({}),
+    .prefault({}),
   layout: z.enum(["sidebar"]).default("sidebar"),
   mode: z.enum(["system", "light", "dark"]).default("system"),
   radius: z.enum(["none", "sm", "md", "lg"]).default("md"),
@@ -542,7 +548,7 @@ const searchConfigSchema = z
       .strictObject({
         includeHiddenPages: z.boolean().default(false),
       })
-      .default({}),
+      .prefault({}),
     mixedbread: mixedbreadSearchSchema.optional(),
     oramaCloud: oramaCloudSearchSchema.optional(),
     /** Curated links for the Cmd+K empty state; defaults to the first sidebar pages. */
@@ -647,9 +653,7 @@ const aiConfigSchema = z.strictObject({
       apiKeyEnv: z.string().optional(),
       // Base URL of the backend. Required for `openai-compatible` only when no
       // external endpoint is supplied; for named providers it overrides the preset.
-      // blume bundles Zod 3; top-level `z.url()` is undefined at runtime.
-      // oxlint-disable-next-line react-doctor/zod-v4-prefer-top-level-string-formats
-      baseUrl: z.string().url().optional(),
+      baseUrl: z.url().optional(),
       enabled: z.boolean().default(false),
       // Optional external endpoint for projects that keep their docs static
       // and host Ask AI in an existing backend. Absolute URLs and root-relative
@@ -717,7 +721,7 @@ const aiConfigSchema = z.strictObject({
     )
     .default({}),
   /** Expose the docs as an MCP server for connecting agents. */
-  mcp: mcpConfigSchema.default({}),
+  mcp: mcpConfigSchema.prefault({}),
   /**
    * Publish Agent Skills for discovery: a directory (resolved against the
    * project root) whose subdirectories each hold a `SKILL.md`. The build
@@ -738,7 +742,7 @@ const aiConfigSchema = z.strictObject({
     .strictObject({
       keys: z.array(publicJwkSchema).default([]),
     })
-    .default({}),
+    .prefault({}),
   /**
    * WebMCP: register in-page tools (search, page Markdown, the docs index)
    * on the browser's model context so agentic browsers can drive the docs
@@ -779,7 +783,7 @@ const navigationConfigSchema = z.strictObject({
         items: z.array(sidebarItemSchema).optional(),
       }),
     ])
-    .default({})
+    .prefault({})
     .transform((value) =>
       Array.isArray(value) ? { display: "flat" as const, items: value } : value
     ),
@@ -887,9 +891,7 @@ const deploymentConfigSchema = z.strictObject({
     .default(null),
   base: z.string().optional(),
   output: z.enum(["static", "server"]).default("static"),
-  // blume bundles Zod 3; top-level `z.url()` is undefined at runtime.
-  // oxlint-disable-next-line react-doctor/zod-v4-prefer-top-level-string-formats
-  site: z.string().url().optional(),
+  site: z.url().optional(),
 });
 
 const redirectSchema = z.strictObject({
@@ -898,6 +900,33 @@ const redirectSchema = z.strictObject({
     .union([z.literal(301), z.literal(302), z.literal(307), z.literal(308)])
     .default(301),
   to: z.string(),
+});
+
+/**
+ * One authorized remote image source, passed through to Astro's
+ * `image.remotePatterns`. Wildcards follow Astro's rules: `hostname` accepts
+ * `**.example.com` (any depth) or `*.example.com` (one level), `pathname`
+ * accepts `/dir/**` or `/dir/*` the same way.
+ */
+const imageRemotePatternSchema = z.strictObject({
+  hostname: z.string().optional(),
+  pathname: z.string().optional(),
+  port: z.string().optional(),
+  protocol: z.string().optional(),
+});
+
+/**
+ * Image optimization (`image`). Local images referenced by relative path
+ * (`![alt](./diagram.png)`) are optimized at build time automatically —
+ * compressed, converted to WebP, and stamped with intrinsic dimensions.
+ * Remote images are only optimized when their host is authorized here;
+ * both fields map directly onto Astro's `image` config.
+ */
+const imageConfigSchema = z.strictObject({
+  /** Hosts whose remote images may be optimized, e.g. `["cdn.example.com"]`. */
+  domains: z.array(z.string()).default([]),
+  /** Pattern-based host authorization, for wildcards `domains` can't express. */
+  remotePatterns: z.array(imageRemotePatternSchema).default([]),
 });
 
 /**
@@ -1029,11 +1058,11 @@ const seoConfigSchema = z.strictObject({
    */
   agentReadability: z.boolean().default(true),
   /** robots.txt `Content-Signal` usage declaration (on by default). */
-  contentSignals: contentSignalsSchema.default(true),
+  contentSignals: contentSignalsSchema.prefault(true),
   og: ogConfigSchema.default({}),
   /** Generate robots.txt (with a Sitemap reference when available). */
   robots: z.boolean().default(true),
-  rss: rssConfigSchema.default({}),
+  rss: rssConfigSchema.prefault({}),
   /** Generate sitemap.xml (requires deployment.site). */
   sitemap: z.boolean().default(true),
   /** Emit schema.org JSON-LD in each page's <head>. */
@@ -1085,7 +1114,7 @@ const codeBlockThemeSchema = z.strictObject({
 });
 
 const codeBlocksConfigSchema = z.strictObject({
-  theme: codeBlockThemeSchema.default({}),
+  theme: codeBlockThemeSchema.prefault({}),
 });
 
 /**
@@ -1186,8 +1215,8 @@ const codeConfigSchema = z.strictObject({
 
 const markdownConfigSchema = z.strictObject({
   /** Code-block rendering: language icons and line wrapping. */
-  code: codeConfigSchema.default({}),
-  codeBlocks: codeBlocksConfigSchema.default({}),
+  code: codeConfigSchema.prefault({}),
+  codeBlocks: codeBlocksConfigSchema.prefault({}),
   /**
    * Wrap each `##`–`######` heading in a link to its own anchor so readers can
    * click to copy, bookmark, or share a permalink to that section. On by
@@ -1352,9 +1381,9 @@ const tocConfigSchema = z
   });
 
 export const blumeConfigSchema = z.strictObject({
-  ai: aiConfigSchema.default({}),
+  ai: aiConfigSchema.prefault({}),
   analytics: analyticsConfigSchema.optional(),
-  asyncapi: asyncapiConfigSchema.default({}),
+  asyncapi: asyncapiConfigSchema.prefault({}),
   banner: bannerConfigSchema.optional(),
   /**
    * Site-wide mount point prepended to every generated route (e.g. `/docs`),
@@ -1366,13 +1395,13 @@ export const blumeConfigSchema = z.strictObject({
     .string()
     .optional()
     .transform((value) => normalizeBasePath(value)),
-  content: contentConfigSchema.default({}),
+  content: contentConfigSchema.prefault({}),
   /**
    * Date presentation for the "last updated" stamp and the changelog timeline.
    * Pass-through `Intl.DateTimeFormat` options; defaults to `{ dateStyle: "long" }`.
    */
   dateFormat: dateFormatConfigSchema.default({ dateStyle: "long" }),
-  deployment: deploymentConfigSchema.default({}),
+  deployment: deploymentConfigSchema.prefault({}),
   description: z.string().optional(),
   /**
    * Where `<Component path>` resolves live previews and their source from.
@@ -1381,24 +1410,25 @@ export const blumeConfigSchema = z.strictObject({
    * files. The object form adds `css`: a stylesheet injected into every
    * preview frame (design tokens, shadcn variables, `@theme` mappings).
    */
-  examples: examplesConfigSchema.default("examples"),
-  export: exportConfigSchema.default(false),
+  examples: examplesConfigSchema.prefault("examples"),
+  export: exportConfigSchema.prefault(false),
   feedback: z.boolean().default(true),
   /** Opt-in custom frontmatter keys, validated by user-supplied schemas. */
-  frontmatter: frontmatterConfigSchema.default({}),
+  frontmatter: frontmatterConfigSchema.prefault({}),
   github: githubConfigSchema.optional(),
   i18n: i18nConfigSchema.optional(),
+  image: imageConfigSchema.prefault({}),
   integrations: z.array(z.custom<AstroIntegration>()).default([]),
   lastModified: lastModifiedConfigSchema.default(false),
   logo: logoConfigSchema.optional(),
-  markdown: markdownConfigSchema.default({}),
-  navigation: navigationConfigSchema.default({}),
-  openapi: openapiConfigSchema.default({}),
-  react: reactConfigSchema.default({}),
+  markdown: markdownConfigSchema.prefault({}),
+  navigation: navigationConfigSchema.prefault({}),
+  openapi: openapiConfigSchema.prefault({}),
+  react: reactConfigSchema.prefault({}),
   redirects: z.array(redirectSchema).default([]),
-  search: searchConfigSchema.default({}),
-  seo: seoConfigSchema.default({}),
-  theme: themeConfigSchema.default({}),
+  search: searchConfigSchema.prefault({}),
+  seo: seoConfigSchema.prefault({}),
+  theme: themeConfigSchema.prefault({}),
   title: z.string().default("Documentation"),
   toc: tocConfigSchema,
 });

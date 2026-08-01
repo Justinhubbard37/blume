@@ -13,9 +13,10 @@ import { MCP_TOOLS } from "./tools.ts";
 
 /**
  * The low-level SDK `Server` is used (rather than the high-level `McpServer`)
- * because the latter's `registerTool` is generic over the caller's Zod version;
- * Blume pins Zod 3 while the SDK resolves Zod 4, so their types don't unify.
- * Hand-written JSON Schema and the SDK's own request schemas avoid that entirely.
+ * because the latter's `registerTool` is generic over the caller's Zod instance;
+ * Blume's zod and the SDK's may resolve to different copies, whose types don't
+ * unify. Hand-written JSON Schema and the SDK's own request schemas avoid that
+ * entirely.
  */
 
 /** Default and maximum number of hits returned by `search_docs`. */

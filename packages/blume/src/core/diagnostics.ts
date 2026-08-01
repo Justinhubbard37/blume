@@ -186,11 +186,12 @@ export const diagnosticsFromZod = (
 ): Diagnostic[] =>
   diagnosticsFromIssues(
     error.issues.map((issue) => ({
-      message:
-        "received" in issue
-          ? `${issue.message} (received: ${JSON.stringify(issue.received)})`
-          : issue.message,
-      path: issue.path,
+      message: issue.message,
+      // Zod 4 paths are PropertyKey[]; a symbol segment has no place in a
+      // dotted schema path or a source-position scan.
+      path: issue.path.filter(
+        (segment): segment is string | number => typeof segment !== "symbol"
+      ),
     })),
     options
   );

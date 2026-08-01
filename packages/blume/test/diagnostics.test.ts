@@ -42,7 +42,7 @@ describe("createDiagnostic", () => {
 });
 
 describe("diagnosticsFromZod", () => {
-  it("anchors a path-scoped issue with code, file, and received value", () => {
+  it("anchors a path-scoped issue with code, file, and received type", () => {
     const result = z.object({ count: z.number() }).safeParse({ count: "x" });
     expect(result.success).toBe(false);
     if (result.success) {
@@ -57,7 +57,8 @@ describe("diagnosticsFromZod", () => {
     expect(diagnostic?.severity).toBe("error");
     expect(diagnostic?.schemaPath).toBe("count");
     expect(diagnostic?.message).toContain("count: ");
-    expect(diagnostic?.message).toContain("received:");
+    // Zod 4's own invalid_type message names the received type.
+    expect(diagnostic?.message).toContain("received string");
   });
 
   it("omits the schema path for a top-level issue", () => {
@@ -68,15 +69,6 @@ describe("diagnosticsFromZod", () => {
     const [diagnostic] = diagnosticsFromZod(result.error, { code: "BLUME_Y" });
     expect(diagnostic?.schemaPath).toBeUndefined();
     expect(diagnostic?.message.startsWith(":")).toBe(false);
-  });
-
-  it("handles issues that carry no received value", () => {
-    const result = z.string().min(5).safeParse("hi");
-    if (result.success) {
-      throw new Error("expected a failure");
-    }
-    const [diagnostic] = diagnosticsFromZod(result.error, { code: "BLUME_Z" });
-    expect(diagnostic?.message).not.toContain("received:");
   });
 
   it("resolves a nested path to a line/column in the source", () => {
