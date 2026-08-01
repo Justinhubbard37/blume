@@ -7,14 +7,20 @@ const configWith = (
   overrides: Partial<{
     base?: string;
     basePath: string;
+    mcp: boolean;
     webBotAuthKeys: Record<string, unknown>[];
   }>
 ): ResolvedConfig =>
   ({
-    ai: { webBotAuth: { keys: overrides.webBotAuthKeys ?? [] } },
+    ai: {
+      mcp: { enabled: overrides.mcp ?? false, route: "/mcp" },
+      webBotAuth: { keys: overrides.webBotAuthKeys ?? [] },
+    },
+    asyncapi: { enabled: false, sources: [] },
     basePath: overrides.basePath ?? "",
     deployment: { base: overrides.base },
-  }) as ResolvedConfig;
+    openapi: { enabled: false, sources: [] },
+  }) as unknown as ResolvedConfig;
 
 describe("buildNetlifyHeaders", () => {
   it("pins a UTF-8 Content-Type onto each raw endpoint extension", () => {
@@ -71,6 +77,14 @@ describe("buildNetlifyHeaders", () => {
   it("emits no Link rule without a link header", () => {
     expect(buildNetlifyHeaders(configWith({}))).not.toContain("Link:");
     expect(buildNetlifyHeaders(configWith({}), null)).not.toContain("Link:");
+  });
+
+  it("pins the API catalog media type when the site publishes APIs", () => {
+    const out = buildNetlifyHeaders(configWith({ base: "/base", mcp: true }));
+    expect(out).toContain(
+      "/base/.well-known/api-catalog\n  Content-Type: application/linkset+json"
+    );
+    expect(buildNetlifyHeaders(configWith({}))).not.toContain("api-catalog");
   });
 
   it("pins the Web Bot Auth directory media type when keys are configured", () => {

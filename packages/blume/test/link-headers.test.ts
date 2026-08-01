@@ -8,13 +8,20 @@ const configWith = (
     agentReadability: boolean;
     base: string;
     llmsTxt: boolean;
+    mcp: boolean;
   }> = {}
 ): ResolvedConfig =>
   ({
-    ai: { llmsTxt: { enabled: overrides.llmsTxt ?? true } },
+    ai: {
+      llmsTxt: { enabled: overrides.llmsTxt ?? true },
+      mcp: { enabled: overrides.mcp ?? false, route: "/mcp" },
+    },
+    asyncapi: { enabled: false, sources: [] },
+    basePath: "",
     deployment: { base: overrides.base },
+    openapi: { enabled: false, sources: [] },
     seo: { agentReadability: overrides.agentReadability ?? true },
-  }) as ResolvedConfig;
+  }) as unknown as ResolvedConfig;
 
 describe("buildHomeLinkHeader", () => {
   it("advertises the manifest, llms.txt, and the home Markdown mirror", () => {
@@ -64,5 +71,13 @@ describe("buildHomeLinkHeader", () => {
         '</base/index.md>; rel="alternate"; type="text/markdown"',
       ].join(", ")
     );
+  });
+
+  it("advertises the API catalog when the site publishes APIs (RFC 9727 §3)", () => {
+    const header = buildHomeLinkHeader(configWith({ mcp: true }), []);
+    expect(header).toContain(
+      '</.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"'
+    );
+    expect(buildHomeLinkHeader(configWith(), [])).not.toContain("api-catalog");
   });
 });

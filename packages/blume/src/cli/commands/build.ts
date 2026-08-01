@@ -6,6 +6,12 @@ import { defineCommand } from "citty";
 import { join } from "pathe";
 
 import { buildAgentReadability } from "../../ai/agent-readability.ts";
+import {
+  API_CATALOG_PATH,
+  API_CATALOG_TYPE,
+  buildApiCatalog,
+  hasApiCatalog,
+} from "../../ai/api-catalog.ts";
 import { buildHomeLinkHeader } from "../../ai/link-headers.ts";
 import { buildLlmsFiles } from "../../ai/llms.ts";
 import {
@@ -148,6 +154,42 @@ const emitHeaderFiles = async (
 };
 
 /**
+ * Emit the generated `.well-known` discovery files — the RFC 9727 API catalog
+ * and the Web Bot Auth signature directory — each skipped when the feature is
+ * off or when the user ships their own copy via public/ (already in dist by
+ * the time this runs).
+ */
+const emitWellKnownFiles = async (
+  config: ResolvedConfig,
+  distDir: string
+): Promise<void> => {
+  const files = [
+    {
+      content: buildSignaturesDirectory(config),
+      label: "Web Bot Auth",
+      path: SIGNATURES_DIRECTORY_PATH,
+    },
+    {
+      content: buildApiCatalog(config),
+      label: "RFC 9727",
+      path: API_CATALOG_PATH,
+    },
+  ];
+  for (const file of files) {
+    const target = join(distDir, file.path.slice(1));
+    if (!file.content || existsSync(target)) {
+      continue;
+    }
+    // Sequential by nature: both files share the .well-known dir creation.
+    // oxlint-disable-next-line no-await-in-loop
+    await mkdir(join(distDir, ".well-known"), { recursive: true });
+    // oxlint-disable-next-line no-await-in-loop
+    await writeFile(target, file.content, "utf-8");
+    logger.success(`Generated ${file.path.slice(1)} (${file.label})`);
+  }
+};
+
+/**
  * Splice `Accept: text/markdown` negotiation routes into the Vercel adapter's
  * Build Output config, so a content-page request that prefers Markdown gets the
  * page's prerendered `.md` mirror (content pages are prerendered even in server
@@ -164,15 +206,19 @@ const emitVercelNegotiation = async (
   if (!existsSync(configPath)) {
     return;
   }
+  const overrides: Record<string, string> = {
+    ...(hasApiCatalog(config)
+      ? { [API_CATALOG_PATH.slice(1)]: API_CATALOG_TYPE }
+      : {}),
+    ...(config.ai.webBotAuth.keys.length > 0
+      ? { [SIGNATURES_DIRECTORY_PATH.slice(1)]: SIGNATURES_DIRECTORY_TYPE }
+      : {}),
+  };
   const injected = injectNegotiationRoutes(
     await readFile(configPath, "utf-8"),
     routePaths,
     buildHomeLinkHeader(config, routePaths),
-    config.ai.webBotAuth.keys.length > 0
-      ? {
-          [SIGNATURES_DIRECTORY_PATH.slice(1)]: SIGNATURES_DIRECTORY_TYPE,
-        }
-      : undefined
+    overrides
   );
   if (injected === null) {
     logger.warn(
@@ -432,15 +478,7 @@ const publishBuildArtifacts = async (
     logger.success("Generated agent-readability.json");
   }
 
-  const signaturesDirectory = buildSignaturesDirectory(project.config);
-  const signaturesPath = join(distDir, SIGNATURES_DIRECTORY_PATH.slice(1));
-  if (signaturesDirectory && !existsSync(signaturesPath)) {
-    await mkdir(join(distDir, ".well-known"), { recursive: true });
-    await writeFile(signaturesPath, signaturesDirectory, "utf-8");
-    logger.success(
-      "Generated .well-known/http-message-signatures-directory (Web Bot Auth)"
-    );
-  }
+  await emitWellKnownFiles(project.config, distDir);
 
   await emitRedirectFiles(project.config, distDir);
   await emitHeaderFiles(project, distDir);

@@ -1,5 +1,6 @@
 import { normalizeBasePath } from "../core/base-path.ts";
 import type { ResolvedConfig } from "../core/schema.ts";
+import { API_CATALOG_PATH, hasApiCatalog } from "./api-catalog.ts";
 
 /**
  * The homepage `Link` response header (RFC 8288) — agent discovery for the
@@ -22,6 +23,13 @@ export const buildHomeLinkHeader = (
 ): string | null => {
   const deployBase = normalizeBasePath(config.deployment.base);
   const links: string[] = [];
+  // RFC 9727 §3: the api-catalog relation is how a homepage advertises the
+  // well-known catalog.
+  if (hasApiCatalog(config)) {
+    links.push(
+      `<${deployBase}${API_CATALOG_PATH}>; rel="api-catalog"; type="application/linkset+json"`
+    );
+  }
   if (config.seo.agentReadability) {
     links.push(
       `<${deployBase}/agent-readability.json>; rel="describedby"; type="application/json"`

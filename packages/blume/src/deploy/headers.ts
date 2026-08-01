@@ -1,4 +1,9 @@
 import {
+  API_CATALOG_PATH,
+  API_CATALOG_TYPE,
+  hasApiCatalog,
+} from "../ai/api-catalog.ts";
+import {
   SIGNATURES_DIRECTORY_PATH,
   SIGNATURES_DIRECTORY_TYPE,
 } from "../ai/web-bot-auth.ts";
@@ -77,9 +82,14 @@ export const buildNetlifyHeaders = (
   if (homeLinkHeader) {
     rules.push(`${deployBase}/\n  Link: ${homeLinkHeader}`);
   }
-  // The Web Bot Auth signature directory is extensionless, so without an
-  // explicit rule a static host serves its registered media type as
-  // octet-stream or text/plain.
+  // The well-known discovery files are extensionless, so without an explicit
+  // rule a static host serves their registered media types as octet-stream or
+  // text/plain.
+  if (hasApiCatalog(config)) {
+    rules.push(
+      `${deployBase}${API_CATALOG_PATH}\n  Content-Type: ${API_CATALOG_TYPE}`
+    );
+  }
   if (config.ai.webBotAuth.keys.length > 0) {
     rules.push(
       `${deployBase}${SIGNATURES_DIRECTORY_PATH}\n  Content-Type: ${SIGNATURES_DIRECTORY_TYPE}`

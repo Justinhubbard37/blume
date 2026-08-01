@@ -324,7 +324,39 @@ Link: </agent-readability.json>; rel="describedby"; type="application/json",
   </index.md>; rel="alternate"; type="text/markdown"
 ```
 
-Each entry appears only when its feature is on, and the `alternate` link only when your homepage is a content page with a [raw Markdown](#raw-markdown) mirror. The header rides on every surface Blume controls: the dev server (check it with `curl -I localhost:4321`), static builds via the emitted `_headers` file (Netlify and Cloudflare), and Vercel server builds via the deploy's routing rules. Hosts that ignore `_headers` on static output (GitHub Pages, S3) can't send custom response headers at all — there, agents still find everything through `llms.txt` and `agent-readability.json` at the site root.
+Each entry appears only when its feature is on, and the `alternate` link only when your homepage is a content page with a [raw Markdown](#raw-markdown) mirror. Sites that publish APIs also get a `rel="api-catalog"` entry pointing at the [generated API catalog](#api-catalog). The header rides on every surface Blume controls: the dev server (check it with `curl -I localhost:4321`), static builds via the emitted `_headers` file (Netlify and Cloudflare), and Vercel server builds via the deploy's routing rules. Hosts that ignore `_headers` on static output (GitHub Pages, S3) can't send custom response headers at all — there, agents still find everything through `llms.txt` and `agent-readability.json` at the site root.
+
+### API catalog
+
+When the site publishes APIs, Blume generates an [RFC 9727](https://www.rfc-editor.org/rfc/rfc9727) API catalog at `/.well-known/api-catalog` — a [linkset](https://www.rfc-editor.org/rfc/rfc9264) that lets agents enumerate your APIs from the domain alone, served with its registered `application/linkset+json` media type on every build surface. There's nothing to configure: the catalog is derived from what's already in `blume.config.ts`. Each [OpenAPI or AsyncAPI reference](/docs/advanced/api-reference) becomes an entry anchored at its rendered docs route, with `service-doc` pointing at those docs and `service-desc` at the spec when it lives at a fetchable URL; the [MCP server](#mcp-server) becomes an entry with its discovery document as the service description:
+
+```json .well-known/api-catalog
+{
+  "linkset": [
+    {
+      "anchor": "https://docs.example.com/reference",
+      "service-doc": [
+        { "href": "https://docs.example.com/reference", "type": "text/html" }
+      ],
+      "service-desc": [{ "href": "https://api.example.com/openapi.json" }]
+    },
+    {
+      "anchor": "https://docs.example.com/mcp",
+      "service-desc": [
+        {
+          "href": "https://docs.example.com/.well-known/mcp.json",
+          "type": "application/json"
+        }
+      ],
+      "service-doc": [
+        { "href": "https://docs.example.com/", "type": "text/html" }
+      ]
+    }
+  ]
+}
+```
+
+A site with no API references and no MCP server emits no catalog — there'd be nothing in it. As everywhere, a `public/.well-known/api-catalog` file you ship yourself wins over the generated one.
 
 ### DNS-based discovery (DNS-AID)
 

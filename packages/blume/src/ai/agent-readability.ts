@@ -2,6 +2,7 @@ import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
 import type { ContentSignalPolicy, ContentSignals } from "../core/schema.ts";
 import { buildRssFeeds } from "../deploy/rss.ts";
+import { hasApiCatalog } from "./api-catalog.ts";
 
 /** Token map for the machine-readable content-usage echo. */
 const USAGE_TOKENS: [keyof ContentSignalPolicy, string][] = [
@@ -43,6 +44,23 @@ const askApiUrl = (
   return site && endpoint.startsWith("/")
     ? `${site.replace(/\/+$/u, "")}${endpoint}`
     : endpoint;
+};
+
+/** The `.well-known` discovery artifacts the site publishes, if any. */
+const wellKnownArtifacts = (
+  config: BlumeProject["config"],
+  abs: (path: string) => string
+): Record<string, string> => {
+  const artifacts: Record<string, string> = {};
+  if (config.ai.webBotAuth.keys.length > 0) {
+    artifacts.httpMessageSignaturesDirectory = abs(
+      "/.well-known/http-message-signatures-directory"
+    );
+  }
+  if (hasApiCatalog(config)) {
+    artifacts.apiCatalog = abs("/.well-known/api-catalog");
+  }
+  return artifacts;
 };
 
 /**
@@ -97,11 +115,7 @@ export const buildAgentReadability = (
   if (config.ai.ask?.enabled) {
     artifacts.askApi = askApiUrl(config.ai.ask.endpoint, site, abs);
   }
-  if (config.ai.webBotAuth.keys.length > 0) {
-    artifacts.httpMessageSignaturesDirectory = abs(
-      "/.well-known/http-message-signatures-directory"
-    );
-  }
+  Object.assign(artifacts, wellKnownArtifacts(config, abs));
   if (site && config.seo.sitemap) {
     artifacts.sitemap = abs("/sitemap.xml");
   }
