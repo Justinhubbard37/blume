@@ -1,4 +1,5 @@
 import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
+import { rewriteRelativeImages } from "../core/content-assets.ts";
 import matter from "../core/frontmatter.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
 import { readEntryText } from "../core/sources/read.ts";
@@ -180,7 +181,17 @@ const buildFull = async (project: BlumeProject): Promise<string> => {
 
   const sections = await Promise.all(
     pages.map(async (page) => {
-      const raw = await readEntryText(project, page);
+      let raw = await readEntryText(project, page);
+      // Colocated `./image.png` references resolve to nothing for a reader of
+      // llms-full.txt; point them at the served originals instead.
+      if (page.sourcePath) {
+        raw = rewriteRelativeImages({
+          deployBase: config.deployment.base,
+          projectRoot: project.context.root,
+          source: raw,
+          sourcePath: page.sourcePath,
+        });
+      }
       // Resolve `<Visibility>` audiences (web-only content omitted from the
       // agent-facing output, agents-only unwrapped), then downlevel supported
       // components to plain Markdown.

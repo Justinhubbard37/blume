@@ -96,15 +96,23 @@ Tabulate structured data — config options, comparison matrices, parameter list
 
 ## Links and images
 
-Link to other pages or external sites. Images accept any path under `public/` (served at the site root) or a remote URL.
+Link to other pages or external sites. Images accept a relative path to a file next to your content, any path under `public/` (served at the site root), or a remote URL.
 
 Read the [quickstart](/docs/quickstart) to get started.
 
 ```md
 Read the [quickstart](/docs/quickstart) to get started.
 
-![Alt text](/screenshot.png)
+![Alt text](./screenshot.png)
 ```
+
+**Prefer relative paths for local images** — they're optimized at build time: compressed, converted to WebP, and stamped with intrinsic `width`/`height` so the page doesn't shift while loading. Keep the image next to the page that uses it (or in a shared folder inside your content directory) and reference it relatively:
+
+```md
+![Build output](./images/build-output.png)
+```
+
+Absolute paths under `public/` (`![Alt text](/screenshot.png)`) are served verbatim with no optimization — use them for files that must keep their exact bytes and URL, like a logo referenced from outside your docs. Remote images are also passed through untouched unless their host is authorized in the [`image` config](/docs/configuration#images).
 
 Content images are click-to-zoom by default — readers can click any image to open it in a lightbox. Turn this off with `markdown: { imageZoom: false }` in `blume.config.ts`, or opt a single image out with `data-no-zoom`.
 

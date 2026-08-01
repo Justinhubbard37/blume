@@ -105,14 +105,14 @@ const mapRoute = (
 const CODE_FENCE = /^(?<delimiter>```|~~~)/u;
 
 /** The fence delimiter opening the current code block, or null outside one. */
-type FenceState = "```" | "~~~" | null;
+export type FenceState = "```" | "~~~" | null;
 
 /**
  * Advance the fenced-code state for one line: an opening fence records its
  * delimiter, only the matching delimiter closes it, and any other line leaves
  * the state untouched.
  */
-const nextFenceState = (line: string, fence: FenceState): FenceState => {
+export const nextFenceState = (line: string, fence: FenceState): FenceState => {
   const trimmed = line.trimStart();
   const delimiter = trimmed.match(CODE_FENCE)?.groups?.delimiter as
     | Exclude<FenceState, null>
@@ -340,12 +340,12 @@ const MD_LINK =
   /\[(?<label>(?:[^[\]]|\[[^\]]*\])*)\]\((?<target>(?:[^()\s]|\([^()\s]*\))+)(?<title>\s+"[^"]*")?\)/gu;
 // An image inside a link label; its target was matched (and so validated) as a
 // link of its own before labels admitted nesting, and still should be.
-const MD_IMAGE =
+export const MD_IMAGE =
   /!\[[^\]]*\]\((?<target>(?:[^()\s]|\([^()\s]*\))+)(?<title>\s+"[^"]*")?\)/gu;
-const INLINE_CODE = /`[^`]*`/gu;
+export const INLINE_CODE = /`[^`]*`/gu;
 
 /** Column (0-based, within `matched`) where a link/image match's target starts. */
-const targetOffsetIn = (
+export const targetOffsetIn = (
   matched: string,
   target: string,
   title: string | undefined

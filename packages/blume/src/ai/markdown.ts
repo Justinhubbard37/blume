@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import { rewriteRelativeImages } from "../core/content-assets.ts";
 import matter from "../core/frontmatter.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
 import { readEntryText } from "../core/sources/read.ts";
@@ -33,7 +34,10 @@ export const agentMarkdown = (entry: RawMarkdownEntry): string =>
  * exactly what the author wrote, while `.md` downlevels supported components
  * to plain Markdown for consumers that can't interpret JSX. `<Visibility>`
  * audiences are resolved for agents in both variants: web-only content is
- * removed, agents-only unwrapped.
+ * removed, agents-only unwrapped. Relative image references are rewritten to
+ * their served `/blume-assets/content/…` URLs in both variants too — an agent
+ * fetches these endpoints by URL, where a colocated `./diagram.png` resolves
+ * to nothing.
  */
 export const buildRawMarkdown = async (
   project: BlumeProject
@@ -57,7 +61,16 @@ export const buildRawMarkdown = async (
 
   const entries = await Promise.all(
     project.manifest.routes.map(async (route) => {
-      const source = applyAgentVisibility(await readRoute(route));
+      let text = await readRoute(route);
+      if (route.sourcePath) {
+        text = rewriteRelativeImages({
+          deployBase: project.config.deployment.base,
+          projectRoot: project.context.root,
+          source: text,
+          sourcePath: route.sourcePath,
+        });
+      }
+      const source = applyAgentVisibility(text);
       // The `.md` variant keeps the front-matter block in the output, but its
       // data must also be in scope for `prop={frontmatter.*}` expressions.
       const md = downlevelComponents(source, components, matter(source).data);

@@ -735,6 +735,34 @@ export interface DeploymentConfig {
   site?: string;
 }
 
+/**
+ * One authorized remote image source, passed through to Astro's
+ * `image.remotePatterns`. Hostnames accept `*.` (one level) and `**.` (any
+ * depth) wildcards; pathnames accept `/dir/*` and `/dir/**` the same way.
+ */
+export interface ImageRemotePattern {
+  /** Hostname pattern, e.g. `"**.example.com"`. */
+  hostname?: string;
+  /** Pathname pattern, e.g. `"/images/**"`. */
+  pathname?: string;
+  /** Port, e.g. `"8080"`. */
+  port?: string;
+  /** URL scheme, e.g. `"https"`. */
+  protocol?: string;
+}
+
+/**
+ * Image optimization. Local images referenced by relative path are optimized
+ * automatically; remote images are only optimized when their host is
+ * authorized here. Both fields map directly onto Astro's `image` config.
+ */
+export interface ImageConfig {
+  /** Hosts whose remote images may be optimized, e.g. `["cdn.example.com"]`. */
+  domains?: string[];
+  /** Pattern-based host authorization, for wildcards `domains` can't express. */
+  remotePatterns?: ImageRemotePattern[];
+}
+
 /** HTTP redirect status codes: permanent (301/308) and temporary (302/307). */
 type RedirectStatusPermanent = 301 | 308;
 type RedirectStatusTemporary = 302 | 307;
@@ -1165,6 +1193,8 @@ export interface BlumeConfig {
   github?: GithubConfig;
   /** Internationalization (opt-in multi-locale). */
   i18n?: I18nConfig;
+  /** Image optimization: remote-host authorization for the image service. */
+  image?: ImageConfig;
   /** Astro integrations appended after Blume's built-ins, in declaration order. */
   integrations?: AstroIntegration[];
   /** "Last updated" timestamps from git history or frontmatter. Defaults to `false`. */

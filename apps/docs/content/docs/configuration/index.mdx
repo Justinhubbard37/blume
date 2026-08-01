@@ -190,7 +190,25 @@ content: {
 | `pages` | `"pages"` | Folder for custom `.astro` pages. |
 | `defaultType` | `"doc"` | Page `type` used when frontmatter omits it. |
 
-Static assets live in `public/` — a file at `public/logo.png` is served at `/logo.png`, so a reference like `![](/images/create.png)` resolves against `public/images/create.png`.
+Static assets live in `public/` — a file at `public/logo.png` is served at `/logo.png`, so a reference like `![](/images/create.png)` resolves against `public/images/create.png`. Images referenced by **relative path** (`![](./diagram.png)`) live next to your content instead, and are [optimized at build time](/docs/content/syntax#links-and-images).
+
+## Images
+
+Local images referenced by relative path are optimized automatically at build time — compressed, converted to WebP, and given intrinsic `width`/`height` attributes so the layout doesn't shift while they load. There's nothing to configure; see [Links and images](/docs/content/syntax#links-and-images) for authoring guidance.
+
+Remote images are served untouched by default. To have Blume download and optimize them at build time too, authorize their hosts:
+
+```ts blume.config.ts lineNumbers
+image: {
+  domains: ["cdn.example.com"],
+  remotePatterns: [{ protocol: "https", hostname: "**.example.com" }],
+}
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `domains` | `[]` | Hostnames whose remote images may be optimized. |
+| `remotePatterns` | `[]` | Pattern-based authorization (`protocol`, `hostname`, `port`, `pathname`); hostnames accept `*.` (one level) and `**.` (any depth) wildcards. |
 
 ## Frontmatter
 

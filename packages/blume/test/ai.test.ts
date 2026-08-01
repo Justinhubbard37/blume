@@ -74,6 +74,7 @@ const makeProject = (
   });
   return {
     config: parsed,
+    context: { root },
     graph: buildContentGraph(pages, {
       folderMeta: new Map(),
       i18n: parsed.i18n,
@@ -676,6 +677,7 @@ const askDataProject = (): BlumeProject =>
       deployment: { site: "https://example.com/" },
       title: "Docs",
     }),
+    context: { root },
     graph: {
       pages: [
         makePage("a.md", "/a", "Alpha", { description: "First" }),
@@ -718,6 +720,7 @@ describe("buildAskData", () => {
   it("resolves <Visibility> for the agents audience", async () => {
     const proj = {
       config: blumeConfigSchema.parse({ title: "Docs" }),
+      context: { root },
       graph: { pages: [makePage("v.md", "/v", "Vis")] },
       manifest: {
         routes: [

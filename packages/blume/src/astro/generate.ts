@@ -24,6 +24,7 @@ import { buildMcpData } from "../ai/mcp/data.ts";
 import { buildMcpDiscovery, buildMcpServerCard } from "../ai/mcp/discovery.ts";
 import { validateUsedComponents } from "../core/component-diagnostics.ts";
 import { analyzeComponentOverrides } from "../core/component-overrides.ts";
+import { collectContentAssets } from "../core/content-assets.ts";
 import type {
   BlumeBanner,
   BlumeData,
@@ -74,6 +75,7 @@ import {
   astroConfigTemplate,
   catchAllPageTemplate,
   changelogIndexTemplate,
+  contentAssetsEndpointTemplate,
   contentConfigTemplate,
   envTemplate,
   exampleMapTemplate,
@@ -1703,6 +1705,10 @@ export const generateRuntime = async (
   }
 
   const rawMarkdown = await buildRawMarkdown(project);
+  // The originals behind the rewritten `/blume-assets/content/…` references in
+  // the agent-facing Markdown, plus the endpoint that serves them (and the
+  // remote-source assets materialized under `.blume/public/blume-assets`).
+  const contentAssets = await collectContentAssets(project);
   await Promise.all([
     write(
       join(srcDir, "generated", "raw-markdown.json"),
@@ -1715,6 +1721,16 @@ export const generateRuntime = async (
     write(
       join(srcDir, "pages", "[...slug].mdx.ts"),
       rawMarkdownEndpointTemplate("mdx")
+    ),
+    write(
+      join(srcDir, "generated", "content-assets.json"),
+      `${JSON.stringify(contentAssets)}\n`
+    ),
+    write(
+      join(srcDir, "pages", "blume-assets", "[...asset].ts"),
+      contentAssetsEndpointTemplate(
+        join(project.context.outDir, "public", "blume-assets")
+      )
     ),
   ]);
 

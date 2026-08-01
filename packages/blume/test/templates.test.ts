@@ -14,6 +14,7 @@ import {
   astroConfigTemplate,
   catchAllPageTemplate,
   changelogIndexTemplate,
+  contentAssetsEndpointTemplate,
   contentConfigTemplate,
   envTemplate,
   exampleMapTemplate,
@@ -1498,5 +1499,61 @@ describe("env / package / tsconfig templates", () => {
     expect(runtimeTsconfigTemplate()).toContain(
       '"extends": "astro/tsconfigs/strict"'
     );
+  });
+});
+
+describe("astroConfigTemplate image config", () => {
+  const render = (parsed: typeof config) =>
+    astroConfigTemplate({
+      askPath: ASK_PATH,
+      config: parsed,
+      contentRoutes: [],
+      context: context(),
+      dataPath: DATA_PATH,
+      examplesPath: EXAMPLES_PATH,
+      examplesThemePath: EXAMPLES_THEME_PATH,
+      needsReact: false,
+      openapiPath: OPENAPI_PATH,
+      pages: [],
+      searchClientPath: SEARCH_CLIENT_PATH,
+      themePath: THEME_PATH,
+    });
+
+  it("emits no image block by default", () => {
+    expect(render(config)).not.toContain("image:");
+  });
+
+  it("passes authorized domains and remote patterns through to Astro", () => {
+    const configured = blumeConfigSchema.parse({
+      image: {
+        domains: ["cdn.example.com"],
+        remotePatterns: [{ hostname: "**.example.com", protocol: "https" }],
+      },
+    });
+    const out = render(configured);
+    expect(out).toContain('"domains":["cdn.example.com"]');
+    expect(out).toContain('"hostname":"**.example.com"');
+    expect(out).toContain('"protocol":"https"');
+  });
+});
+
+describe("contentAssetsEndpointTemplate", () => {
+  const out = contentAssetsEndpointTemplate("/p/.blume/public/blume-assets");
+
+  it("prerenders and reads the generated content-asset map", () => {
+    expect(out).toContain("export const prerender = true;");
+    expect(out).toContain(
+      'import assets from "../../generated/content-assets.json"'
+    );
+  });
+
+  it("bakes in the staged remote-assets directory", () => {
+    expect(out).toContain(
+      'const STAGED_DIR = "/p/.blume/public/blume-assets";'
+    );
+  });
+
+  it("guards staged lookups against path traversal", () => {
+    expect(out).toContain('abs.startsWith(STAGED_DIR + "/")');
   });
 });
