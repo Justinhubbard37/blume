@@ -40,6 +40,60 @@ const BOOST = { description: 2, title: 3 };
 const SEGMENTED_LANGUAGES = new Set(["ja", "ko", "th", "zh"]);
 
 /**
+ * Languages indexed as character bigrams rather than whole segments, and
+ * queried to match accordingly. Japanese and Chinese write compounds in
+ * {@link BIGRAM_SCRIPTS} without delimiters; Korean separates words with
+ * spaces and Thai has no comparable bigram convention, so both keep the plain
+ * segmented tokens even where a page mixes in Han or kana.
+ *
+ * Dictionary segmentation alone drops the adjacency that makes a compound term
+ * distinctive: 資金決済法 becomes 資金 / 決済 / 法, and because Orama scores a
+ * bag of words, a page that merely mentions each fragment somewhere outranks
+ * the page about the law itself. Bigrams put that adjacency back as index
+ * terms, and dropping the whole-segment tokens keeps a fragment as common as
+ * 法 from matching on its own.
+ */
+const BIGRAM_LANGUAGES = new Set(["ja", "zh"]);
+
+/**
+ * Segments written entirely in these scripts are the ones re-cut into bigrams,
+ * matching the scripts Lucene's CJK analyzer bigrams. Property escapes rather
+ * than ranges, so ideographs outside the basic plane are covered as well —
+ * 𠮟, the 常用漢字表 form of しかる, is one. The literals that follow belong to
+ * no script of their own but appear only inside such words: the iteration
+ * marks, the prolonged sound mark, and the halfwidth voiced sound marks.
+ */
+const BIGRAM_SCRIPTS =
+  /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}々〆〇ーﾞﾟ]+$/u;
+
+/**
+ * Emit every overlapping 2-character window of `run`, or the lone character.
+ * Windows are cut by code point: an ideograph outside the basic plane is a
+ * surrogate pair, and slicing by code unit would split it into halves that
+ * match nothing.
+ *
+ * Dropping the whole-segment tokens means a single-character query reaches
+ * only pages where the character opens a bigram: a run-final 法 sits in 示法,
+ * which the query 法 does not prefix-match. Lucene's CJK analyzer shares this
+ * property; indexing lone characters alongside the bigrams would reinvite the
+ * fragment noise this file exists to remove.
+ */
+const addBigrams = (run: string, tokens: Set<string>): void => {
+  const characters = [...run];
+  if (characters.length === 1) {
+    tokens.add(run);
+    return;
+  }
+  let previous = "";
+  for (const character of characters) {
+    if (previous) {
+      tokens.add(previous + character);
+    }
+    previous = character;
+  }
+};
+
+/**
  * A word-segmenting tokenizer for languages the default splitter can't handle,
  * built on `Intl.Segmenter` (the same engine `@orama/tokenizers` wraps).
  * Input is lowercased before segmenting — unlike the upstream tokenizers —
@@ -47,6 +101,13 @@ const SEGMENTED_LANGUAGES = new Set(["ja", "ko", "th", "zh"]);
  * case-insensitively. Returns `undefined` for languages the default tokenizer
  * already serves, and on runtimes without `Intl.Segmenter`, where the caller
  * falls back to Orama's default.
+ *
+ * On a {@link BIGRAM_LANGUAGES} index, runs of adjacent
+ * {@link BIGRAM_SCRIPTS} segments are joined and re-cut into character
+ * bigrams; everything else (Latin, digits, and every segment on a Korean or
+ * Thai index) is emitted as the segmenter produced it. Punctuation and spaces
+ * are not word-like, so they end a run — 「クーリング・オフ」 bigrams either
+ * side of the interpunct rather than across it.
  */
 const segmentingTokenizer = (locale?: string): Tokenizer | undefined => {
   const language = locale?.toLowerCase().split(/[-_]/u)[0] ?? "";
@@ -57,16 +118,34 @@ const segmentingTokenizer = (locale?: string): Tokenizer | undefined => {
     return;
   }
   const segmenter = new Intl.Segmenter(language, { granularity: "word" });
+  // Keyed off the same set the strict query pass reads, so an index is never
+  // built from bigrams that the query side then matches loosely.
+  const bigram = BIGRAM_LANGUAGES.has(language);
   return {
     language,
     normalizationCache: new Map(),
     tokenize: (raw: string): string[] => {
       const tokens = new Set<string>();
-      for (const segment of segmenter.segment(raw.toLowerCase())) {
-        if (segment.isWordLike) {
-          tokens.add(segment.segment);
+      let run = "";
+      const flush = (): void => {
+        if (run) {
+          addBigrams(run, tokens);
+          run = "";
         }
+      };
+      for (const segment of segmenter.segment(raw.toLowerCase())) {
+        if (!segment.isWordLike) {
+          flush();
+          continue;
+        }
+        if (bigram && BIGRAM_SCRIPTS.test(segment.segment)) {
+          run += segment.segment;
+          continue;
+        }
+        flush();
+        tokens.add(segment.segment);
       }
+      flush();
       return [...tokens];
     },
   };
@@ -94,10 +173,19 @@ export const buildOramaIndex = async (
   return db;
 };
 
+/** Orama keeps only documents matching every token at a threshold of 0. */
+const ALL_TOKENS = 0;
+
 /**
  * Query the index, returning the matching documents (highest-ranked first).
  * When `locale` is given, results are filtered to that language via an exact
  * `where` match on the `locale` enum.
+ *
+ * On a bigrammed index the strict pass runs first: a term is only meant to
+ * match where its bigrams sit together, and scoring them independently lets a
+ * page sharing a couple of windows outrank the page the term is about. Terms
+ * spanning several words rarely appear in full on one page, so an empty strict
+ * result falls back to the default pass rather than reporting no matches.
  */
 export const queryOramaIndex = async (
   db: AnyOrama,
@@ -105,12 +193,18 @@ export const queryOramaIndex = async (
   limit: number,
   locale?: string
 ): Promise<OramaDoc[]> => {
-  const found = await search(db, {
+  const params = {
     boost: BOOST,
     limit,
     properties: ["title", "description", "content"],
     term,
     ...(locale ? { where: { locale: { eq: locale } } } : {}),
-  });
+  };
+  const bigrammed = BIGRAM_LANGUAGES.has(db.tokenizer?.language ?? "");
+  const strict = bigrammed
+    ? await search(db, { ...params, threshold: ALL_TOKENS })
+    : undefined;
+  const found =
+    strict && strict.hits.length > 0 ? strict : await search(db, params);
   return found.hits.map((hit) => hit.document as unknown as OramaDoc);
 };
