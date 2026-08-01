@@ -626,6 +626,13 @@ export interface AiConfig {
    * containing private material (`d`, `p`, `q`, …) is rejected.
    */
   webBotAuth?: WebBotAuthConfig;
+  /**
+   * WebMCP: register in-page tools (search, page Markdown, the docs index)
+   * on the browser's model context, so agentic browsers can drive the docs
+   * without a separate MCP connection. The script is tiny and no-ops in
+   * browsers without the API. Defaults to `true`; set `false` to opt out.
+   */
+  webmcp?: boolean;
 }
 
 /** Web Bot Auth signature directory. Off until at least one key is listed. */

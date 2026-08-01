@@ -20,6 +20,7 @@ import { buildStructuredData, toIso } from "../../seo/jsonld.ts";
 import { normalizeXHandle } from "../../seo/x-handle.ts";
 import { withBase } from "../islands/base-path.ts";
 import Analytics from "./Analytics.astro";
+import WebMcp from "./WebMcp.astro";
 import Banner from "./Banner.astro";
 import Breadcrumbs from "./Breadcrumbs.astro";
 import Empty from "./Empty.astro";
@@ -962,5 +963,6 @@ const bannerKey = banner?.dismissible ? banner.key : null;
         }
       }
     </script>
+    <WebMcp />
   </body>
 </html>

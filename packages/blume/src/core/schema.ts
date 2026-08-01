@@ -739,6 +739,13 @@ const aiConfigSchema = z.strictObject({
       keys: z.array(publicJwkSchema).default([]),
     })
     .default({}),
+  /**
+   * WebMCP: register in-page tools (search, page Markdown, the docs index)
+   * on the browser's model context so agentic browsers can drive the docs
+   * without a separate MCP connection. A tiny script that no-ops in browsers
+   * without the API; on by default.
+   */
+  webmcp: z.boolean().default(true),
 });
 
 /**

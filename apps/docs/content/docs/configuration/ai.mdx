@@ -358,6 +358,18 @@ When the site publishes APIs, Blume generates an [RFC 9727](https://www.rfc-edit
 
 A site with no API references and no MCP server emits no catalog — there'd be nothing in it. As everywhere, a `public/.well-known/api-catalog` file you ship yourself wins over the generated one.
 
+### WebMCP
+
+[WebMCP](https://webmachinelearning.github.io/webmcp/) is an emerging browser API that lets a page register tools directly with an agentic browser — no separate server connection needed. Every Blume page registers the docs' read-only surface on the page's model context: `search_docs` (site search), `get_page` (a page's [raw Markdown](#raw-markdown)), and `list_pages` (the [`llms.txt`](#llmstxt) index). The script is tiny, loads no search machinery until a tool is actually called, and silently no-ops in every browser without the API — which today is all of them outside [Chrome's early preview](https://developer.chrome.com/blog/webmcp-epp). It registers on whichever surface the in-flux spec exposes (`navigator.modelContext` or `document.modelContext`), via `provideContext` or per-tool `registerTool`.
+
+It's on by default; set `webmcp: false` to opt out:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  webmcp: false,
+}
+```
+
 ### Skills discovery
 
 If your project ships [agent skills](https://agentskills.io) — the [Blume repo itself does](#agent-skill) — point `ai.skills` at the directory that holds them, and the build publishes them for discovery per the [Agent Skills Discovery RFC](https://github.com/cloudflare/agent-skills-discovery-rfc):

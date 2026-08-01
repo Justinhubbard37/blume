@@ -139,6 +139,11 @@ export interface BlumeDataConfig {
   title: string;
   /** Table-of-contents settings: whether to show it and the heading range. */
   toc: ResolvedConfig["toc"];
+  /**
+   * WebMCP in-page tools (`ai.webmcp`), plus whether llms.txt exists for the
+   * list tool to fetch (`ai.llmsTxt.enabled`).
+   */
+  webmcp: { enabled: boolean; llms: boolean };
   /** X (Twitter) attribution: the site's account, and a default creator. */
   x: { creator?: string; handle?: string };
 }

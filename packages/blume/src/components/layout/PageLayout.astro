@@ -40,6 +40,7 @@ import Fonts from "./Fonts.astro";
 import { BANNER_INIT_SCRIPT, THEME_INIT_SCRIPT } from "./head-scripts.ts";
 import Header from "./Header.astro";
 import { activeTabForRoute } from "./nav-utils.ts";
+import WebMcp from "./WebMcp.astro";
 
 interface Props {
   site: { title: string; description?: string };
@@ -254,6 +255,7 @@ const bannerKey = banner?.dismissible ? banner.key : null;
     />
     <main id="blume-content"><slot /></main>
     <slot name="footer" />
+    <WebMcp />
     {
       // Mobile nav for chrome-only pages: the header's inline tab bar is hidden
       // below `lg` and there's no sidebar drawer, so surface the tabs in a

@@ -1156,6 +1156,10 @@ export const buildRuntimeData = (project: BlumeProject): string => {
       theme: config.theme,
       title: config.title,
       toc: config.toc,
+      webmcp: {
+        enabled: config.ai.webmcp,
+        llms: config.ai.llmsTxt.enabled,
+      },
       x: config.seo.x,
     },
     feeds: buildRssFeeds(project).map((feed) => ({
