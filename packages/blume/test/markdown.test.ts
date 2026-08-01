@@ -645,7 +645,7 @@ describe("mermaidPlugin", () => {
         [
           jsxAttribute(
             "class",
-            "not-prose my-6 flex justify-center overflow-x-auto"
+            "not-prose my-6 flex overflow-x-auto [&>div]:w-full [&>div>svg]:mx-auto [&>div>svg]:block"
           ),
           jsxAttribute("data-source", "graph TD; A-->B;"),
         ],
