@@ -83,10 +83,13 @@ export interface BlumeIntegrationOptions {
 /**
  * Dev-server content negotiation: when a client asks for `text/markdown`,
  * transparently rewrite a content-page request to its `.md` variant so the
- * existing raw-Markdown endpoint serves it. Runs only under `blume dev`; static
- * and server builds expose the same content at the `.md` URL. Only routes with
- * a Markdown variant are rewritten, so landing pages and user `.astro` pages
- * keep serving HTML.
+ * existing raw-Markdown endpoint serves it. Runs only under `blume dev` — in
+ * production the content pages are prerendered and served from the platform's
+ * static layer, which this middleware never fronts. Vercel server builds get
+ * the same negotiation from routing rules spliced into the Build Output config
+ * (see `deploy/vercel-negotiation.ts`); every other build exposes the same
+ * content at the `.md` URL. Only routes with a Markdown variant are rewritten,
+ * so landing pages and user `.astro` pages keep serving HTML.
  */
 const negotiateMarkdown =
   (routes: ReadonlySet<string>, base?: string) =>

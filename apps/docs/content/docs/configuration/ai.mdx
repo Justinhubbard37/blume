@@ -61,6 +61,10 @@ Nested routes work the same way (`/content/syntax.md`), and the home page is ser
 
 The `.md` variant _downlevels_ components to plain Markdown for consumers that can't interpret JSX: `<TypeTable>` becomes a Markdown table, `<Callout>` a labeled blockquote, `<Steps>` an ordered list, `<Tabs>` bold-labeled sections, and `<YouTube>` a link. Props are evaluated with the page's `frontmatter` in scope, so a prop like `title={frontmatter.status}` resolves to the same value the rendered page shows. Anything that can't be converted faithfully — a custom component, or a prop computed from an import — is left as-is, and component markup inside fenced code blocks is never touched. The same conversion applies to `llms-full.txt` and the MCP server's `get_page` tool, so every agent-facing surface reads clean Markdown. When you want the untransformed source, use the `.mdx` variant.
 
+### Content negotiation
+
+Agents don't need to know the `.md` convention: requesting a page's own URL with an [`Accept: text/markdown`](https://acceptmarkdown.com) header serves the Markdown variant at the same address, with `Vary: Accept` so caches keep the two apart. The dev server honors the header out of the box, and a [Vercel server build](/docs/deployment#server-rendering) wires the same negotiation into the deploy's routing rules automatically — no configuration needed. Other deploy targets serve prerendered pages from a static layer with no request-time hook, so agents there fetch the `.md` URL directly; the [agent readability manifest](#agent-readability) advertises `contentNegotiation` only on deployments that honor the header.
+
 ### Custom component serializers
 
 Give your own components a Markdown form with `ai.markdownComponents` — a map of JSX name to serializer. Each serializer receives the component's `props` (statically evaluated from the MDX attributes, with the page's `frontmatter` in scope), its `children` (already downleveled to Markdown), and the page's `frontmatter` data, and returns the replacement — or `null` to leave the JSX as-is:
@@ -305,6 +309,8 @@ The manifest lists only what you've enabled — the [raw Markdown](#raw-markdown
   "repository": "https://github.com/acme/docs"
 }
 ```
+
+The `contentNegotiation` field appears only when the deployed site actually honors the `Accept: text/markdown` header — see [content negotiation](#content-negotiation); on every other deployment the manifest advertises just the `.md` mirror pattern.
 
 Set `seo.agentReadability` to `false` to skip it, or ship your own `public/agent-readability.json` to take over — Blume never overwrites a file you place in `public/`.
 

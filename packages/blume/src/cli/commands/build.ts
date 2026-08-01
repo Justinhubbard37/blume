@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readdir, stat, writeFile } from "node:fs/promises";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 
 import { build } from "astro";
 import { defineCommand } from "citty";
@@ -26,6 +26,7 @@ import {
 } from "../../deploy/redirects.ts";
 import { buildRobots } from "../../deploy/robots.ts";
 import { buildSitemap } from "../../deploy/sitemap.ts";
+import { injectNegotiationRoutes } from "../../deploy/vercel-negotiation.ts";
 import { buildSearchIndex } from "../../search/build.ts";
 import { syncSearchProvider } from "../../search/sync/index.ts";
 import { refuseIfDevRunning } from "../dev-lock.ts";
@@ -127,6 +128,38 @@ const emitHeaderFiles = async (
     "utf-8"
   );
   logger.success("Emitted _headers (UTF-8 Content-Type for raw endpoints)");
+};
+
+/**
+ * Splice `Accept: text/markdown` negotiation routes into the Vercel adapter's
+ * Build Output config, so a content-page request that prefers Markdown gets the
+ * page's prerendered `.md` mirror (content pages are prerendered even in server
+ * output, so Astro middleware never sees them — the routing layer is the only
+ * request-time hook). Vercel server builds only; the adapter writes the config
+ * straight to the project root (see `withAdapterRoot`).
+ */
+const emitVercelNegotiation = async (
+  routePaths: string[],
+  root: string
+): Promise<void> => {
+  const configPath = join(root, ".vercel", "output", "config.json");
+  if (!existsSync(configPath)) {
+    return;
+  }
+  const injected = injectNegotiationRoutes(
+    await readFile(configPath, "utf-8"),
+    routePaths
+  );
+  if (injected === null) {
+    logger.warn(
+      "Could not wire Accept: text/markdown negotiation into .vercel/output/config.json — raw Markdown stays available at the .md URLs."
+    );
+    return;
+  }
+  await writeFile(configPath, injected, "utf-8");
+  logger.success(
+    "Wired Accept: text/markdown negotiation into the Vercel routing config"
+  );
 };
 
 const formatBytes = (bytes: number): string => {
@@ -545,6 +578,13 @@ export const buildCommand = defineCommand({
     );
     if (surfaced.moved) {
       logger.success(`Surfaced ${adapter} output to ${surfaced.to}`);
+    }
+
+    if (project.config.deployment.output === "server" && adapter === "vercel") {
+      await emitVercelNegotiation(
+        project.manifest.routes.map((route) => route.path),
+        root
+      );
     }
 
     await publishBuildArtifacts(

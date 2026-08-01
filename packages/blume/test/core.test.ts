@@ -1094,18 +1094,44 @@ describe("robots.txt", () => {
   });
 });
 
+const markdownArtifact = (
+  manifest: ReturnType<typeof buildAgentReadability>
+): Record<string, unknown> | undefined =>
+  (manifest?.artifacts as { markdown?: Record<string, unknown> } | undefined)
+    ?.markdown;
+
 describe("agent-readability.json", () => {
   it("indexes the Markdown mirror and sitemap with absolute URLs", () => {
     const manifest = buildAgentReadability(makeProject([]));
     expect(manifest?.name).toBe("Docs");
     expect(manifest?.site).toBe("https://example.com");
     expect(manifest?.artifacts).toMatchObject({
-      markdown: {
-        contentNegotiation: "text/markdown",
-        pattern: "https://example.com/{route}.md",
-      },
+      // A static build serves prerendered HTML with no request-time hook, so
+      // no `contentNegotiation` claim — agents fetch the `.md` pattern.
+      markdown: { pattern: "https://example.com/{route}.md" },
       sitemap: "https://example.com/sitemap.xml",
     });
+    expect(markdownArtifact(manifest)).not.toContainKey("contentNegotiation");
+  });
+
+  it("advertises content negotiation only where the deploy honors it", () => {
+    const manifest = buildAgentReadability(
+      makeProject([], {
+        deployment: {
+          adapter: "vercel",
+          output: "server",
+          site: "https://example.com",
+        },
+      })
+    );
+    expect(markdownArtifact(manifest)).toMatchObject({
+      contentNegotiation: "text/markdown",
+      pattern: "https://example.com/{route}.md",
+    });
+    const node = buildAgentReadability(
+      makeProject([], { deployment: { adapter: "node", output: "server" } })
+    );
+    expect(markdownArtifact(node)).not.toContainKey("contentNegotiation");
   });
 
   it("returns null when disabled", () => {
