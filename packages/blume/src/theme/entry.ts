@@ -452,19 +452,29 @@ blume-diff {
    even though its chrome wrapper is not-prose. */
 .prose :where(pre:not(.twoslash, .twoslash pre, blume-panel-tabs *) > code) {
   display: block;
-  overflow-x: auto;
-  padding: 0 1.25rem;
-  /* The scroller is only as tall as the code, so an overlay scrollbar would
-     draw on top of the last line; hide it (wheel/trackpad/keyboard scrolling
-     still works). */
-  scrollbar-width: none;
+  /* Tall blocks scroll vertically in place instead of taking the page. Both
+     axes live on the code element for the same reason: the pre stays static
+     so the header bar and copy button never drift with the scroll. */
+  max-height: 24rem;
+  overflow: auto;
+  /* The small bottom inset keeps the horizontal thumb off the last line's
+     descenders now that scrollbars are visible. */
+  padding: 0 1.25rem 0.375rem;
+  /* Thin theme-colored scrollbars, matching the sidebar treatment, so a
+     height-capped block reads as scrollable instead of simply ending.
+     Safari before 18.2 supports neither property and falls back to the
+     platform-default scrollbar — acceptable, since macOS overlays it. */
+  scrollbar-color: var(--blume-border) transparent;
+  scrollbar-width: thin;
 }
 
-.prose
-  :where(
-    pre:not(.twoslash, .twoslash pre, blume-panel-tabs *) > code
-  )::-webkit-scrollbar {
-  display: none;
+/* The dark border token is too close to the page background to read as a
+   scrollbar thumb; derive a brighter one from the muted foreground instead. */
+:root[data-theme="dark"]
+  .prose
+  :where(pre:not(.twoslash, .twoslash pre, blume-panel-tabs *) > code) {
+  scrollbar-color: color-mix(in oklab, var(--blume-muted-foreground) 55%, transparent)
+    transparent;
 }
 
 /* Word wrap (markdown.code.wrap): long lines wrap instead of scrolling. The
@@ -532,6 +542,10 @@ pre.blume-source {
 
 pre.blume-source > code {
   flex: 1;
+  /* The pane's measured height is authoritative (it can exceed the prose
+     24rem cap), so undo the generic prose max-height: the code must fill
+     whatever height the tab was given. */
+  max-height: none;
   min-height: 0;
   overflow: auto;
 }
@@ -711,6 +725,13 @@ pre:has(.line.focused):hover .line:not(.focused) {
   #blume-content > nav,
   #blume-content > details {
     display: none !important;
+  }
+
+  /* Paper can't scroll: uncap the code scroller so long blocks print in
+     full, same as tab panels are force-expanded below. */
+  .prose :where(pre:not(.twoslash, .twoslash pre, blume-panel-tabs *) > code) {
+    max-height: none;
+    overflow: visible;
   }
 
   #blume-content {

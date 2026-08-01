@@ -448,6 +448,7 @@ const bannerKey = banner?.dismissible ? banner.key : null;
     class="bg-background font-sans text-foreground antialiased"
     data-blume-code-wrap={codeWrap ? "" : undefined}
     data-blume-image-zoom={imageZoom ? "" : undefined}
+    data-i18n-copied={actionStrings.copied}
     data-i18n-copy-code={actionStrings.copyCode}
     data-i18n-diagram-error={contentStrings.diagramError}
   >
@@ -707,17 +708,30 @@ const bannerKey = banner?.dismissible ? banner.key : null;
         });
       }
 
-      const svg = (name: string) =>
-        `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name]}</svg>`;
+      const svg = (name: string, cls = "") =>
+        `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${cls ? ` class="${cls}"` : ""}>${icons[name]}</svg>`;
 
+      // Opaque icon chip over the code (in the style of Lina's code block),
+      // with the check icon scale-swapping in over the copy icon after a copy.
       const buttonClass =
-        "absolute right-3 inline-flex size-7 items-center justify-center rounded-full bg-transparent text-muted-foreground opacity-70 transition hover:bg-muted hover:text-foreground hover:opacity-100 focus-visible:opacity-100";
+        "absolute right-3 z-[2] inline-flex size-[1.875rem] select-none items-center justify-center rounded-md text-muted-foreground bg-background transition-colors [&_svg]:pointer-events-none [&_svg]:shrink-0";
+      const idleClasses = ["hover:bg-muted", "hover:text-foreground"];
 
-      // Localized copy-button label, stamped on <body> by the layout markup
+      // Localized copy-button labels, stamped on <body> by the layout markup
       // (the Search.astro data-attribute channel) since this bundled script
       // can't interpolate server values directly.
       const copyCodeLabel =
         document.body.getAttribute("data-i18n-copy-code") || "Copy code";
+      const copiedLabel =
+        document.body.getAttribute("data-i18n-copied") || "Copied!";
+
+      // Shared polite live region: the icon swap is invisible to screen
+      // readers, so copy success is announced here. Cleared when a button's
+      // checked state resets so the next copy re-announces.
+      const copyStatus = document.createElement("span");
+      copyStatus.className = "sr-only";
+      copyStatus.setAttribute("aria-live", "polite");
+      document.body.appendChild(copyStatus);
 
       const languageLabels: Record<string, string> = {
         astro: "Astro",
@@ -757,6 +771,16 @@ const bannerKey = banner?.dismissible ? banner.key : null;
           );
         }
         pre.classList.add("group", "relative");
+        // The code element is the scroll container (see the theme entry), but
+        // Shiki's tab stop lands on the pre, which no longer scrolls. Move the
+        // stop to the code so keyboard users can actually scroll the block
+        // (WCAG 2.1.1 — the same rule the table wrapper handles). Twoslash and
+        // API-panel blocks keep the pre as their scroller, so theirs stays.
+        const scroller = pre.querySelector("code");
+        if (scroller && !pre.matches(".twoslash, blume-panel-tabs *")) {
+          scroller.setAttribute("tabindex", "0");
+          pre.removeAttribute("tabindex");
+        }
         const button = document.createElement("button");
         button.type = "button";
         // The language-label bar (prose) vs flush code (tabs) need a different
@@ -764,10 +788,31 @@ const bannerKey = banner?.dismissible ? banner.key : null;
         const topClass = pre.closest("blume-tabs, .not-prose")
           ? "top-2.5"
           : "top-2";
-        button.className = `${buttonClass} ${topClass}`;
+        button.className = `${buttonClass} ${idleClasses.join(" ")} ${topClass}`;
         button.setAttribute("data-blume-copy", "");
         button.setAttribute("aria-label", copyCodeLabel);
-        button.innerHTML = svg("copy");
+        button.innerHTML =
+          svg(
+            "check",
+            "scale-0 text-green-600 transition-transform dark:text-green-500"
+          ) + svg("copy", "absolute transition-transform");
+        const [checkIcon, copyIcon] = button.querySelectorAll("svg");
+        // While checked the button drops its idle hover tint so the green
+        // check reads as a steady confirmation, mirroring Lina's copied state.
+        // The accessible name tracks the visual state for anyone probing the
+        // button mid-confirmation.
+        const setChecked = (checked: boolean) => {
+          checkIcon?.classList.toggle("scale-0", !checked);
+          copyIcon?.classList.toggle("scale-0", checked);
+          button.setAttribute(
+            "aria-label",
+            checked ? copiedLabel : copyCodeLabel
+          );
+          for (const cls of idleClasses) {
+            button.classList.toggle(cls, !checked);
+          }
+        };
+        let resetTimeout: number | undefined;
         button.addEventListener("click", async () => {
           const code = pre.querySelector("code");
           let text = code?.textContent ?? "";
@@ -788,9 +833,14 @@ const bannerKey = banner?.dismissible ? banner.key : null;
           } catch {
             return;
           }
-          button.innerHTML = svg("check");
-          setTimeout(() => {
-            button.innerHTML = svg("copy");
+          if (resetTimeout) {
+            window.clearTimeout(resetTimeout);
+          }
+          setChecked(true);
+          copyStatus.textContent = copiedLabel;
+          resetTimeout = window.setTimeout(() => {
+            setChecked(false);
+            copyStatus.textContent = "";
           }, 1500);
         });
         pre.appendChild(button);
