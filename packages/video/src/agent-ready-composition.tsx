@@ -17,6 +17,7 @@ import {
 import { SharedAxisY } from "@/components/remocn/shared-axis-y";
 import { SoftBlurIn } from "@/components/remocn/soft-blur-in";
 import { Typewriter } from "@/components/remocn/typewriter";
+import { AGENT_CHECKS_DURATION, AgentChecks } from "@/scenes/agent-checks";
 import {
   AGENT_BUILD_DURATION,
   AGENT_CURL_DURATION,
@@ -185,34 +186,28 @@ const SceneTagline = () => (
   <>
     <Positioned dy={-37}>
       <SoftBlurIn
-        text="Your docs have a new reader."
+        text="Your docs have new readers."
         fontSize={70}
         color={WHITE}
       />
     </Positioned>
     <Sequence from={8} layout="none">
       <Positioned dy={37}>
-        <SoftBlurIn text="It isn’t human." fontSize={70} color={WHITE} />
+        <SoftBlurIn
+          text="Most of them aren’t human."
+          fontSize={70}
+          color={WHITE}
+        />
       </Positioned>
     </Sequence>
   </>
 );
 
-// ─── Scene 2 · The probes ───────────────────────────────────────────────────
-// A rattle of what agents actually ask a domain — the same questions the
-// discovery artifacts answer two scenes later.
-const PROBES = [
-  "Can I read this as Markdown?",
-  "Is there an MCP server?",
-  "Which APIs do you publish?",
-  "Any skills I can install?",
-];
-
-const PROBES_DURATION = rattleDuration(PROBES);
-
-const SceneProbes = () => (
-  <Rattle lines={PROBES} fontSize={64} animateFirstIn />
-);
+// ─── Scene 2 · The checklist ────────────────────────────────────────────────
+// The problem, made concrete: a fixed headline over a scrolling pile of
+// agent-readiness requirement cards — the standards a docs site is now
+// expected to answer, and the ones this release wires into the harness.
+const SceneChecks = () => <AgentChecks />;
 
 // ─── Scene 3 · The solution ─────────────────────────────────────────────────
 // The pivot, in the tagline's two-line rhythm.
@@ -279,7 +274,7 @@ const SNAPS = [
   "Link headers. API catalog.",
   "Server card. Agent skills.",
   "WebMCP tools on every page.",
-  "Zero config. One build.",
+  "Zero config… mostly.",
 ];
 
 const FEATURES_DURATION = rattleDuration(SNAPS);
@@ -326,8 +321,8 @@ const REF_H = 720;
 // Scene starts, derived so the card scenes can grow without hand-retiming
 // everything after them.
 const TAGLINE_END = 90;
-const PROBES_END = TAGLINE_END + PROBES_DURATION;
-const SOLUTION_END = PROBES_END + SOLUTION_DURATION;
+const CHECKS_END = TAGLINE_END + AGENT_CHECKS_DURATION;
+const SOLUTION_END = CHECKS_END + SOLUTION_DURATION;
 const CURL_END = SOLUTION_END + AGENT_CURL_DURATION;
 const PIVOT_END = CURL_END + PIVOT_DURATION;
 const BUILD_END = PIVOT_END + AGENT_BUILD_DURATION;
@@ -364,13 +359,13 @@ export const AgentReadyVideo = () => {
           </Sequence>
           <Sequence
             from={TAGLINE_END}
-            durationInFrames={PROBES_DURATION}
+            durationInFrames={AGENT_CHECKS_DURATION}
             layout="none"
           >
-            <SceneProbes />
+            <SceneChecks />
           </Sequence>
           <Sequence
-            from={PROBES_END}
+            from={CHECKS_END}
             durationInFrames={SOLUTION_DURATION}
             layout="none"
           >
