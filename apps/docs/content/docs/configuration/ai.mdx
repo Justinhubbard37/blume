@@ -358,6 +358,22 @@ node -e 'const { generateKeyPairSync } = require("node:crypto"); const { publicK
 
 The public JWK goes in the config above; the private one goes wherever your signing agent runs (a secret manager, never the repo). If your organization doesn't operate agents, skip this — an empty directory advertises nothing worth verifying.
 
+Since `blume.config.ts` is executed at build time, the key doesn't have to be hardcoded — load it from a build-time environment variable to keep the config free of key blobs and rotate without a commit:
+
+```ts blume.config.ts lineNumbers
+const webBotAuthKey = process.env.WEB_BOT_AUTH_PUBLIC_JWK;
+
+export default defineConfig({
+  ai: {
+    webBotAuth: {
+      keys: webBotAuthKey ? [JSON.parse(webBotAuthKey)] : [],
+    },
+  },
+});
+```
+
+Environments without the variable publish no directory, and a key loaded this way is validated exactly like an inline one — including the private-material check. (The public key isn't a secret, so committing it inline is equally fine; the env var is an ergonomic choice, not a security one.)
+
 ## Agent skill
 
 Building a Blume site with the help of a coding agent? Install the Blume [agent skill](https://docs.claude.com/en/docs/claude-code/skills) so it knows how Blume works without you explaining it:
