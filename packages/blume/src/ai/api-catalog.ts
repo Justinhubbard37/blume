@@ -1,5 +1,6 @@
 import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import type { ResolvedConfig } from "../core/schema.ts";
+import { trimEnd } from "../core/trim.ts";
 import { resolveReferences } from "../openapi/references.ts";
 
 /**
@@ -31,7 +32,7 @@ const linksetEntries = (config: ResolvedConfig): LinksetEntry[] => {
   const deployBase = normalizeBasePath(config.deployment.base);
   const abs = (path: string): string => {
     const based = withBasePath(deployBase, path);
-    return site ? `${site.replace(/\/+$/u, "")}${based}` : based;
+    return site ? `${trimEnd(site, "/")}${based}` : based;
   };
 
   const entries: LinksetEntry[] = [];

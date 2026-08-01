@@ -44,6 +44,18 @@ const hitSearch: SearchFn = () =>
     sections: [],
   });
 
+const mangledSearch: SearchFn = () =>
+  Promise.resolve({
+    hits: [
+      {
+        excerpt: "Mangled <scr<b>ipt>alert(1)</script> and dangling <img src=x",
+        title: "Install",
+        url: "/quickstart",
+      },
+    ],
+    sections: [],
+  });
+
 describe("buildWebMcpTools", () => {
   it("offers the read-only tool set, gated by the config flags", () => {
     expect(toolsWith().map((entry) => entry.name)).toEqual([
@@ -92,6 +104,21 @@ describe("buildWebMcpTools", () => {
     // A working search with no matches is an answer, not an error.
     expect(empty.isError).toBeUndefined();
     expect(loads).toBe(2);
+  });
+
+  it("search_docs leaves no markup fragment behind on mangled hits", async () => {
+    const search = tool(
+      toolsWith({ loadSearch: () => Promise.resolve(mangledSearch) }),
+      "search_docs"
+    );
+
+    const result = await search.execute({ query: "install" });
+    // Lossy on broken markup by design — the guarantee is that no `<` (and
+    // so no reassembled tag) survives.
+    expect(result.content[0]?.text).toBe(
+      "Install — /base/quickstart\nMangled ipt>alert(1) and dangling "
+    );
+    expect(result.content[0]?.text).not.toContain("<");
   });
 
   it("get_page fetches the based .md mirror and maps the home route", async () => {
