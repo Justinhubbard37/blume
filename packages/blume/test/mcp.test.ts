@@ -711,6 +711,50 @@ describe("discovery documents", () => {
     );
   });
 
+  it("emits the SEP-2127 Server Card core with a reverse-DNS name", () => {
+    const card = buildMcpServerCard(input);
+    expect(card.$schema).toBe(
+      "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json"
+    );
+    expect(card.name).toBe("com.example.docs/test-docs");
+    expect(card.title).toBe("Test Docs");
+    expect(card.version).toBe("0.0.0");
+    expect(card.websiteUrl).toBe("https://docs.example.com");
+    // The schema requires remote URLs to be absolute, so `remotes` appears
+    // exactly when a site makes that possible.
+    expect(card.remotes).toEqual([
+      { type: "streamable-http", url: "https://docs.example.com/mcp" },
+    ]);
+    expect((card.description as string).length).toBeLessThanOrEqual(100);
+  });
+
+  it("carries initialize-shaped compat fields for older scanners", () => {
+    const card = buildMcpServerCard(input);
+    expect(card.serverInfo).toEqual({ name: "Test Docs", version: "0.0.0" });
+    expect(card.capabilities).toEqual({ tools: { listChanged: false } });
+    expect(card.transports).toEqual([
+      { endpoint: "https://docs.example.com/mcp", type: "streamable-http" },
+    ]);
+  });
+
+  it("omits remotes and namespaces under localhost without a site", () => {
+    const card = buildMcpServerCard({ ...input, site: null });
+    expect(card.name).toBe("localhost/test-docs");
+    expect(card.remotes).toBeUndefined();
+    expect(card.websiteUrl).toBeUndefined();
+    // A malformed site keeps the local namespace rather than throwing.
+    expect(buildMcpServerCard({ ...input, site: "not a url" }).name).toBe(
+      "localhost/test-docs"
+    );
+  });
+
+  it("caps card text at the schema's 100-character limit", () => {
+    const card = buildMcpServerCard({ ...input, name: "N".repeat(120) });
+    expect((card.description as string).length).toBe(100);
+    expect((card.title as string).length).toBe(100);
+    expect((card.description as string).endsWith("…")).toBe(true);
+  });
+
   it("falls back to a relative URL without a site", () => {
     const discovery = buildMcpDiscovery({ ...input, site: null }) as {
       servers: { url: string }[];

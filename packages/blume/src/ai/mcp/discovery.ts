@@ -1,5 +1,6 @@
 import { withBasePath } from "../../core/base-path.ts";
 import { trimEnd } from "../../core/trim.ts";
+import { slugify } from "../../openapi/references.ts";
 import { MCP_TOOLS } from "./tools.ts";
 
 /** Inputs needed to describe the MCP server in discovery documents. */
@@ -38,22 +39,76 @@ export const buildMcpDiscovery = (
   ],
 });
 
+/** The published `/v1/` Server Card schema (SEP-2127 extension). */
+const SERVER_CARD_SCHEMA =
+  "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json";
+
+/** The schema caps `description` (and `title`) at 100 characters. */
+const CARD_TEXT_MAX = 100;
+
+const truncate = (text: string): string =>
+  text.length > CARD_TEXT_MAX ? `${text.slice(0, CARD_TEXT_MAX - 1)}…` : text;
+
 /**
- * The `/.well-known/mcp/server-card.json` document: richer metadata including
- * the advertised tool set (full input schemas are served live via `tools/list`).
+ * The card's identity in the schema's reverse-DNS `namespace/server` form:
+ * the site hostname reversed (`useblume.dev` → `dev.useblume`), or
+ * `localhost` when no site is configured, plus the slugged display name.
+ */
+const reverseDnsName = (input: McpDiscoveryInput): string => {
+  let namespace = "localhost";
+  if (input.site) {
+    try {
+      namespace = new URL(input.site).hostname
+        .split(".")
+        .toReversed()
+        .join(".");
+    } catch {
+      // Not a parsable URL; the local namespace is honest enough.
+    }
+  }
+  return `${namespace}/${slugify(input.name) || "docs"}`;
+};
+
+const HTTP_URL = /^https?:\/\//u;
+
+/**
+ * The `/.well-known/mcp/server-card.json` document. The core follows the
+ * SEP-2127 Server Card extension schema (`$schema`, reverse-DNS `name`,
+ * `remotes` — which the schema requires to be absolute, so it appears only
+ * when a `site` is configured). Alongside it ride initialize-shaped compat
+ * fields (`serverInfo`, `capabilities`, `transports`) for scanners built
+ * against the SEP's earlier revision, plus Blume's advertised tool set —
+ * schema-legal extras (`additionalProperties` is open), and the tool list is
+ * genuinely static for a docs server, unlike the dynamic servers the spec
+ * excludes primitives for. Full input schemas are served live via
+ * `tools/list`.
  */
 export const buildMcpServerCard = (
   input: McpDiscoveryInput
-): Record<string, unknown> => ({
-  description: `Model Context Protocol server for the ${input.name} documentation.`,
-  name: input.name,
-  tools: MCP_TOOLS.map((tool) => ({
-    annotations: tool.annotations,
-    description: tool.description,
-    name: tool.name,
-    title: tool.title,
-  })),
-  transport: "streamable-http",
-  url: serverUrl(input),
-  version: input.version,
-});
+): Record<string, unknown> => {
+  const url = serverUrl(input);
+  return {
+    $schema: SERVER_CARD_SCHEMA,
+    capabilities: { tools: { listChanged: false } },
+    description: truncate(
+      `Model Context Protocol server for the ${input.name} documentation.`
+    ),
+    name: reverseDnsName(input),
+    ...(HTTP_URL.test(url)
+      ? { remotes: [{ type: "streamable-http", url }] }
+      : {}),
+    serverInfo: { name: input.name, version: input.version },
+    title: truncate(input.name),
+    tools: MCP_TOOLS.map((tool) => ({
+      annotations: tool.annotations,
+      description: tool.description,
+      name: tool.name,
+      title: tool.title,
+    })),
+    transport: "streamable-http",
+    transports: [{ endpoint: url, type: "streamable-http" }],
+    url,
+    version: input.version,
+    ...(input.site ? { websiteUrl: trimEnd(input.site, "/") } : {}),
+  };
+};
