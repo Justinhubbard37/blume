@@ -719,6 +719,15 @@ const aiConfigSchema = z.strictObject({
   /** Expose the docs as an MCP server for connecting agents. */
   mcp: mcpConfigSchema.default({}),
   /**
+   * Publish Agent Skills for discovery: a directory (resolved against the
+   * project root) whose subdirectories each hold a `SKILL.md`. The build
+   * copies each skill under `/.well-known/agent-skills/` — a lone `SKILL.md`
+   * verbatim, a skill with supporting files as a `.tar.gz` — and emits the
+   * discovery index (`index.json`) with SHA-256 digests per the Agent Skills
+   * Discovery RFC.
+   */
+  skills: z.string().min(1).optional(),
+  /**
    * Web Bot Auth (IETF `webbotauth`): publish the org's HTTP Message
    * Signature public keys at `/.well-known/http-message-signatures-directory`
    * so sites receiving requests from the org's agents can verify them.

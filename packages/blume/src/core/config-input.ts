@@ -606,6 +606,20 @@ export interface AiConfig {
   /** Expose the docs as an MCP server for agents. */
   mcp?: McpConfig;
   /**
+   * Publish Agent Skills for discovery: a directory (resolved against the
+   * project root) whose subdirectories each hold a `SKILL.md`. Skills are
+   * copied under `/.well-known/agent-skills/` — single-file skills verbatim,
+   * skills with supporting resources as `.tar.gz` archives — and enumerated
+   * in a discovery index with SHA-256 digests (Agent Skills Discovery RFC).
+   *
+   * ```ts
+   * ai: {
+   *   skills: "./skills",
+   * }
+   * ```
+   */
+  skills?: string;
+  /**
    * Web Bot Auth: publish the org's HTTP Message Signature public keys at
    * `/.well-known/http-message-signatures-directory`, so sites receiving
    * requests from your agents can verify them. Public keys only — a key

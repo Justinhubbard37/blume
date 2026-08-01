@@ -5,6 +5,7 @@ export default defineConfig({
     mcp: {
       enabled: true,
     },
+    skills: "../../skills",
   },
   analytics: {
     vercel: true,

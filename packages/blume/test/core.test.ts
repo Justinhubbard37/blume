@@ -1185,6 +1185,18 @@ describe("agent-readability.json", () => {
     );
   });
 
+  it("advertises the agent-skills index only when skills are configured", () => {
+    const manifest = buildAgentReadability(
+      makeProject([], { ai: { skills: "./skills" } })
+    );
+    expect(manifest?.artifacts).toMatchObject({
+      agentSkills: "https://example.com/.well-known/agent-skills/index.json",
+    });
+    expect(
+      buildAgentReadability(makeProject([]))?.artifacts
+    ).not.toHaveProperty("agentSkills");
+  });
+
   it("echoes the content-usage policy by default and drops it when disabled", () => {
     const on = buildAgentReadability(makeProject([]));
     expect(on?.contentUsage).toStrictEqual({

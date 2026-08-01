@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 
 import { build } from "astro";
 import { defineCommand } from "citty";
-import { join } from "pathe";
+import { dirname, join, resolve } from "pathe";
 
 import { buildAgentReadability } from "../../ai/agent-readability.ts";
 import {
@@ -14,6 +14,11 @@ import {
 } from "../../ai/api-catalog.ts";
 import { buildHomeLinkHeader } from "../../ai/link-headers.ts";
 import { buildLlmsFiles } from "../../ai/llms.ts";
+import {
+  AGENT_SKILLS_DIR,
+  buildSkillsIndex,
+  collectSkills,
+} from "../../ai/skills.ts";
 import {
   buildSignaturesDirectory,
   SIGNATURES_DIRECTORY_PATH,
@@ -150,6 +155,56 @@ const emitHeaderFiles = async (
   );
   logger.success(
     "Emitted _headers (UTF-8 Content-Type + homepage Link header)"
+  );
+};
+
+/**
+ * Publish the configured Agent Skills: copy each skill artifact under
+ * `.well-known/agent-skills/` and emit the discovery index. A user-shipped
+ * `public/.well-known/agent-skills/index.json` takes over the whole surface,
+ * matching every other generated artifact.
+ */
+const emitAgentSkills = async (
+  project: BlumeProject,
+  distDir: string
+): Promise<void> => {
+  const configured = project.config.ai.skills;
+  if (!configured) {
+    return;
+  }
+  const dir = resolve(project.context.root, configured);
+  if (!existsSync(dir)) {
+    logger.warn(
+      `ai.skills points at "${configured}" (${dir}), which does not exist; no skills published.`
+    );
+    return;
+  }
+  const outDir = join(distDir, AGENT_SKILLS_DIR.slice(1));
+  if (existsSync(join(outDir, "index.json"))) {
+    return;
+  }
+  const { skills, warnings } = await collectSkills(dir);
+  for (const warning of warnings) {
+    logger.warn(warning);
+  }
+  if (skills.length === 0) {
+    logger.warn(`ai.skills: no publishable skills found in "${configured}".`);
+    return;
+  }
+  await Promise.all(
+    skills.map(async (skill) => {
+      const target = join(outDir, skill.path);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, skill.content);
+    })
+  );
+  await writeFile(
+    join(outDir, "index.json"),
+    buildSkillsIndex(skills, project.config),
+    "utf-8"
+  );
+  logger.success(
+    `Published ${skills.length} agent skill(s) (.well-known/agent-skills/index.json)`
   );
 };
 
@@ -479,6 +534,7 @@ const publishBuildArtifacts = async (
   }
 
   await emitWellKnownFiles(project.config, distDir);
+  await emitAgentSkills(project, distDir);
 
   await emitRedirectFiles(project.config, distDir);
   await emitHeaderFiles(project, distDir);

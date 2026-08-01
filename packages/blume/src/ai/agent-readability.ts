@@ -60,6 +60,9 @@ const wellKnownArtifacts = (
   if (hasApiCatalog(config)) {
     artifacts.apiCatalog = abs("/.well-known/api-catalog");
   }
+  if (config.ai.skills) {
+    artifacts.agentSkills = abs("/.well-known/agent-skills/index.json");
+  }
   return artifacts;
 };
 

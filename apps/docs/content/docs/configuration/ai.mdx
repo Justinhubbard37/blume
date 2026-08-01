@@ -358,6 +358,20 @@ When the site publishes APIs, Blume generates an [RFC 9727](https://www.rfc-edit
 
 A site with no API references and no MCP server emits no catalog — there'd be nothing in it. As everywhere, a `public/.well-known/api-catalog` file you ship yourself wins over the generated one.
 
+### Skills discovery
+
+If your project ships [agent skills](https://agentskills.io) — the [Blume repo itself does](#agent-skill) — point `ai.skills` at the directory that holds them, and the build publishes them for discovery per the [Agent Skills Discovery RFC](https://github.com/cloudflare/agent-skills-discovery-rfc):
+
+```ts blume.config.ts lineNumbers
+ai: {
+  skills: "./skills",
+}
+```
+
+The path resolves against your project root, and each subdirectory with a `SKILL.md` becomes a published skill. A skill that's a lone `SKILL.md` is copied verbatim to `/.well-known/agent-skills/<name>/SKILL.md` (`type: "skill-md"`); a skill with supporting resources (`scripts/`, `references/`, `assets/`) is bundled into a deterministic `.tar.gz` (`type: "archive"`) so its relative references resolve after unpacking, with script execute bits preserved. The discovery index at `/.well-known/agent-skills/index.json` carries the v0.2.0 `$schema` and, per skill, its name, type, description (from the `SKILL.md` frontmatter), artifact URL, and the SHA-256 digest clients verify downloads against.
+
+Skills with a missing or spec-invalid `name`/`description` are skipped with a build warning rather than published broken, and a `public/.well-known/agent-skills/index.json` you ship yourself takes over the whole surface.
+
 ### DNS-based discovery (DNS-AID)
 
 [DNS for AI Discovery](https://datatracker.ietf.org/doc/draft-mozleywilliams-dnsop-dnsaid/) is an emerging IETF draft that lets agents discover a site's AI surface before making a single HTTP request, by querying ServiceMode [SVCB/HTTPS records](https://www.rfc-editor.org/rfc/rfc9460) at a well-known DNS entrypoint. DNS records live in your zone, not in the build, so this is the one discovery surface Blume can't publish for you — instead, add a record with your DNS provider:

@@ -8,12 +8,14 @@ const configWith = (
     base?: string;
     basePath: string;
     mcp: boolean;
+    skills: string;
     webBotAuthKeys: Record<string, unknown>[];
   }>
 ): ResolvedConfig =>
   ({
     ai: {
       mcp: { enabled: overrides.mcp ?? false, route: "/mcp" },
+      skills: overrides.skills,
       webBotAuth: { keys: overrides.webBotAuthKeys ?? [] },
     },
     asyncapi: { enabled: false, sources: [] },
@@ -85,6 +87,19 @@ describe("buildNetlifyHeaders", () => {
       "/base/.well-known/api-catalog\n  Content-Type: application/linkset+json"
     );
     expect(buildNetlifyHeaders(configWith({}))).not.toContain("api-catalog");
+  });
+
+  it("pins agent-skill media types when skills are configured", () => {
+    const out = buildNetlifyHeaders(
+      configWith({ base: "/base", skills: "./skills" })
+    );
+    expect(out).toContain(
+      "/base/.well-known/agent-skills/*.md\n  Content-Type: text/markdown; charset=utf-8"
+    );
+    expect(out).toContain(
+      "/base/.well-known/agent-skills/*.tar.gz\n  Content-Type: application/gzip"
+    );
+    expect(buildNetlifyHeaders(configWith({}))).not.toContain("agent-skills");
   });
 
   it("pins the Web Bot Auth directory media type when keys are configured", () => {
