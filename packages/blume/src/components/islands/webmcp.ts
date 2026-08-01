@@ -40,14 +40,26 @@ const text = (value: string, isError = false): WebMcpResult => ({
   ...(isError ? { isError: true } : {}),
 });
 
+const TAG = /<[^>]*>?/gu;
+
 /**
  * Drop the `<mark>` highlighting (and any other markup) search hits carry.
  * The closing `>` is optional so every `<` starts a strip: a dangling
  * `<script` fragment can't survive the way it would if a full `<...>` pair
  * were required. The input is HTML, where a literal `<` is `&lt;`, so
- * consuming from every raw `<` loses nothing legitimate.
+ * consuming from every raw `<` loses nothing legitimate. Stripping repeats
+ * to a fixed point so the no-fragment guarantee is explicit rather than an
+ * artifact of the regex shape.
  */
-const plain = (html: string): string => html.replaceAll(/<[^>]*>?/gu, "");
+const plain = (html: string): string => {
+  let previous = html;
+  let stripped = html.replaceAll(TAG, "");
+  while (stripped !== previous) {
+    previous = stripped;
+    stripped = stripped.replaceAll(TAG, "");
+  }
+  return stripped;
+};
 
 export interface WebMcpToolOptions {
   /** The deployment base (`import.meta.env.BASE_URL`). */
