@@ -9,6 +9,8 @@ Blume is a **markdown-first** documentation framework on Astro/Vite. You drop Ma
 
 Your job is to convert a source docs repo into an **idiomatic** Blume project — not a 1:1 transliteration. Read this file, detect the source framework, open the matching `references/<framework>.md` for the exact mappings, and work the loop below. Report everything you drop or approximate.
 
+Throughout this skill (including the `references/` files), **`<skill>` means the absolute path of the directory containing this SKILL.md** — resolve it from wherever you read this file (e.g. `node_modules/blume/skills/blume-migrate` or `.claude/skills/blume-migrate`). It is a placeholder to substitute, never a literal path.
+
 ## Migration philosophy
 
 - **Target idiomatic Blume, not a mechanical port.** Prefer filesystem-derived navigation over an exhaustive explicit `navigation.sidebar`. Prefer `:::` directives over JSX callouts. Prefer Blume defaults over restating them in config.

@@ -193,7 +193,8 @@ If the repo uses (or the user wants to adopt) **[Ultracite](https://www.ultracit
 The fix is a committed **pnpm patch** (`patches/oxfmt@0.55.0.patch`), shipped with this skill at `assets/oxfmt@0.55.0.patch`. Unlike the Astro/Vite patch, this one is a **known, deterministic diff** — copy it in, don't regenerate it:
 
 ```bash
-# 1. Copy the shipped patch into the target repo's patches/ dir (keep the exact filename):
+# 1. Copy the shipped patch into the target repo's patches/ dir (keep the exact filename;
+#    <skill> = this skill's directory, the one containing SKILL.md):
 mkdir -p patches
 cp "<skill>/assets/oxfmt@0.55.0.patch" patches/oxfmt@0.55.0.patch
 ```

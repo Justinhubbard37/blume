@@ -50,9 +50,9 @@ Mintlify defaults to **FontAwesome**; Blume is **Lucide-only**. Convert every ic
 **Automate the frontmatter pass — don't hand-edit it.** `scripts/mintlify-codemod.mjs` (in this skill, zero-dependency) remaps every **frontmatter** `icon:` using the table below, drops brand/no-equivalent icons, and — in the same pass — drops/renames unsupported frontmatter keys (see [Frontmatter](#frontmatter)). It's deterministic and idempotent, and reports what it changed per file plus what it couldn't (unknown icons, OpenAPI-stub flags):
 
 ```bash
-# dry run first (report only), then apply:
-node <this-skill>/scripts/mintlify-codemod.mjs <content-dir>
-node <this-skill>/scripts/mintlify-codemod.mjs --write <content-dir>
+# <skill> = this skill's directory (the one containing SKILL.md); dry run first (report only), then apply:
+node <skill>/scripts/mintlify-codemod.mjs <content-dir>
+node <skill>/scripts/mintlify-codemod.mjs --write <content-dir>
 ```
 
 The codemod touches **only frontmatter**. Icons in MDX **body** (`<Icon icon="…">`, `<Card icon="…">`, nav-group icons in `docs.json`) it does not see — convert those by hand using the same table. Common mappings:
