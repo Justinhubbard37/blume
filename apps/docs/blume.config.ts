@@ -1,6 +1,11 @@
 import { defineConfig } from "blume";
 
 export default defineConfig({
+  ai: {
+    mcp: {
+      enabled: true,
+    },
+  },
   analytics: {
     vercel: true,
   },
@@ -23,6 +28,7 @@ export default defineConfig({
   },
   deployment: {
     adapter: "vercel",
+    output: "server",
   },
   description:
     "Open-source, markdown-first documentation powered by Astro and Vite.",
