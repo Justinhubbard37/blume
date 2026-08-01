@@ -72,7 +72,7 @@ The single biggest shift for most sources — especially Mintlify — is that **
 - **Don't set `deployment.site`.** Blume auto-fills it: the dev server's `localhost` URL in dev, and the deployment URL (`VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL`) on Vercel. Hardcoding it in `blume.config.ts` overrides that auto-detection and pins the wrong absolute URL (canonical links, sitemap, OG, llms.txt) everywhere but the one host you typed — so leave it unset even when a source config had a `url`/`site` field. (Sitemap still generates in production because the deploy URL is present there.)
 - **Favicon is a filename convention, not config.** Drop `icon`/`favicon.{svg,png,ico}` (and `apple-icon.png`) in the project root or `public/` — Blume auto-detects it. There is **no** `favicon` config field. A source favicon given as `{ light, dark }` **collapses to one** — pick a single file and report the loss.
 
-The schema is exported from `blume/schema`; the full field reference is in `node_modules/blume/docs/configuration/`.
+The schema is exported from `blume/schema`; the full field reference is in the `docs/configuration/` directory of the installed `blume` package (see "Full documentation" below for how to locate it).
 
 ### Icons are Lucide, period
 
@@ -162,7 +162,7 @@ A `redirects: [{ from, to, status? }]` array **in `blume.config.ts`** maps old U
 
 ## Full documentation
 
-The mapping details live in `references/`: one file per source framework (`mintlify.md`, `docusaurus.md`, `fumadocs.md`, `nextra.md`, `starlight.md`), plus **`monorepo.md`** for host-repo integration (content-layout detection, pnpm `minimumReleaseAge`, frozen-lockfile regeneration, the Vercel monorepo recipe, and the Astro/Vite patch). The Mintlify icon + frontmatter pass is automated by **`scripts/mintlify-codemod.mjs`** (zero-dependency, deterministic, idempotent; `--write` to apply). The authoritative Blume docs are bundled in the installed package at **`node_modules/blume/docs`** (or `apps/docs/content/docs` in a repo checkout). The most relevant pages:
+The mapping details live in `references/`: one file per source framework (`mintlify.md`, `docusaurus.md`, `fumadocs.md`, `nextra.md`, `starlight.md`), plus **`monorepo.md`** for host-repo integration (content-layout detection, pnpm `minimumReleaseAge`, frozen-lockfile regeneration, the Vercel monorepo recipe, and the Astro/Vite patch). The Mintlify icon + frontmatter pass is automated by **`scripts/mintlify-codemod.mjs`** (zero-dependency, deterministic, idempotent; `--write` to apply). The authoritative Blume docs are bundled in the installed package's **`docs/` directory** — not necessarily at the repository root: in a workspace monorepo (pnpm especially) the package lives in the depending workspace's `node_modules` (e.g. `apps/docs/node_modules/blume/docs`); `node -e "console.log(require.resolve('blume/package.json'))"` run from the depending package prints the exact location. (In a repo checkout of Blume itself, the docs source is `apps/docs/content/docs`.) The most relevant pages:
 
 - `configuration/index.mdx` — every `blume.config.ts` field.
 - `content/navigation.mdx` — the sidebar/tabs/selectors model.

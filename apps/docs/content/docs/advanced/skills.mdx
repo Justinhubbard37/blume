@@ -3,11 +3,11 @@ title: Skills
 description: The agent skills Blume ships — playbooks that teach a coding agent like Claude Code, Codex, or Cursor to build and maintain a Blume docs site.
 ---
 
-Blume ships [agent skills](https://docs.claude.com/en/docs/claude-code/skills) — playbooks that teach a coding agent (Claude Code, Codex, Cursor) how to do a Blume-shaped job without you explaining it. They live on GitHub in the repo's `skills/` folder and are bundled in the package at `node_modules/blume/skills/` once Blume is installed, so any agent can be pointed at a `SKILL.md` directly.
+Blume ships [agent skills](https://docs.claude.com/en/docs/claude-code/skills) — playbooks that teach a coding agent (Claude Code, Codex, Cursor) how to do a Blume-shaped job without you explaining it. They live on GitHub in the repo's `skills/` folder and are bundled in the installed package under `skills/`, so any agent can be pointed at a `SKILL.md` directly.
 
 ## Blume
 
-The core skill. It teaches the agent what Blume is and how to scaffold, write, and configure a site — filesystem-derived navigation, the config schema, content components — and points it at the full docs bundled in the installed package (`node_modules/blume/docs`). Install it in any project where an agent helps you build your docs:
+The core skill. It teaches the agent what Blume is and how to scaffold, write, and configure a site — filesystem-derived navigation, the config schema, content components — and points it at the full docs bundled in the installed package (the `docs/` directory inside `blume`, resolved from wherever your package manager installs it — in a pnpm monorepo that's the depending workspace's `node_modules`, not the repo root). Install it in any project where an agent helps you build your docs:
 
 ```bash
 npx skills add haydenbleasel/blume
