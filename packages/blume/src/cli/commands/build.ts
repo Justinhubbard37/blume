@@ -6,6 +6,7 @@ import { defineCommand } from "citty";
 import { join } from "pathe";
 
 import { buildAgentReadability } from "../../ai/agent-readability.ts";
+import { buildHomeLinkHeader } from "../../ai/link-headers.ts";
 import { buildLlmsFiles } from "../../ai/llms.ts";
 import { ensureGitignore } from "../../core/gitignore.ts";
 import type { BlumeProject } from "../../core/project-graph.ts";
@@ -108,14 +109,17 @@ const emitRedirectFiles = async (
  * hosts serve the raw AI-ready endpoints (`*.md`, `*.mdx`, `*.txt`) with an
  * explicit `charset=utf-8`. Without it those hosts send `text/markdown` /
  * `text/plain` with no charset and browsers fall back to Windows-1252, garbling
- * any non-ASCII docs (#82). A `_headers` shipped in `public/` (copied into dist
- * by Astro before this runs) wins, exactly like `_redirects`. Server adapters
- * set the Content-Type on the Response directly, so this is static-only.
+ * any non-ASCII docs (#82). The same file also stamps the homepage
+ * agent-discovery `Link` header (RFC 8288, see `ai/link-headers.ts`). A
+ * `_headers` shipped in `public/` (copied into dist by Astro before this runs)
+ * wins, exactly like `_redirects`. Server adapters set the Content-Type on the
+ * Response directly, so this is static-only.
  */
 const emitHeaderFiles = async (
-  config: ResolvedConfig,
+  project: BlumeProject,
   distDir: string
 ): Promise<void> => {
+  const { config } = project;
   if (
     config.deployment.output !== "static" ||
     existsSync(join(distDir, "_headers"))
@@ -124,10 +128,18 @@ const emitHeaderFiles = async (
   }
   await writeFile(
     join(distDir, "_headers"),
-    buildNetlifyHeaders(config),
+    buildNetlifyHeaders(
+      config,
+      buildHomeLinkHeader(
+        config,
+        project.manifest.routes.map((route) => route.path)
+      )
+    ),
     "utf-8"
   );
-  logger.success("Emitted _headers (UTF-8 Content-Type for raw endpoints)");
+  logger.success(
+    "Emitted _headers (UTF-8 Content-Type + homepage Link header)"
+  );
 };
 
 /**
@@ -139,6 +151,7 @@ const emitHeaderFiles = async (
  * straight to the project root (see `withAdapterRoot`).
  */
 const emitVercelNegotiation = async (
+  config: ResolvedConfig,
   routePaths: string[],
   root: string
 ): Promise<void> => {
@@ -148,7 +161,8 @@ const emitVercelNegotiation = async (
   }
   const injected = injectNegotiationRoutes(
     await readFile(configPath, "utf-8"),
-    routePaths
+    routePaths,
+    buildHomeLinkHeader(config, routePaths)
   );
   if (injected === null) {
     logger.warn(
@@ -409,7 +423,7 @@ const publishBuildArtifacts = async (
   }
 
   await emitRedirectFiles(project.config, distDir);
-  await emitHeaderFiles(project.config, distDir);
+  await emitHeaderFiles(project, distDir);
 
   const { config } = project;
   const features = serverFeatures(config);
@@ -582,6 +596,7 @@ export const buildCommand = defineCommand({
 
     if (project.config.deployment.output === "server" && adapter === "vercel") {
       await emitVercelNegotiation(
+        project.config,
         project.manifest.routes.map((route) => route.path),
         root
       );

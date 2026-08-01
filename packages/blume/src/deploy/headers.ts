@@ -54,13 +54,24 @@ const HEADER_RULES: readonly {
  * still match once the site is mounted under a subpath (`/docs/*.md`); the
  * wildcard spans path segments, so a nested route like `/docs/ja/intro.md`
  * matches too.
+ *
+ * When a homepage `Link` header is provided (see `ai/link-headers.ts`), an
+ * exact-path rule for the root page advertises the agent-discovery resources —
+ * the static-host counterpart of the Vercel routing-config injection.
  */
-export const buildNetlifyHeaders = (config: ResolvedConfig): string => {
+export const buildNetlifyHeaders = (
+  config: ResolvedConfig,
+  homeLinkHeader?: string | null
+): string => {
   const deployBase = normalizeBasePath(config.deployment.base);
-  return `${HEADER_RULES.map((rule) => {
+  const rules = HEADER_RULES.map((rule) => {
     const prefix = rule.underBasePath
       ? `${deployBase}${config.basePath}`
       : deployBase;
     return `${prefix}/*.${rule.ext}\n  Content-Type: ${rule.contentType}`;
-  }).join("\n")}\n`;
+  });
+  if (homeLinkHeader) {
+    rules.push(`${deployBase}/\n  Link: ${homeLinkHeader}`);
+  }
+  return `${rules.join("\n")}\n`;
 };

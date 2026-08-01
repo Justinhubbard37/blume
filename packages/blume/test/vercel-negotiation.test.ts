@@ -181,9 +181,71 @@ describe("injectNegotiationRoutes", () => {
     expect(injected).toContain('\n\t"routes"');
   });
 
+  it("splices a homepage Link route after handle:filesystem when given", () => {
+    const link = '</llms.txt>; rel="describedby"; type="text/plain"';
+    const injected = injectNegotiationRoutes(
+      JSON.stringify(baseConfig),
+      ["/docs/a"],
+      link
+    );
+    const config = JSON.parse(injected ?? "");
+    const filesystemIndex = config.routes.findIndex(
+      (route: { handle?: string }) => route.handle === "filesystem"
+    );
+    const linkRoute = config.routes.find(
+      (route: { headers?: Record<string, string> }) => route.headers?.link
+    );
+    expect(linkRoute).toStrictEqual({
+      continue: true,
+      headers: { link },
+      src: "^/$",
+    });
+    expect(config.routes.indexOf(linkRoute)).toBeGreaterThan(filesystemIndex);
+  });
+
+  it("injects only the Link route when there are no content routes", () => {
+    const link = '</llms.txt>; rel="describedby"; type="text/plain"';
+    const injected = injectNegotiationRoutes(
+      JSON.stringify(baseConfig),
+      [],
+      link
+    );
+    const config = JSON.parse(injected ?? "");
+    expect(
+      config.routes.filter(
+        (route: { has?: unknown; headers?: Record<string, string> }) =>
+          route.has || route.headers?.vary
+      )
+    ).toHaveLength(0);
+    expect(
+      config.routes.filter(
+        (route: { headers?: Record<string, string> }) => route.headers?.link
+      )
+    ).toHaveLength(1);
+  });
+
+  it("replaces a previously injected Link route instead of duplicating it", () => {
+    const once = injectNegotiationRoutes(
+      JSON.stringify(baseConfig),
+      ["/docs/a"],
+      "old"
+    );
+    const twice = injectNegotiationRoutes(once ?? "", ["/docs/a"], "new");
+    const config = JSON.parse(twice ?? "");
+    const linkRoutes = config.routes.filter(
+      (route: { headers?: Record<string, string> }) => route.headers?.link
+    );
+    expect(linkRoutes).toHaveLength(1);
+    expect(linkRoutes[0].headers.link).toBe("new");
+    expect(injectNegotiationRoutes(twice ?? "", ["/docs/a"], "new")).toBe(
+      twice ?? ""
+    );
+  });
+
   it("returns null when there is nothing to do or nowhere to splice", () => {
     const text = JSON.stringify(baseConfig);
     expect(injectNegotiationRoutes(text, [])).toBeNull();
+    expect(injectNegotiationRoutes(text, [], null)).toBeNull();
     expect(injectNegotiationRoutes("not json", ["/docs/a"])).toBeNull();
     expect(injectNegotiationRoutes("{}", ["/docs/a"])).toBeNull();
     expect(

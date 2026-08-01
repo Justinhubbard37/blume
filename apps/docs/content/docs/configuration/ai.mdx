@@ -314,6 +314,18 @@ The `contentNegotiation` field appears only when the deployed site actually hono
 
 Set `seo.agentReadability` to `false` to skip it, or ship your own `public/agent-readability.json` to take over — Blume never overwrites a file you place in `public/`.
 
+### Discovery Link header
+
+Agents that probe a site don't know to look for the manifest — so Blume also advertises it in an [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288) `Link` response header on the homepage, using IANA-registered relation types:
+
+```http
+Link: </agent-readability.json>; rel="describedby"; type="application/json",
+  </llms.txt>; rel="describedby"; type="text/plain",
+  </index.md>; rel="alternate"; type="text/markdown"
+```
+
+Each entry appears only when its feature is on, and the `alternate` link only when your homepage is a content page with a [raw Markdown](#raw-markdown) mirror. The header rides on every surface Blume controls: the dev server (check it with `curl -I localhost:4321`), static builds via the emitted `_headers` file (Netlify and Cloudflare), and Vercel server builds via the deploy's routing rules. Hosts that ignore `_headers` on static output (GitHub Pages, S3) can't send custom response headers at all — there, agents still find everything through `llms.txt` and `agent-readability.json` at the site root.
+
 ## Agent skill
 
 Building a Blume site with the help of a coding agent? Install the Blume [agent skill](https://docs.claude.com/en/docs/claude-code/skills) so it knows how Blume works without you explaining it:

@@ -142,12 +142,17 @@ export const buildNegotiationRoutes = (
   return { headerRoutes, rewriteRoutes };
 };
 
+/** The `src` of the injected homepage `Link` header route. */
+const HOME_SRC = "^/$";
+
 /**
  * Whether a route is one this module previously injected, so re-injection
  * replaces rather than duplicates. Rewrites are identified by their `accept`
  * condition; the `Vary` routes by their exact three-field shape (a
  * user-authored route of that identical shape would be semantically equal to
- * the one re-added).
+ * the one re-added); the homepage `Link` route by its three-field
+ * continue-with-link shape (the Build Output config is adapter-generated, so
+ * no user-authored route competes in this file).
  */
 const isNegotiationRoute = (route: VercelRoute): boolean =>
   route.has?.some(
@@ -156,20 +161,28 @@ const isNegotiationRoute = (route: VercelRoute): boolean =>
   (route.continue === true &&
     route.headers?.vary === "Accept" &&
     typeof route.src === "string" &&
+    Object.keys(route).length === 3) ||
+  (route.continue === true &&
+    typeof route.headers?.link === "string" &&
+    route.src === HOME_SRC &&
     Object.keys(route).length === 3);
 
 /**
- * Splice the negotiation routes into a Build Output `config.json`. Returns the
- * updated JSON text (tab-indented, like the adapter's own output), or `null`
- * when there is nothing to do or nowhere safe to do it: no content routes, an
- * unparsable config, no `routes` array, or no `handle: "filesystem"` marker to
- * anchor the splice.
+ * Splice the negotiation routes into a Build Output `config.json`, plus — when
+ * given — a homepage `Link` header route for agent discovery (see
+ * `ai/link-headers.ts`), applied the same way the `Vary` routes are: after
+ * `handle: "filesystem"` with `continue`, so the header rides on the
+ * prerendered homepage response. Returns the updated JSON text (tab-indented,
+ * like the adapter's own output), or `null` when there is nothing to do or
+ * nowhere safe to do it: nothing to inject, an unparsable config, no `routes`
+ * array, or no `handle: "filesystem"` marker to anchor the splice.
  */
 export const injectNegotiationRoutes = (
   configText: string,
-  routePaths: readonly string[]
+  routePaths: readonly string[],
+  homeLinkHeader?: string | null
 ): string | null => {
-  if (routePaths.length === 0) {
+  if (routePaths.length === 0 && !homeLinkHeader) {
     return null;
   }
   let config: { routes?: VercelRoute[] };
@@ -189,6 +202,13 @@ export const injectNegotiationRoutes = (
     return null;
   }
   const { headerRoutes, rewriteRoutes } = buildNegotiationRoutes(routePaths);
+  if (homeLinkHeader) {
+    headerRoutes.push({
+      continue: true,
+      headers: { link: homeLinkHeader },
+      src: HOME_SRC,
+    });
+  }
   routes.splice(filesystemIndex + 1, 0, ...headerRoutes);
   routes.splice(filesystemIndex, 0, ...rewriteRoutes);
   config.routes = routes;

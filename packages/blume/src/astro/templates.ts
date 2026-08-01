@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, relative } from "pathe";
 
 import { askBackendRuntimeDep } from "../ai/ask.ts";
 import type { AskBackend } from "../ai/ask.ts";
+import { buildHomeLinkHeader } from "../ai/link-headers.ts";
 import { normalizeBasePath } from "../core/base-path.ts";
 import type { ResolvedConfig } from "../core/schema.ts";
 import { BLUME_IGNORE_DIRS } from "../core/sources/watch.ts";
@@ -550,9 +551,15 @@ export const astroConfigTemplate = (options: {
     integrations.push("svelte()");
   }
   // Always mounted: injects user pages (a no-op when there are none) and wires
-  // up dev-server `Accept: text/markdown` negotiation over the content routes.
+  // up dev-server `Accept: text/markdown` negotiation over the content routes,
+  // plus the homepage agent-discovery `Link` header.
   integrations.push(
-    `blumeIntegration(${JSON.stringify({ base: deployment.base, contentRoutes, pages })})`
+    `blumeIntegration(${JSON.stringify({
+      base: deployment.base,
+      contentRoutes,
+      homeLinkHeader: buildHomeLinkHeader(config, contentRoutes) ?? undefined,
+      pages,
+    })})`
   );
 
   const watchOption = devWatchOption(

@@ -49,4 +49,22 @@ describe("buildNetlifyHeaders", () => {
     expect(out).toContain("/*.txt");
     expect(out).not.toContain("/docs/*.txt");
   });
+
+  it("appends a homepage Link rule when a link header is provided", () => {
+    const link = '</llms.txt>; rel="describedby"; type="text/plain"';
+    expect(buildNetlifyHeaders(configWith({}), link)).toEndWith(
+      `/\n  Link: ${link}\n`
+    );
+    // The homepage rule sits at the deployment base, not under basePath.
+    const based = buildNetlifyHeaders(
+      configWith({ base: "/base", basePath: "/docs" }),
+      link
+    );
+    expect(based).toContain(`/base/\n  Link: ${link}`);
+  });
+
+  it("emits no Link rule without a link header", () => {
+    expect(buildNetlifyHeaders(configWith({}))).not.toContain("Link:");
+    expect(buildNetlifyHeaders(configWith({}), null)).not.toContain("Link:");
+  });
 });

@@ -78,7 +78,34 @@ export interface BlumeIntegrationOptions {
   contentRoutes: string[];
   /** Configured `deployment.base`, stripped from dev URLs before matching. */
   base?: string;
+  /**
+   * Homepage `Link` header value for agent discovery (see
+   * `ai/link-headers.ts`); the dev-server counterpart of the `_headers` /
+   * Vercel-config emission, so `curl -I` against `blume dev` shows what the
+   * deployed site will send.
+   */
+  homeLinkHeader?: string;
 }
+
+/**
+ * Whether a dev-server request URL is the homepage: the path (query dropped,
+ * `deployment.base` stripped, trailing slash tolerated) is the root.
+ */
+const isHomeUrl = (rawUrl: string | undefined, base?: string): boolean => {
+  if (!rawUrl) {
+    return false;
+  }
+  const queryIndex = rawUrl.indexOf("?");
+  let path = queryIndex === -1 ? rawUrl : rawUrl.slice(0, queryIndex);
+  const prefix = base && base !== "/" ? base.replace(/\/$/u, "") : "";
+  if (prefix) {
+    if (path !== prefix && !path.startsWith(`${prefix}/`)) {
+      return false;
+    }
+    path = path.slice(prefix.length);
+  }
+  return path === "" || path === "/";
+};
 
 /**
  * Dev-server content negotiation: when a client asks for `text/markdown`,
@@ -89,19 +116,23 @@ export interface BlumeIntegrationOptions {
  * the same negotiation from routing rules spliced into the Build Output config
  * (see `deploy/vercel-negotiation.ts`); every other build exposes the same
  * content at the `.md` URL. Only routes with a Markdown variant are rewritten,
- * so landing pages and user `.astro` pages keep serving HTML.
+ * so landing pages and user `.astro` pages keep serving HTML. The same
+ * middleware also stamps the homepage agent-discovery `Link` header, mirroring
+ * what the deployed site sends via `_headers` / the Vercel routing config.
  */
 const negotiateMarkdown =
-  (routes: ReadonlySet<string>, base?: string) =>
+  (routes: ReadonlySet<string>, base?: string, homeLinkHeader?: string) =>
   (req: IncomingMessage, res: ServerResponse, next: () => void): void => {
-    if (
-      (req.method === "GET" || req.method === "HEAD") &&
-      prefersMarkdown(req.headers.accept)
-    ) {
-      const variant = markdownVariantUrl(req.url, routes, base);
-      if (variant) {
-        res.setHeader("Vary", "Accept");
-        req.url = variant;
+    if (req.method === "GET" || req.method === "HEAD") {
+      if (homeLinkHeader && isHomeUrl(req.url, base)) {
+        res.setHeader("Link", homeLinkHeader);
+      }
+      if (prefersMarkdown(req.headers.accept)) {
+        const variant = markdownVariantUrl(req.url, routes, base);
+        if (variant) {
+          res.setHeader("Vary", "Accept");
+          req.url = variant;
+        }
       }
     }
     next();
@@ -133,7 +164,11 @@ export const blumeIntegration = (
       // Prepend so the rewrite happens before Astro's own request handler,
       // letting the rewritten URL resolve to the `.md` endpoint.
       server.middlewares.stack.unshift({
-        handle: negotiateMarkdown(new Set(options.contentRoutes), options.base),
+        handle: negotiateMarkdown(
+          new Set(options.contentRoutes),
+          options.base,
+          options.homeLinkHeader
+        ),
         route: "",
       });
     },

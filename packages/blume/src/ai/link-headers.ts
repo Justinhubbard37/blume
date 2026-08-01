@@ -1,0 +1,44 @@
+import { normalizeBasePath } from "../core/base-path.ts";
+import type { ResolvedConfig } from "../core/schema.ts";
+
+/**
+ * The homepage `Link` response header (RFC 8288) — agent discovery for the
+ * machine-readable surface Blume already publishes. Agents probing a site read
+ * this header off `GET /` to find the resources without scraping HTML:
+ * `agent-readability.json` and `llms.txt` as `rel="describedby"`, and the
+ * homepage's raw-Markdown mirror as `rel="alternate"` (only when the home
+ * route is a content page — a user landing page has no mirror). Both rel
+ * values are IANA-registered, which agent-readiness checkers require.
+ *
+ * The header is homepage-only by design: the root response is what agents
+ * probe, and `agent-readability.json` indexes the rest of the surface (the
+ * per-route Markdown pattern, MCP, feeds) far better than per-page headers
+ * could. Targets are root-relative under `deployment.base` — RFC 8288 resolves
+ * them against the request URL. Returns null when nothing is advertisable.
+ */
+export const buildHomeLinkHeader = (
+  config: ResolvedConfig,
+  routePaths: readonly string[]
+): string | null => {
+  const deployBase = normalizeBasePath(config.deployment.base);
+  const links: string[] = [];
+  if (config.seo.agentReadability) {
+    links.push(
+      `<${deployBase}/agent-readability.json>; rel="describedby"; type="application/json"`
+    );
+  }
+  if (config.ai.llmsTxt.enabled) {
+    links.push(
+      `<${deployBase}/llms.txt>; rel="describedby"; type="text/plain"`
+    );
+  }
+  // Same home-mirror condition as the Vercel negotiation routes: "/" is a
+  // content route only when the docs sit at the site root (no `basePath`) and
+  // the root page is real content, so `/index.md` exists exactly then.
+  if (routePaths.includes("/")) {
+    links.push(
+      `<${deployBase}/index.md>; rel="alternate"; type="text/markdown"`
+    );
+  }
+  return links.length > 0 ? links.join(", ") : null;
+};

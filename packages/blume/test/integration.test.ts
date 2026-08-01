@@ -43,6 +43,27 @@ const markdownHandle = (
 ): MiddlewareHandle =>
   serverSetup({ base, contentRoutes })[0]?.handle as MiddlewareHandle;
 
+/** Run a handle against a bare GET/HEAD request; returns the headers it set. */
+const runHandle = (
+  handle: MiddlewareHandle,
+  url: string,
+  method = "GET"
+): Record<string, string> => {
+  const headers: Record<string, string> = {};
+  handle(
+    { headers: {}, method, url } as unknown as IncomingMessage,
+    {
+      setHeader: (key: string, value: string) => {
+        headers[key] = value;
+      },
+    } as unknown as ServerResponse,
+    () => {
+      // The middleware always chains; nothing to observe here.
+    }
+  );
+  return headers;
+};
+
 describe("blumeIntegration astro:config:setup", () => {
   it("injects each user page route as a prerendered route", () => {
     const injected: unknown[] = [];
@@ -148,6 +169,36 @@ describe("blumeIntegration markdown negotiation", () => {
     expect(req.url).toBe("/guide");
     expect(headerSet).toBe(false);
     expect(nexted).toBe(true);
+  });
+});
+
+describe("blumeIntegration homepage Link header", () => {
+  const LINK = '</llms.txt>; rel="describedby"; type="text/plain"';
+
+  const handleWith = (base?: string): MiddlewareHandle =>
+    serverSetup({ base, contentRoutes: ["/"], homeLinkHeader: LINK })[0]
+      ?.handle as MiddlewareHandle;
+
+  it("stamps the Link header on homepage requests only", () => {
+    const handle = handleWith();
+    expect(runHandle(handle, "/").Link).toBe(LINK);
+    expect(runHandle(handle, "/?draft=1").Link).toBe(LINK);
+    expect(runHandle(handle, "/guide").Link).toBeUndefined();
+    expect(runHandle(handle, "/", "POST").Link).toBeUndefined();
+  });
+
+  it("matches the homepage under deployment.base, with or without a slash", () => {
+    const handle = handleWith("/base/");
+    expect(runHandle(handle, "/base").Link).toBe(LINK);
+    expect(runHandle(handle, "/base/").Link).toBe(LINK);
+    expect(runHandle(handle, "/").Link).toBeUndefined();
+    expect(runHandle(handle, "/other/").Link).toBeUndefined();
+  });
+
+  it("sends no Link header when none is configured", () => {
+    const handle = serverSetup({ contentRoutes: ["/"] })[0]
+      ?.handle as MiddlewareHandle;
+    expect(runHandle(handle, "/").Link).toBeUndefined();
   });
 });
 
