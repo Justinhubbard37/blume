@@ -326,6 +326,18 @@ Link: </agent-readability.json>; rel="describedby"; type="application/json",
 
 Each entry appears only when its feature is on, and the `alternate` link only when your homepage is a content page with a [raw Markdown](#raw-markdown) mirror. The header rides on every surface Blume controls: the dev server (check it with `curl -I localhost:4321`), static builds via the emitted `_headers` file (Netlify and Cloudflare), and Vercel server builds via the deploy's routing rules. Hosts that ignore `_headers` on static output (GitHub Pages, S3) can't send custom response headers at all — there, agents still find everything through `llms.txt` and `agent-readability.json` at the site root.
 
+### DNS-based discovery (DNS-AID)
+
+[DNS for AI Discovery](https://datatracker.ietf.org/doc/draft-mozleywilliams-dnsop-dnsaid/) is an emerging IETF draft that lets agents discover a site's AI surface before making a single HTTP request, by querying ServiceMode [SVCB/HTTPS records](https://www.rfc-editor.org/rfc/rfc9460) at a well-known DNS entrypoint. DNS records live in your zone, not in the build, so this is the one discovery surface Blume can't publish for you — instead, add a record with your DNS provider:
+
+```txt
+_index._agents.docs.example.com. 3600 IN HTTPS 1 docs.example.com. alpn=h2
+```
+
+Use the `HTTPS` record type if your provider offers it (Vercel DNS does; it doesn't support the plain `SVCB` type), or a ServiceMode `SVCB` record with `alpn` and `port` parameters otherwise. The draft also recommends signing the zone with DNSSEC so validating resolvers return authenticated answers — providers like Cloudflare enable it in one click, while some (including Vercel DNS) don't support it at all.
+
+`blume audit --url <origin>` checks this for you: when [`deployment.site`](/docs/deployment) is set, the network tier queries the entrypoint over DNS-over-HTTPS and reports the exact record to publish if none exists, plus whether the answers are DNSSEC-authenticated. Set `BLUME_DOH_URL` to point the lookup at your own resolver if your network blocks the public ones (Google, Cloudflare).
+
 ## Agent skill
 
 Building a Blume site with the help of a coding agent? Install the Blume [agent skill](https://docs.claude.com/en/docs/claude-code/skills) so it knows how Blume works without you explaining it:

@@ -690,6 +690,26 @@ export const CHECKS = [
     tier: "static",
     title: "Indexable page missing from llms.txt",
   },
+  // DNS-AID (draft-mozleywilliams-dnsop-dnsaid) lives in the DNS zone, not the
+  // build, so unlike the llms.txt checks these can only observe and advise —
+  // hence `info`: publishing the records is a DNS-provider action Blume can't
+  // take for you, and the draft is young enough that absence is the norm.
+  {
+    category: "ai",
+    fix: "Publish a ServiceMode SVCB or HTTPS record at `_index._agents.<host>` with your DNS provider so agents can discover the site via DNS (DNS-AID).",
+    id: "BLUME_AUDIT_DNS_AID_MISSING",
+    severity: "info",
+    tier: "network",
+    title: "No DNS-AID agent-discovery records",
+  },
+  {
+    category: "ai",
+    fix: "Enable DNSSEC for the zone so validating resolvers return authenticated DNS-AID answers; if your DNS provider doesn't support DNSSEC, the records still work unsigned.",
+    id: "BLUME_AUDIT_DNS_AID_UNSIGNED",
+    severity: "info",
+    tier: "network",
+    title: "DNS-AID records are not DNSSEC-authenticated",
+  },
 
   // Structured data. Note we validate only what Blume itself emits — we do not
   // claim Google-rich-results or full schema.org validation (the former is an
