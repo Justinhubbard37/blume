@@ -168,6 +168,26 @@ describe("formatReport", () => {
     expect(text).not.toContain("--verbose)");
   });
 
+  it("prints each finding's message with --verbose", () => {
+    // The rolled-up line says five pages link to a broken page; only the
+    // message says which target is broken. Without it --verbose can't be
+    // acted on for link checks.
+    const diagnostics = [
+      finding(
+        "BLUME_AUDIT_LINK_TO_BROKEN",
+        { url: "/docs/a" },
+        "Link to ./missing resolves to /docs/missing, which the build does not serve."
+      ),
+    ];
+    const verbose = strip(
+      formatReport(result(diagnostics), "/root", { verbose: true })
+    );
+    expect(verbose).toContain("/docs/missing, which the build does not serve");
+    // The default report stays a compact rollup.
+    const compact = strip(formatReport(result(diagnostics), "/root"));
+    expect(compact).not.toContain("resolves to /docs/missing");
+  });
+
   it("shows the source file a finding maps back to", () => {
     const text = strip(
       formatReport(

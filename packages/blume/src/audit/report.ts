@@ -192,6 +192,11 @@ export const formatReport = (
       : group.findings.slice(0, PREVIEW);
     for (const diagnostic of shown) {
       lines.push(findingLine(diagnostic, root));
+      // The message names the specifics the rolled-up line can't — which target
+      // is broken, what the duplicate is — so --verbose prints it per finding.
+      if (options.verbose) {
+        lines.push(`        ${COLORS.dim}${diagnostic.message}${COLORS.reset}`);
+      }
     }
     const hidden = group.count - shown.length;
     if (hidden > 0) {

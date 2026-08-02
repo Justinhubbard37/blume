@@ -56,7 +56,7 @@ blume <command> [options]
 - `blume audit --external` — probe outbound links over the network.
 - `blume audit --only <check|category>` / `--skip <check|category>` — narrow the report while you work through it (comma-separated).
 - `blume audit --list-checks` — print every check the audit can report.
-- `blume audit --verbose` — list every affected page instead of the first few.
+- `blume audit --verbose` — list every affected page with each finding's full detail, such as which link target is broken.
 - `blume audit --json` — emit the report as JSON on stdout.
 - `blume audit --claude` / `--codex` — hand the findings to Claude Code or Codex to fix interactively.
 - `blume eval` — run the questions in `evals.yaml` through an agent that reads only your docs; see [Evals](/docs/reference/eval).
@@ -140,7 +140,7 @@ blume build
 blume audit
 ```
 
-Findings are grouped by check rather than listed per page, so the report reads as a to-do list. Use `--verbose` to expand every affected page, and `--only`/`--skip` to work through one category at a time. `blume audit --list-checks` prints the full catalog.
+Findings are grouped by check rather than listed per page, so the report reads as a to-do list. Use `--verbose` to expand every affected page with its full detail, and `--only`/`--skip` to work through one category at a time. `blume audit --list-checks` prints the full catalog.
 
 ### Failing CI
 
