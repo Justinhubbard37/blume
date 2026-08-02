@@ -287,7 +287,7 @@ export default defineConfig({
 /** SDK dependencies required by the selected remote sources. */
 const extraDepsFor = (sources: SourceKind[]): Record<string, string> => ({
   ...(sources.includes("notion") && { "@notionhq/client": "^2.2.15" }),
-  ...(sources.includes("sanity") && { "@sanity/client": "^6.21.0" }),
+  ...(sources.includes("sanity") && { "@sanity/client": "^7.25.0" }),
 });
 
 /** Every file `init` should write for the given answers, package.json first. */

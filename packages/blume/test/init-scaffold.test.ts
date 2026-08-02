@@ -284,7 +284,7 @@ describe("buildPlan", () => {
       answersWith({ sources: ["filesystem", "notion", "sanity"] })
     );
     expect(pkg?.content).toContain('"@notionhq/client": "^2.2.15"');
-    expect(pkg?.content).toContain('"@sanity/client": "^6.21.0"');
+    expect(pkg?.content).toContain('"@sanity/client": "^7.25.0"');
   });
 
   it("skips seed pages when no filesystem source is selected", () => {

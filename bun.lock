@@ -18,7 +18,7 @@
         "@orama/orama": "^3.1.18",
         "@oramacloud/client": "^2.1.0",
         "@pierre/diffs": "^1.2.11",
-        "@sanity/client": "^6.21.0",
+        "@sanity/client": "^7.25.0",
         "@scalar/astro": "^0.4.5",
         "@shikijs/twoslash": "^4.2.0",
         "@tailwindcss/typography": "^0.5.20",
@@ -130,7 +130,7 @@
         "@notionhq/client": "^2.2.15",
         "@openrouter/ai-sdk-provider": "^1.5.4",
         "@oramacloud/client": "^2.1.0",
-        "@sanity/client": "^6.21.0",
+        "@sanity/client": "^6.21.0 || ^7.0.0",
         "algoliasearch": "^5.55.0",
         "flexsearch": "^0.8.0",
         "typesense": "^3.0.0",
@@ -829,9 +829,9 @@
 
     "@rspack/plugin-react-refresh": ["@rspack/plugin-react-refresh@1.6.1", "", { "dependencies": { "error-stack-parser": "^2.1.4", "html-entities": "^2.6.0" }, "peerDependencies": { "react-refresh": ">=0.10.0 <1.0.0", "webpack-hot-middleware": "2.x" }, "optionalPeers": ["webpack-hot-middleware"] }, "sha512-eqqW5645VG3CzGzFgNg5HqNdHVXY+567PGjtDhhrM8t67caxmsSzRmT5qfoEIfBcGgFkH9vEg7kzXwmCYQdQDw=="],
 
-    "@sanity/client": ["@sanity/client@6.29.1", "", { "dependencies": { "@sanity/eventsource": "^5.0.2", "get-it": "^8.6.7", "rxjs": "^7.0.0" } }, "sha512-BQRCMeDlBxwnMbFtB61HUxFf9aSb4HNVrpfrC7IFVqFf4cwcc3o5H8/nlrL9U3cDFedbe4W0AXt1mQzwbY/ljw=="],
+    "@sanity/client": ["@sanity/client@7.26.0", "", { "dependencies": { "@sanity/eventsource": "^5.0.4", "get-it": "^8.8.0", "nanoid": "^3.3.11", "rxjs": "^7.0.0" } }, "sha512-7GEzTFRY6kWRjHbJYUDEGKPXHVl/XItGpV5LYCLcWMvBlgfujXuAjdp4hJVZqX8F8OtBzIFqdhiSn5Kh5u/V5Q=="],
 
-    "@sanity/eventsource": ["@sanity/eventsource@5.0.2", "", { "dependencies": { "@types/event-source-polyfill": "1.0.5", "@types/eventsource": "1.1.15", "event-source-polyfill": "1.0.31", "eventsource": "2.0.2" } }, "sha512-/B9PMkUvAlUrpRq0y+NzXgRv5lYCLxZNsBJD2WXVnqZYOfByL9oQBV7KiTaARuObp5hcQYuPfOAVjgXe3hrixA=="],
+    "@sanity/eventsource": ["@sanity/eventsource@5.0.4", "", { "dependencies": { "@types/event-source-polyfill": "1.0.5", "@types/eventsource": "1.1.15", "event-source-polyfill": "1.0.31", "eventsource": "2.0.2" } }, "sha512-NT6XrTJePJd7q1ZdTqB3NsTyNNOe9R2zMkg4Hlkqwb0LL6UmekVamAD46yjSJ+HbRyXAKLl1Rb65xZBdzC1f8Q=="],
 
     "@scalar/astro": ["@scalar/astro@0.4.9", "", { "dependencies": { "@scalar/client-side-rendering": "0.3.2" }, "peerDependencies": { "astro": "^4.0.0 || ^5.0.0" } }, "sha512-GfcqviMFZM9arUfW7R6B6xwpKFGzFQSCEwMZX/whax1D6nRLu0om5quU8shIoRzA/+qypfSy81ZO9Cq9Y/1L/A=="],
 

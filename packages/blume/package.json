@@ -136,7 +136,7 @@
     "@notionhq/client": "^2.2.15",
     "@openrouter/ai-sdk-provider": "^1.5.4",
     "@oramacloud/client": "^2.1.0",
-    "@sanity/client": "^6.21.0",
+    "@sanity/client": "^6.21.0 || ^7.0.0",
     "algoliasearch": "^5.55.0",
     "flexsearch": "^0.8.0",
     "typesense": "^3.0.0"
