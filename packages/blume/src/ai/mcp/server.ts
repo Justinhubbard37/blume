@@ -150,7 +150,7 @@ export const createIndexProvider = (
   locale?: string
 ): OramaIndexProvider => {
   let dbPromise: ReturnType<OramaIndexProvider> | null = null;
-  return () => {
+  return function provideIndex() {
     dbPromise ??= buildOramaIndex(documents, locale);
     return dbPromise;
   };

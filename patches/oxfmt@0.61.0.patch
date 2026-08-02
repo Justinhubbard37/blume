@@ -1,22 +1,13 @@
-diff --git a/node_modules/oxfmt/.bun-tag-5e4651067266cef3 b/.bun-tag-5e4651067266cef3
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
-diff --git a/node_modules/oxfmt/.bun-tag-ca147c7dea06d01a b/.bun-tag-ca147c7dea06d01a
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
-diff --git a/node_modules/oxfmt/.bun-tag-deb4271ce4cb6024 b/.bun-tag-deb4271ce4cb6024
-new file mode 100644
-index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
-diff --git a/dist/markdown-BjyDFyaO.js b/dist/markdown-BjyDFyaO.js
-index 1905aa7563e612808426e26f1ed28bebbef3456f..42bb9f66829068676c5697fc9fc39279bf937f3e 100644
---- a/dist/markdown-BjyDFyaO.js
-+++ b/dist/markdown-BjyDFyaO.js
-@@ -4830,7 +4830,43 @@ function lu(e, t, r) {
- 		case "sentence": return Mh(e, r);
- 		case "word": return t.parser !== "mdx" ? Vh(e, t) : Gh(e);
+diff --git a/dist/markdown-ZuiQU4Xe.js b/dist/markdown-ZuiQU4Xe.js
+index 566b9e6d27f36061d64b93736e238e871e1ee2b2..82d0595acc010807c2939fc4a1717dde887a8555 100644
+--- a/dist/markdown-ZuiQU4Xe.js
++++ b/dist/markdown-ZuiQU4Xe.js
+@@ -4875,7 +4875,43 @@ function lu(e, t, r) {
+ 		case "sentence": return Oh(e, r);
+ 		case "word": return t.parser !== "mdx" ? zh(e, t) : Uh(e);
  		case "whitespace": {
--			let { next: i } = e, u = i && /^>|^(?:[*+-]|#{1,6}|\d+[).])$/.test(i.value) && !ME(e) && !(t.proseWrap === "preserve" && zE(e)) ? "never" : t.proseWrap;
-+			let { next: i, previous: oxfmtFencePrev } = e;
+-			let { next: a } = e, u = a && /^>|^(?:[*+-]|#{1,6}|\d+[).])$/.test(a.value) && !NE(e) && !(t.proseWrap === "preserve" && RE(e)) ? "never" : t.proseWrap;
++			let { next: a, previous: oxfmtFencePrev } = e;
 +			// Preserve line breaks that sit directly against a `:::` container
 +			// directive fence, so `proseWrap: "never"` keeps the opening/closing
 +			// fence on their own lines instead of joining them into the prose (which
@@ -52,7 +43,7 @@ index 1905aa7563e612808426e26f1ed28bebbef3456f..42bb9f66829068676c5697fc9fc39279
 +				}
 +				oxfmtPrevIsTitledFence = oxfmtIsFence(oxfmtLineFirst);
 +			}
-+			let u = oxfmtIsFence(oxfmtFencePrev) || oxfmtPrevIsTitledFence || oxfmtIsFence(i) ? "preserve" : i && /^>|^(?:[*+-]|#{1,6}|\d+[).])$/.test(i.value) && !ME(e) && !(t.proseWrap === "preserve" && zE(e)) ? "never" : t.proseWrap;
++			let u = oxfmtIsFence(oxfmtFencePrev) || oxfmtPrevIsTitledFence || oxfmtIsFence(a) ? "preserve" : a && /^>|^(?:[*+-]|#{1,6}|\d+[).])$/.test(a.value) && !NE(e) && !(t.proseWrap === "preserve" && RE(e)) ? "never" : t.proseWrap;
  			return ou(e, n.value, u, !1, t);
  		}
  		case "emphasis": {
