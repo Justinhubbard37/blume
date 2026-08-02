@@ -443,6 +443,47 @@ describe("buildRuntimeData", () => {
     expect(data.config.og.fonts).toBeUndefined();
   });
 
+  it("includes the deployment base in the OG footer site text", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": `export default {
+  deployment: { site: "https://torn4dom4n.github.io", base: "/notes" },
+};
+`,
+        "docs/index.md": "# Home\n",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    // A GitHub Pages project site lives under the base; the bare host is the
+    // platform's shared apex, not this site (#139).
+    expect(data.config.og.site).toBe("torn4dom4n.github.io/notes");
+  });
+
+  it("uses the bare host as the OG footer site text without a base", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": `export default {
+  deployment: { site: "https://docs.acme.com" },
+};
+`,
+        "docs/index.md": "# Home\n",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.og.site).toBe("docs.acme.com");
+  });
+
+  it("omits the OG footer site text without a site URL", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": "export default {};\n",
+        "docs/index.md": "# Home\n",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.og.site).toBeUndefined();
+  });
+
   it("records whether the config set theme.fonts itself", async () => {
     const configured = await scanProject(
       await writeProject({

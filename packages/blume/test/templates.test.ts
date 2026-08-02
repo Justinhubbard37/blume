@@ -1459,6 +1459,10 @@ describe("static endpoint templates", () => {
     expect(endpoint).toContain("renderOgImage");
     expect(endpoint).toContain("logo: data.config.og.logo");
     expect(endpoint).toContain("palette: data.config.og.palette");
+    // The footer site text is resolved at generate time (host + deployment
+    // base) — deriving it here from `data.config.site` dropped the base (#139).
+    expect(endpoint).toContain("site: data.config.og.site");
+    expect(endpoint).not.toContain("siteHost");
     // An unannotated `const customRoutes = []` is an implicit any[] under a
     // strict tsconfig, failing `blume check` on the generated file (#91).
     expect(endpoint).toContain(

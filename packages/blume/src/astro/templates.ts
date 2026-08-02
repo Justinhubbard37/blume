@@ -1353,7 +1353,7 @@ export function GET({ props }: { props: { section: string } }) {
 }
 `;
 
-/** Generate the OG image endpoint (`.blume/src/pages/_og/[...slug].png.ts`). */
+/** Generate the OG image endpoint (`.blume/src/pages/og/[...slug].png.ts`). */
 export const ogEndpointTemplate = (
   customRoutes: OgCustomRoute[] = [],
   og: { families?: OgFontFamilies; fonts?: OgFont[] } = {}
@@ -1399,21 +1399,11 @@ export function getStaticPaths() {
   return paths;
 }
 
-// Footer branding shared by every card, derived once from the resolved config.
-// The repo slug reuses the header link URL; the host comes from the site URL.
+// Footer branding shared by every card. The repo slug reuses the header link
+// URL; the site text (host plus deployment base) is resolved at generate time.
 const repoSlug = data.config.repoUrl
   ? data.config.repoUrl.split("github.com/")[1]
   : undefined;
-const siteHost = (() => {
-  if (!data.config.site) {
-    return undefined;
-  }
-  try {
-    return new URL(data.config.site).host;
-  } catch {
-    return undefined;
-  }
-})();
 
 export async function GET({ props }: { props: { title: string } }) {
   const png = await renderOgImage({
@@ -1425,7 +1415,7 @@ export async function GET({ props }: { props: { title: string } }) {
     logo: data.config.og.logo,
     palette: data.config.og.palette,
     repo: repoSlug,
-    site: siteHost,
+    site: data.config.og.site,
     title: props.title,
   });
   return new Response(new Uint8Array(png), {

@@ -124,6 +124,12 @@ export interface BlumeDataConfig {
     enabled: boolean;
     logo?: string;
     palette?: ResolvedConfig["seo"]["og"]["palette"];
+    /**
+     * Footer site text: the deployment site's host plus `deployment.base`
+     * (`docs.acme.com`, `user.github.io/repo`), so a subpath deploy's card
+     * names the actual site rather than the platform's shared apex host.
+     */
+    site?: string;
   };
   /** Repository URL for header/edit links, or `null`. */
   repoUrl: string | null;

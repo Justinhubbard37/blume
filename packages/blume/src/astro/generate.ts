@@ -22,6 +22,7 @@ import { resolveAskBackend } from "../ai/ask.ts";
 import { buildRawMarkdown } from "../ai/markdown.ts";
 import { buildMcpData } from "../ai/mcp/data.ts";
 import { buildMcpDiscovery, buildMcpServerCard } from "../ai/mcp/discovery.ts";
+import { normalizeBasePath } from "../core/base-path.ts";
 import { validateUsedComponents } from "../core/component-diagnostics.ts";
 import { analyzeComponentOverrides } from "../core/component-overrides.ts";
 import { collectContentAssets } from "../core/content-assets.ts";
@@ -1049,6 +1050,14 @@ export const buildRuntimeData = (project: BlumeProject): string => {
   const ogLogo = config.seo.og.logo
     ? resolveOgLogo(project, config.seo.og.logo)
     : logo?.svg;
+  // The card footer names where the site actually lives: host plus the
+  // deployment base. On a subpath deploy (a GitHub Pages project site) the
+  // bare host is the platform's shared apex, not this site — #139.
+  const ogSite = config.deployment.site
+    ? `${new URL(config.deployment.site).host}${normalizeBasePath(
+        config.deployment.base
+      )}`
+    : undefined;
 
   const editUrlFor = (sourcePath?: string): string | null => {
     if (!(editBase && sourcePath)) {
@@ -1154,6 +1163,7 @@ export const buildRuntimeData = (project: BlumeProject): string => {
         enabled: config.seo.og.enabled ?? false,
         logo: ogLogo,
         palette: config.seo.og.palette,
+        site: ogSite,
       },
       repoUrl,
       search: {
