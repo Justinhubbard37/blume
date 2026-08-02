@@ -893,18 +893,18 @@ export const askEndpointTemplate = (
         console.error("Ask AI provider error:", error);
       },`;
   const stream = grounded
-    ? `    const system =
+    ? `    const instructions =
       (await ground(messages, body.page)) ??
       "You are a helpful documentation assistant. Answer using the project's documentation.";
     const result = streamText({
       model: ${modelExpr},
-      system,
+      instructions,
       messages,
 ${onError}
     });`
     : `    const result = streamText({
       model: ${modelExpr},
-      system:
+      instructions:
         "You are a helpful documentation assistant. Answer using the project's documentation.",
       messages,
 ${onError}
