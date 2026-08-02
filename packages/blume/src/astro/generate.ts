@@ -1038,6 +1038,55 @@ const resolveBanner = (config: ResolvedConfig): BlumeBanner | null => {
   };
 };
 
+/**
+ * The OG card's brand mark: a `seo.og.logo` of `false` opts out of any mark,
+ * a configured SVG wins over the site logo, and a non-SVG value resolves to
+ * `undefined` (the card falls back to the accent-initial tile).
+ */
+const resolveOgMark = (
+  project: BlumeProject,
+  siteLogo: string | undefined
+): string | false | undefined => {
+  const configured = project.config.seo.og.logo;
+  if (configured === false) {
+    return false;
+  }
+  if (configured) {
+    return resolveOgLogo(project, configured);
+  }
+  return siteLogo;
+};
+
+/**
+ * The OG card's footer site text. A `seo.og.site` override wins (`false`
+ * hides it); the default is the deployment site's host plus the normalized
+ * deployment base — on a subpath deploy (a GitHub Pages project site) the
+ * bare host is the platform's shared apex, not this site (#139).
+ */
+const resolveOgSite = (config: ResolvedConfig): string | undefined => {
+  const configured = config.seo.og.site;
+  if (configured === false) {
+    return;
+  }
+  if (configured !== undefined) {
+    return configured;
+  }
+  return config.deployment.site
+    ? `${new URL(config.deployment.site).host}${normalizeBasePath(
+        config.deployment.base
+      )}`
+    : undefined;
+};
+
+/** The OG card's subtitle: `seo.og.description` (`false` omits it) over the site description. */
+const resolveOgDescription = (config: ResolvedConfig): string | undefined => {
+  const configured = config.seo.og.description;
+  if (configured === false) {
+    return;
+  }
+  return configured ?? config.description;
+};
+
 /** Serialize the content graph into the data module the runtime consumes. */
 export const buildRuntimeData = (project: BlumeProject): string => {
   const { config, context, graph, manifest } = project;
@@ -1047,17 +1096,7 @@ export const buildRuntimeData = (project: BlumeProject): string => {
     : null;
   const editBase = github ? `${repoUrl}/edit/${github.branch}` : null;
   const logo = resolveLogo(project);
-  const ogLogo = config.seo.og.logo
-    ? resolveOgLogo(project, config.seo.og.logo)
-    : logo?.svg;
-  // The card footer names where the site actually lives: host plus the
-  // deployment base. On a subpath deploy (a GitHub Pages project site) the
-  // bare host is the platform's shared apex, not this site — #139.
-  const ogSite = config.deployment.site
-    ? `${new URL(config.deployment.site).host}${normalizeBasePath(
-        config.deployment.base
-      )}`
-    : undefined;
+  const ogLogo = resolveOgMark(project, logo?.svg);
 
   const editUrlFor = (sourcePath?: string): string | null => {
     if (!(editBase && sourcePath)) {
@@ -1160,10 +1199,11 @@ export const buildRuntimeData = (project: BlumeProject): string => {
       // absolute build-machine paths), not serialized here — this snapshot
       // ends up in every page's client data.
       og: {
+        description: resolveOgDescription(config),
         enabled: config.seo.og.enabled ?? false,
         logo: ogLogo,
         palette: config.seo.og.palette,
-        site: ogSite,
+        site: resolveOgSite(config),
       },
       repoUrl,
       search: {

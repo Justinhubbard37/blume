@@ -484,6 +484,55 @@ describe("buildRuntimeData", () => {
     expect(data.config.og.site).toBeUndefined();
   });
 
+  it("prefers seo.og.site and seo.og.description overrides", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": `export default {
+  deployment: { site: "https://user.github.io", base: "/notes" },
+  description: "Site description",
+  seo: { og: { site: "example.com/docs", description: "Card subtitle" } },
+};
+`,
+        "docs/index.md": "# Home\n",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.og.site).toBe("example.com/docs");
+    expect(data.config.og.description).toBe("Card subtitle");
+  });
+
+  it("hides OG card layers set to false", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": `export default {
+  deployment: { site: "https://docs.acme.com" },
+  description: "Site description",
+  logo: "/logo.svg",
+  seo: { og: { description: false, logo: false, site: false } },
+};
+`,
+        "docs/index.md": "# Home\n",
+        "public/logo.svg": '<svg id="brand"></svg>',
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.og.site).toBeUndefined();
+    expect(data.config.og.description).toBeUndefined();
+    // `false` (not undefined) — the card must not fall back to the initial tile.
+    expect(data.config.og.logo).toBe(false);
+  });
+
+  it("defaults the OG subtitle to the site description", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": 'export default { description: "The docs." };\n',
+        "docs/index.md": "# Home\n",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.og.description).toBe("The docs.");
+  });
+
   it("records whether the config set theme.fonts itself", async () => {
     const configured = await scanProject(
       await writeProject({

@@ -1409,7 +1409,7 @@ export async function GET({ props }: { props: { title: string } }) {
   const png = await renderOgImage({
     accent: data.config.og.palette?.accent ?? data.config.theme.accent.light,
     brand: data.config.title,
-    description: data.config.description,
+    description: data.config.og.description,
     families,
     fonts,
     logo: data.config.og.logo,

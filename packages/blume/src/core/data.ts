@@ -121,13 +121,17 @@ export interface BlumeDataConfig {
    * kept out of this snapshot, which pages serialize into HTML.
    */
   og: {
+    /** Card subtitle: `seo.og.description` (`false` omits it) over the site description. */
+    description?: string;
     enabled: boolean;
-    logo?: string;
+    /** Inlined SVG brand mark; `false` renders the card without any mark. */
+    logo?: string | false;
     palette?: ResolvedConfig["seo"]["og"]["palette"];
     /**
-     * Footer site text: the deployment site's host plus `deployment.base`
-     * (`docs.acme.com`, `user.github.io/repo`), so a subpath deploy's card
-     * names the actual site rather than the platform's shared apex host.
+     * Footer site text: `seo.og.site` if set (`false` hides it), otherwise
+     * the deployment site's host plus `deployment.base` (`docs.acme.com`,
+     * `user.github.io/repo`) — so a subpath deploy's card names the actual
+     * site rather than the platform's shared apex host.
      */
     site?: string;
   };

@@ -869,6 +869,11 @@ export interface OgPaletteConfig {
 /** Per-page Open Graph image generation. */
 export interface OgConfig {
   /**
+   * Card subtitle. Defaults to the site description; a string overrides it,
+   * `false` renders the card without one.
+   */
+  description?: string | false;
+  /**
    * Generate an OG image per page. Defaults to on once a deployment `site`
    * URL is known and off otherwise (`og:image` must be absolute). An explicit
    * value always wins.
@@ -899,10 +904,19 @@ export interface OgConfig {
         weight?: number;
       }
   )[];
-  /** Local SVG used in the generated card instead of the site logo. */
-  logo?: string;
+  /**
+   * Local SVG used in the generated card instead of the site logo; `false`
+   * renders the card without any brand mark.
+   */
+  logo?: string | false;
   /** Optional generated-card colors. */
   palette?: OgPaletteConfig;
+  /**
+   * Footer site text. Defaults to the deployment site's host plus
+   * `deployment.base` (`docs.acme.com`, `user.github.io/repo`); a string
+   * overrides it, `false` hides it.
+   */
+  site?: string | false;
   /**
    * Card headlines for custom `.astro` pages, keyed by route (`"/"`, `"/cli"`).
    * A custom page has no frontmatter to read, so its card is otherwise titled

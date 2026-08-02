@@ -170,6 +170,18 @@ describe("renderOgImage", () => {
     await expectPng({ logo: NO_VIEWBOX_LOGO, title: "Hi" });
   });
 
+  it("renders no brand mark when logo is false", async () => {
+    // Without a logo the accent-initial tile stands in; `logo: false` must
+    // suppress that fallback too, so the two renders cannot be identical.
+    const withTile = await renderOgImage({ brand: "Acme", title: "Hi" });
+    const without = await renderOgImage({
+      brand: "Acme",
+      logo: false,
+      title: "Hi",
+    });
+    expect(Buffer.from(withTile).equals(Buffer.from(without))).toBe(false);
+  });
+
   it("renders a footer with only a repo", async () => {
     await expectPng({ repo: "owner/repo", title: "Hi" });
   });

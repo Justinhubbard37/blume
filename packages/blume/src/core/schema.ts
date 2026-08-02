@@ -1033,6 +1033,11 @@ const ogFontSchema = z.union([
 
 const ogConfigSchema = z.strictObject({
   /**
+   * Card subtitle. Defaults to the site description; a string overrides it,
+   * `false` renders the card without one.
+   */
+  description: z.union([z.string(), z.literal(false)]).optional(),
+  /**
    * Generate a per-page Open Graph image. Defaults to on once a deployment
    * site URL is known (set or auto-detected) and off otherwise, since
    * `og:image` must be absolute to be useful to crawlers — resolved in
@@ -1045,10 +1050,19 @@ const ogConfigSchema = z.strictObject({
    * Fetched from Google Fonts at build.
    */
   fonts: z.array(ogFontSchema).optional(),
-  /** Local SVG used in the generated card instead of the site logo. */
-  logo: z.string().optional(),
+  /**
+   * Local SVG used in the generated card instead of the site logo; `false`
+   * renders the card without any brand mark.
+   */
+  logo: z.union([z.string(), z.literal(false)]).optional(),
   /** Optional generated-card colors. */
   palette: ogPaletteSchema.optional(),
+  /**
+   * Footer site text. Defaults to the deployment site's host plus
+   * `deployment.base` (`docs.acme.com`, `user.github.io/repo`); a string
+   * overrides it, `false` hides it.
+   */
+  site: z.union([z.string(), z.literal(false)]).optional(),
   /**
    * Card headlines for custom `.astro` pages, keyed by route (`"/"`, `"/cli"`).
    * A custom page has no frontmatter to read, so its card is otherwise titled

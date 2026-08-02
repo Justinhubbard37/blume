@@ -1463,6 +1463,9 @@ describe("static endpoint templates", () => {
     // base) — deriving it here from `data.config.site` dropped the base (#139).
     expect(endpoint).toContain("site: data.config.og.site");
     expect(endpoint).not.toContain("siteHost");
+    // The subtitle honors the seo.og.description override, so it must read
+    // the resolved og value, not the raw site description.
+    expect(endpoint).toContain("description: data.config.og.description");
     // An unannotated `const customRoutes = []` is an implicit any[] under a
     // strict tsconfig, failing `blume check` on the generated file (#91).
     expect(endpoint).toContain(

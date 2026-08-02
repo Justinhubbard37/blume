@@ -90,10 +90,11 @@ export interface OgCardOptions {
   /** Muted subtitle under the headline (usually the site description). */
   description?: string;
   /**
-   * Inlined SVG markup of the configured logo, painted into
-   * the brand lockup. Falls back to an accent mark when absent.
+   * Inlined SVG markup of the configured logo, painted into the brand
+   * lockup. Falls back to an accent mark when absent; `false` renders the
+   * card without any brand mark.
    */
-  logo?: string;
+  logo?: string | false;
   /** Optional colors for the generated card. */
   palette?: OgCardPalette;
   /** Footer-left repository slug, e.g. `owner/repo`. */
@@ -291,7 +292,7 @@ export const renderOgImage = async (
   const { accent, background, border, faint, foreground, muted } =
     resolvePalette(options);
   const brand = options.brand?.trim();
-  const logo = options.logo?.trim();
+  const logo = options.logo === false ? false : options.logo?.trim();
   // Slice by code point, not code unit — `charAt(0)` would split a leading
   // surrogate pair (an emoji brand initial) into a lone half that renders blank.
   const initial = brand ? ([...brand][0]?.toUpperCase() ?? "") : "";
@@ -304,11 +305,15 @@ export const renderOgImage = async (
   // Logo only — no brand-name label beside it. A wordmark logo already spells
   // the name, and rendering the site title next to it duplicated the brand
   // ("Ultracite  Ultracite"). Without a logo, the accent tile with the brand
-  // initial stands in.
+  // initial stands in; `logo: false` opts out of any mark.
+  const mark = (): Node[] => {
+    if (logo === false) {
+      return [];
+    }
+    return [logo ? logoMark(logo, foreground) : initialMark(accent, initial)];
+  };
   const header = container({
-    children: [
-      logo ? logoMark(logo, foreground) : initialMark(accent, initial),
-    ],
+    children: mark(),
     style: { alignItems: "center", display: "flex" },
   });
 

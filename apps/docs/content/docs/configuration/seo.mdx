@@ -149,6 +149,20 @@ Every palette color accepts any CSS color — hex, `oklch(…)`, `rgb(…)`, and
 
 Emoji in a page title or site title render as [Twemoji](https://github.com/jdecked/twemoji) glyphs, fetched from a CDN while the card renders — so a build whose titles contain emoji needs network access. Each glyph is fetched once per build, however many pages use it.
 
+### Show, hide, or override card layers
+
+Beyond the headline, the card carries three optional layers: the **brand mark** in the top-left (your logo, or an accent tile with the site title's initial), the **subtitle** under the headline (your site `description`), and a **footer** with your repo slug (from `github`) and the site's URL — the deployment site's host plus [`deployment.base`](/docs/deployment#subpath-deploys), so a GitHub Pages project site reads `user.github.io/repo`. Override any of them with a string of your own, or hide one with `false`:
+
+```ts blume.config.ts lineNumbers
+seo: {
+  og: {
+    site: "docs.acme.com", // footer URL text, or false to hide it
+    description: false, // hide the subtitle; a string overrides it
+    logo: false, // no brand mark at all — not even the initial tile
+  },
+}
+```
+
 ### Card fonts
 
 By default the card renders in Takumi's built-in font, which covers only Latin glyphs — a title in another script (Japanese, Chinese, Korean, Arabic, …) would render as tofu, empty boxes.
