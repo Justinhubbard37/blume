@@ -94,6 +94,14 @@ Tabulate structured data — config options, comparison matrices, parameter list
 | `blume build` | Build the static site | `dist/` |
 ```
 
+For a table without a header row — key–value pairs, for example — leave the header cells empty. Markdown requires the header and divider rows syntactically, but Blume drops the empty header from the rendered table.
+
+```md
+|                |          |
+| -------------- | -------- |
+| Current status | E-3 visa |
+```
+
 ## Links and images
 
 Link to other pages or external sites. Images accept a relative path to a file next to your content, any path under `public/` (served at the site root), or a remote URL.
