@@ -392,14 +392,58 @@ export interface NavigationConfig {
 // Theme
 // ---------------------------------------------------------------------------
 
-/** The three type roles, each a curated Google Font slug. */
+/** Fallback stack category for a custom font. */
+export type FontFallback = "sans" | "serif" | "mono";
+
+/**
+ * Any family from a zero-config Astro font provider, by name. Self-hosted and
+ * optimized like the curated slugs.
+ */
+export interface RemoteFontInput {
+  /** Fallback stack. Defaults to `mono` for the mono role, `sans` otherwise. */
+  fallback?: FontFallback;
+  /** Family name as the provider lists it, e.g. `"Noto Sans JP"`. */
+  name: string;
+  /** Which provider serves the family. Defaults to `google`. */
+  provider?: "google" | "fontsource" | "bunny" | "fontshare";
+  /** Weights (or variable ranges like `"100..900"`) to load. Defaults to `[400, 500, 600, 700]`. */
+  weights?: (number | string)[];
+}
+
+/** One local `@font-face`: a file plus optional weight/style (else inferred). */
+export interface LocalFontVariantInput {
+  /** Font file path, relative to the project root. */
+  src: string;
+  /** Face style; inferred from the file when omitted. */
+  style?: "normal" | "italic" | "oblique";
+  /** Face weight (a number or `"100..900"` range); inferred when omitted. */
+  weight?: number | string;
+}
+
+/** A self-hosted family loaded from font files in the project. */
+export interface LocalFontInput {
+  /** Fallback stack. Defaults to `mono` for the mono role, `sans` otherwise. */
+  fallback?: FontFallback;
+  /** Family name used in CSS and the OG card. */
+  name: string;
+  /** The faces to declare (at least one). */
+  variants: LocalFontVariantInput[];
+}
+
+/** A role's font: curated slug, remote-provider family, or local files. */
+export type FontInput =
+  | LiteralUnion<FontSlug>
+  | RemoteFontInput
+  | LocalFontInput;
+
+/** The three type roles: a curated slug, any provider family, or local files. */
 export interface FontsConfig {
   /** Body / prose font. Defaults to `inter`. */
-  body?: LiteralUnion<FontSlug>;
+  body?: FontInput;
   /** Display / heading font. Defaults to `inter-tight`. */
-  display?: LiteralUnion<FontSlug>;
+  display?: FontInput;
   /** Monospace / code font. Defaults to `ibm-plex-mono`. */
-  mono?: LiteralUnion<FontSlug>;
+  mono?: FontInput;
 }
 
 /** Colors, fonts, radius, and color-mode behavior. */
@@ -831,11 +875,13 @@ export interface OgConfig {
    */
   enabled?: boolean;
   /**
-   * Google Font families for the generated card, extending Takumi's Latin-only
-   * default so non-Latin titles (CJK, and so on) render instead of tofu.
-   * Fetched from Google Fonts at build. A bare string loads the family's
-   * default weights; the object form pins weights (`700`, `[400, 700]`, or a
-   * `"100..900"` variable range) and styles.
+   * Fonts for the generated card, extending Takumi's Latin-only default so
+   * non-Latin titles (CJK, and so on) render instead of tofu. A bare string is
+   * a Google Fonts family fetched at build; the name-only object form pins
+   * weights (`700`, `[400, 700]`, or a `"100..900"` variable range) and
+   * styles; the `src` form reads a local font file from the project instead.
+   * When omitted and `theme.fonts` is explicitly configured, the theme's
+   * display and body fonts are used automatically — pass `[]` to opt out.
    */
   fonts?: (
     | string
@@ -843,6 +889,14 @@ export interface OgConfig {
         name: string;
         style?: "normal" | "italic" | ("normal" | "italic")[];
         weight?: number | number[] | string;
+      }
+    | {
+        /** Family name registered for the file's faces. */
+        name: string;
+        /** Font file path, relative to the project root. */
+        src: string;
+        style?: "normal" | "italic";
+        weight?: number;
       }
   )[];
   /** Local SVG used in the generated card instead of the site logo. */

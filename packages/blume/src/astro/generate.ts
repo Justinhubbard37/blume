@@ -31,6 +31,7 @@ import type {
   BlumeFavicon,
   BlumeLogo,
 } from "../core/data.ts";
+import { BlumeError } from "../core/diagnostics.ts";
 import { EN_UI, resolveUIStrings } from "../core/i18n-ui.ts";
 import { resolveFallbackLocale } from "../core/i18n.ts";
 import {
@@ -44,6 +45,8 @@ import { resolveDocsCollection } from "../core/sources/resolve.ts";
 import { resolveTsconfigAliases } from "../core/tsconfig-aliases.ts";
 import type { Diagnostic, Navigation, ProjectContext } from "../core/types.ts";
 import { buildRssFeeds, renderRssFeed } from "../deploy/rss.ts";
+import { missingFontFiles, resolveOgFonts } from "../og/derive.ts";
+import type { DerivedOgFonts } from "../og/derive.ts";
 import { resolveOgLogo } from "../og/logo.ts";
 import { hasScalarReferences, referenceRoutes } from "../openapi/references.ts";
 import { buildReferenceFiles } from "../openapi/scalar.ts";
@@ -1144,9 +1147,11 @@ export const buildRuntimeData = (project: BlumeProject): string => {
         : null,
       // `og.enabled` is resolved to a definite boolean in `loadConfig`; coerce
       // the optional schema type so the serialized shape stays `boolean`.
+      // Card fonts are baked into the generated OG endpoint (they can carry
+      // absolute build-machine paths), not serialized here — this snapshot
+      // ends up in every page's client data.
       og: {
         enabled: config.seo.og.enabled ?? false,
-        fonts: config.seo.og.fonts ?? [],
         logo: ogLogo,
         palette: config.seo.og.palette,
       },
@@ -1402,6 +1407,37 @@ const contentWatchesRuntimeDir = (
   hasFilesystemSource &&
   runtimeDirWithin(collectionBase, context.outDir) !== null;
 
+/** The OG endpoint fonts for a scanned project (see {@link resolveOgFonts}). */
+const projectOgFonts = (project: BlumeProject): DerivedOgFonts =>
+  resolveOgFonts(
+    {
+      ogFonts: project.config.seo.og.fonts,
+      themeFonts: project.config.theme.fonts,
+      themeFontsConfigured: project.themeFontsConfigured,
+    },
+    project.context.root
+  );
+
+/**
+ * Fail generation when a configured local font file is missing. Warning and
+ * continuing is not an option here — the path is emitted into the Astro
+ * config and the OG endpoint, which would crash later with a bare ENOENT.
+ */
+const assertFontFilesExist = (project: BlumeProject): void => {
+  const { config, context } = project;
+  const missing = missingFontFiles(
+    { ogFonts: config.seo.og.fonts ?? [], themeFonts: config.theme.fonts },
+    context.root
+  );
+  if (missing.length > 0) {
+    throw new BlumeError({
+      code: "BLUME_FONT_FILE_MISSING",
+      message: `Configured font file(s) not found: ${missing.join(", ")}. Font paths resolve relative to the project root.`,
+      severity: "error",
+    });
+  }
+};
+
 /**
  * Write (or update) the generated `.blume/` Astro runtime for a project.
  * Only files whose content changed are rewritten so Vite HMR stays fast.
@@ -1410,6 +1446,7 @@ export const generateRuntime = async (
   project: BlumeProject
 ): Promise<GenerateResult> => {
   const { context, config } = project;
+  assertFontFilesExist(project);
   const out = context.outDir;
   const srcDir = join(out, "src");
   const askPath = join(srcDir, "generated", "Ask.astro");
@@ -1651,7 +1688,7 @@ export const generateRuntime = async (
   if (config.seo.og.enabled) {
     await write(
       join(srcDir, "pages", "og", "[...slug].png.ts"),
-      ogEndpointTemplate(ogRoutes)
+      ogEndpointTemplate(ogRoutes, projectOgFonts(project))
     );
   }
 

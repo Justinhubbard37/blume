@@ -1464,6 +1464,31 @@ describe("static endpoint templates", () => {
     expect(endpoint).toContain(
       "const customRoutes: { slug: string; title: string }[] = []"
     );
+    // Fonts are baked in (never read from blume:data — local entries carry
+    // absolute build-machine paths and data.config ships to the client).
+    expect(endpoint).toContain("const fonts: OgFont[] = []");
+    expect(endpoint).toContain(
+      "const families: OgFontFamilies | undefined = undefined"
+    );
+    expect(endpoint).not.toContain("data.config.og.fonts");
+  });
+
+  it("bakes resolved fonts and role families into the OG endpoint", () => {
+    const endpoint = ogEndpointTemplate([], {
+      families: { body: "Inter", title: "Inter Tight" },
+      fonts: [
+        { name: "Inter Tight", weight: [400, 600] },
+        { name: "Custom", src: "/abs/fonts/custom.woff2" },
+      ],
+    });
+    expect(endpoint).toContain(
+      'const fonts: OgFont[] = [{"name":"Inter Tight","weight":[400,600]},{"name":"Custom","src":"/abs/fonts/custom.woff2"}]'
+    );
+    expect(endpoint).toContain(
+      'const families: OgFontFamilies | undefined = {"body":"Inter","title":"Inter Tight"}'
+    );
+    expect(endpoint).toContain("families,");
+    expect(endpoint).toContain("fonts,");
   });
 
   it("serves one RSS feed per section", () => {

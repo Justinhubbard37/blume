@@ -1,10 +1,11 @@
 /**
- * Curated Google Fonts exposed through `theme.fonts`.
+ * Fonts exposed through `theme.fonts`.
  *
- * Each slug maps to the official Google family name (Astro's font provider needs
- * the exact name), a docs-appropriate set of weights, and a fallback category.
- * Fonts are self-hosted and optimized by Astro's built-in Fonts API; this module
- * only resolves config slugs into the data that drives it.
+ * Each role accepts a curated Google Font slug, a remote-provider family (any
+ * Google/Fontsource/Bunny/Fontshare family by name), or local font files. All
+ * forms resolve to entries for Astro's built-in Fonts API, which self-hosts
+ * and optimizes them; this module only resolves config values into the data
+ * that drives it.
  */
 
 export type FontCategory = "sans" | "serif" | "mono";
@@ -12,22 +13,74 @@ export type FontCategory = "sans" | "serif" | "mono";
 /** The three configurable roles in `theme.fonts`. */
 export type FontSlot = "display" | "body" | "mono";
 
+/** Zero-config Astro font providers usable from `theme.fonts`. */
+export type RemoteFontProvider =
+  | "google"
+  | "fontsource"
+  | "bunny"
+  | "fontshare";
+
+/** A remote-provider family: any family name the provider knows. */
+export interface RemoteFontConfig {
+  /** Family name as the provider lists it, e.g. `"Noto Sans JP"`. */
+  name: string;
+  /** Which provider serves the family. Defaults to `"google"`. */
+  provider?: RemoteFontProvider;
+  /** Weights (or variable ranges like `"100..900"`) to load. Defaults to `[400, 500, 600, 700]`. */
+  weights?: (number | string)[];
+  /** Fallback stack category. Defaults to `"mono"` for the mono role, `"sans"` otherwise. */
+  fallback?: FontCategory;
+}
+
+/** One `@font-face` declaration for a local font. */
+export interface LocalFontVariant {
+  /** Font file path, relative to the project root. */
+  src: string;
+  /** Face weight; inferred from the file when omitted. */
+  weight?: number | string;
+  /** Face style; inferred from the file when omitted. */
+  style?: "normal" | "italic" | "oblique";
+}
+
+/** A self-hosted family loaded from files in the project. */
+export interface LocalFontConfig {
+  /** Family name used in CSS and the OG card. */
+  name: string;
+  /** The faces to declare (at least one). */
+  variants: LocalFontVariant[];
+  /** Fallback stack category. Defaults to `"mono"` for the mono role, `"sans"` otherwise. */
+  fallback?: FontCategory;
+}
+
+/** A role's font: curated slug, remote family, or local files. */
+export type FontValue = string | RemoteFontConfig | LocalFontConfig;
+
 interface FontDef {
   category: FontCategory;
   family: string;
   weights: number[];
 }
 
-/** Resolved theme fonts (a validated slug per role, all optional). */
-export type FontsConfig = Partial<Record<FontSlot, string>> | undefined;
+/** Resolved theme fonts (a validated value per role, all optional). */
+export type FontsConfig = Partial<Record<FontSlot, FontValue>> | undefined;
 
-/** A single Astro `fonts:` entry (sans the literal `fontProviders.google()`). */
-export interface FontEntry {
-  cssVariable: string;
-  fallbacks: string[];
-  name: string;
-  weights: number[];
-}
+/** A single Astro `fonts:` entry (sans the literal `fontProviders.*()` call). */
+export type FontEntry =
+  | {
+      kind: "remote";
+      provider: RemoteFontProvider;
+      cssVariable: string;
+      fallbacks: string[];
+      name: string;
+      weights: (number | string)[];
+    }
+  | {
+      kind: "local";
+      cssVariable: string;
+      fallbacks: string[];
+      name: string;
+      variants: LocalFontVariant[];
+    };
 
 const FALLBACKS: Record<FontCategory, string[]> = {
   mono: ["ui-monospace", "SF Mono", "Menlo", "monospace"],
@@ -149,28 +202,126 @@ export const FONT_SLUGS = Object.keys(GOOGLE_FONTS);
 export const isFontSlug = (value: string): value is FontSlug =>
   Object.hasOwn(GOOGLE_FONTS, value);
 
+/** Weights loaded for a remote family when the config does not pin them. */
+const DEFAULT_REMOTE_WEIGHTS: (number | string)[] = [400, 500, 600, 700];
+
+/** Kebab-case a family name into a slug (`"Noto Sans JP"` -> `"noto-sans-jp"`). */
+export const slugifyFontName = (name: string): string =>
+  name
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/gu, "-")
+    .replaceAll(/^-+|-+$/gu, "");
+
 /** The CSS variable Astro populates for a given font (shared across roles). */
 const fontVar = (slug: string): string => `--blume-ff-${slug}`;
 
 const SLOTS: FontSlot[] = ["display", "body", "mono"];
+
+/** The fallback category a role uses when a custom font does not pick one. */
+const slotCategory = (slot: FontSlot): FontCategory =>
+  slot === "mono" ? "mono" : "sans";
+
+/** A slot value normalized into an entry, or null for an unknown slug string. */
+const resolveFontValue = (
+  slot: FontSlot,
+  value: FontValue
+): FontEntry | null => {
+  if (typeof value === "string") {
+    if (!isFontSlug(value)) {
+      return null;
+    }
+    const def = GOOGLE_FONTS[value];
+    return {
+      cssVariable: fontVar(value),
+      fallbacks: FALLBACKS[def.category],
+      kind: "remote",
+      name: def.family,
+      provider: "google",
+      weights: def.weights,
+    };
+  }
+  const slug = slugifyFontName(value.name);
+  const fallbacks = FALLBACKS[value.fallback ?? slotCategory(slot)];
+  if ("variants" in value) {
+    return {
+      cssVariable: fontVar(slug),
+      fallbacks,
+      kind: "local",
+      name: value.name,
+      variants: value.variants,
+    };
+  }
+  return {
+    cssVariable: fontVar(slug),
+    fallbacks,
+    kind: "remote",
+    name: value.name,
+    provider: value.provider ?? "google",
+    weights: value.weights ?? DEFAULT_REMOTE_WEIGHTS,
+  };
+};
+
+/**
+ * Merge two entries that resolved to the same CSS variable. The same remote
+ * family configured twice unions its weights (so a custom `{ name: "Inter" }`
+ * coexists with the curated `inter` default in another role); identical local
+ * definitions collapse. Anything else is a config conflict worth failing on.
+ */
+const mergeFontEntries = (current: FontEntry, next: FontEntry): FontEntry => {
+  if (
+    current.kind === "remote" &&
+    next.kind === "remote" &&
+    current.provider === next.provider &&
+    current.name === next.name
+  ) {
+    return {
+      ...current,
+      weights: [...new Set([...current.weights, ...next.weights])],
+    };
+  }
+  if (
+    current.kind === "local" &&
+    next.kind === "local" &&
+    current.name === next.name &&
+    JSON.stringify(current.variants) === JSON.stringify(next.variants)
+  ) {
+    return current;
+  }
+  throw new Error(
+    `theme.fonts: "${next.name}" conflicts with "${current.name}" — both resolve to the CSS variable "${current.cssVariable}" with different definitions. Rename one family or align their definitions.`
+  );
+};
 
 /** The unique Astro `fonts:` entries for the configured roles (deduped). */
 export const buildFontEntries = (fonts: FontsConfig): FontEntry[] => {
   if (!fonts) {
     return [];
   }
-  const slugs = SLOTS.map((slot) => fonts[slot]).filter(
-    (slug): slug is FontSlug => typeof slug === "string" && isFontSlug(slug)
-  );
-  return [...new Set(slugs)].map((slug) => {
-    const def = GOOGLE_FONTS[slug];
-    return {
-      cssVariable: fontVar(slug),
-      fallbacks: FALLBACKS[def.category],
-      name: def.family,
-      weights: def.weights,
-    };
-  });
+  const entries = new Map<string, FontEntry>();
+  for (const slot of SLOTS) {
+    const value = fonts[slot];
+    if (value === undefined) {
+      continue;
+    }
+    const entry = resolveFontValue(slot, value);
+    if (!entry) {
+      continue;
+    }
+    const current = entries.get(entry.cssVariable);
+    entries.set(
+      entry.cssVariable,
+      current ? mergeFontEntries(current, entry) : entry
+    );
+  }
+  return [...entries.values()];
+};
+
+/** The slug backing a slot's CSS variable, or null for an unknown slug string. */
+const slotSlug = (value: FontValue): string | null => {
+  if (typeof value === "string") {
+    return isFontSlug(value) ? value : null;
+  }
+  return slugifyFontName(value.name);
 };
 
 /**
@@ -183,10 +334,12 @@ export const buildFontsCss = (fonts: FontsConfig): string => {
     return "";
   }
   const lines = SLOTS.flatMap((slot) => {
-    const slug = fonts[slot];
-    return slug && isFontSlug(slug)
-      ? [`  --blume-font-${slot}-src: var(${fontVar(slug)});`]
-      : [];
+    const value = fonts[slot];
+    if (value === undefined) {
+      return [];
+    }
+    const slug = slotSlug(value);
+    return slug ? [`  --blume-font-${slot}-src: var(${fontVar(slug)});`] : [];
   });
   return lines.length > 0
     ? `/* Generated by Blume from theme.fonts. */\n:root {\n${lines.join("\n")}\n}\n`

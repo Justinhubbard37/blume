@@ -256,7 +256,9 @@ describe("buildFontEntries", () => {
     expect(entry).toStrictEqual({
       cssVariable: "--blume-ff-ibm-plex-mono",
       fallbacks: ["ui-monospace", "SF Mono", "Menlo", "monospace"],
+      kind: "remote",
       name: "IBM Plex Mono",
+      provider: "google",
       weights: [400, 500, 600],
     });
   });
@@ -269,6 +271,105 @@ describe("buildFontEntries", () => {
 
   it("returns no entries when no roles are set", () => {
     expect(buildFontEntries({})).toStrictEqual([]);
+  });
+
+  it("skips an unknown slug string instead of throwing", () => {
+    expect(buildFontEntries({ body: "not-a-real-slug" })).toStrictEqual([]);
+  });
+
+  it("resolves a remote family with default provider and weights", () => {
+    const [entry] = buildFontEntries({
+      body: { name: "Noto Sans JP" },
+    });
+    expect(entry).toStrictEqual({
+      cssVariable: "--blume-ff-noto-sans-jp",
+      fallbacks: ["ui-sans-serif", "system-ui", "sans-serif"],
+      kind: "remote",
+      name: "Noto Sans JP",
+      provider: "google",
+      weights: [400, 500, 600, 700],
+    });
+  });
+
+  it("keeps a remote family's provider, weights, and fallback override", () => {
+    const [entry] = buildFontEntries({
+      display: {
+        fallback: "serif",
+        name: "Supreme",
+        provider: "fontsource",
+        weights: [400, "100..900"],
+      },
+    });
+    expect(entry).toStrictEqual({
+      cssVariable: "--blume-ff-supreme",
+      fallbacks: ["ui-serif", "Georgia", "serif"],
+      kind: "remote",
+      name: "Supreme",
+      provider: "fontsource",
+      weights: [400, "100..900"],
+    });
+  });
+
+  it("defaults a custom font in the mono role to the mono fallback stack", () => {
+    const [entry] = buildFontEntries({ mono: { name: "Berkeley Mono" } });
+    expect(entry?.fallbacks).toStrictEqual([
+      "ui-monospace",
+      "SF Mono",
+      "Menlo",
+      "monospace",
+    ]);
+  });
+
+  it("resolves a local family to its variants", () => {
+    const [entry] = buildFontEntries({
+      display: {
+        name: "Custom Sans",
+        variants: [
+          { src: "./fonts/custom.woff2", weight: 400 },
+          { src: "./fonts/custom-italic.woff2", style: "italic", weight: 400 },
+        ],
+      },
+    });
+    expect(entry).toStrictEqual({
+      cssVariable: "--blume-ff-custom-sans",
+      fallbacks: ["ui-sans-serif", "system-ui", "sans-serif"],
+      kind: "local",
+      name: "Custom Sans",
+      variants: [
+        { src: "./fonts/custom.woff2", weight: 400 },
+        { src: "./fonts/custom-italic.woff2", style: "italic", weight: 400 },
+      ],
+    });
+  });
+
+  it("unions weights when a custom entry names a curated family", () => {
+    const entries = buildFontEntries({
+      body: "inter",
+      display: { name: "Inter", weights: [400, 900] },
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      name: "Inter",
+      weights: [400, 900, 500, 600, 700],
+    });
+  });
+
+  it("collapses identical local definitions across roles", () => {
+    const local = {
+      name: "Custom Sans",
+      variants: [{ src: "./fonts/custom.woff2" }],
+    };
+    const entries = buildFontEntries({ body: local, display: local });
+    expect(entries).toHaveLength(1);
+  });
+
+  it("throws when two roles conflict on the same CSS variable", () => {
+    expect(() =>
+      buildFontEntries({
+        body: { name: "Custom Sans", variants: [{ src: "./a.woff2" }] },
+        display: { name: "Custom Sans" },
+      })
+    ).toThrow(/conflicts/u);
   });
 });
 
@@ -288,6 +389,23 @@ describe("buildFontsCss", () => {
 
   it("emits nothing when no roles are set", () => {
     expect(buildFontsCss({})).toBe("");
+  });
+
+  it("slugifies custom family names into their font variables", () => {
+    const css = buildFontsCss({
+      body: { name: "Noto Sans JP" },
+      mono: { name: "Berkeley Mono", variants: [{ src: "./fonts/bm.woff2" }] },
+    });
+    expect(css).toContain(
+      "--blume-font-body-src: var(--blume-ff-noto-sans-jp);"
+    );
+    expect(css).toContain(
+      "--blume-font-mono-src: var(--blume-ff-berkeley-mono);"
+    );
+  });
+
+  it("skips an unknown slug string", () => {
+    expect(buildFontsCss({ body: "not-a-real-slug" })).toBe("");
   });
 });
 
@@ -332,6 +450,61 @@ describe("theme.fonts schema", () => {
     });
     expect(result.success).toBeFalsy();
     expect(result.error?.issues[0]?.message).toContain("Unknown font");
+  });
+
+  it("accepts a remote family object and defaults its provider", () => {
+    const theme = themeOf({
+      fonts: { body: { name: "Noto Sans JP", weights: [400, 700] } },
+    });
+    expect(theme.fonts.body).toStrictEqual({
+      name: "Noto Sans JP",
+      provider: "google",
+      weights: [400, 700],
+    });
+  });
+
+  it("accepts a local family with variants", () => {
+    const theme = themeOf({
+      fonts: {
+        mono: {
+          fallback: "mono",
+          name: "Berkeley Mono",
+          variants: [{ src: "./fonts/bm.woff2", style: "normal", weight: 400 }],
+        },
+      },
+    });
+    expect(theme.fonts.mono).toStrictEqual({
+      fallback: "mono",
+      name: "Berkeley Mono",
+      variants: [{ src: "./fonts/bm.woff2", style: "normal", weight: 400 }],
+    });
+  });
+
+  it("rejects an unknown remote provider", () => {
+    const result = blumeConfigSchema.safeParse({
+      theme: { fonts: { body: { name: "Inter", provider: "adobe" } } },
+    });
+    expect(result.success).toBeFalsy();
+  });
+
+  it("rejects empty weights and empty variants", () => {
+    expect(
+      blumeConfigSchema.safeParse({
+        theme: { fonts: { body: { name: "Inter", weights: [] } } },
+      }).success
+    ).toBeFalsy();
+    expect(
+      blumeConfigSchema.safeParse({
+        theme: { fonts: { body: { name: "Custom", variants: [] } } },
+      }).success
+    ).toBeFalsy();
+  });
+
+  it("rejects a malformed weight range string", () => {
+    const result = blumeConfigSchema.safeParse({
+      theme: { fonts: { body: { name: "Inter", weights: ["bold"] } } },
+    });
+    expect(result.success).toBeFalsy();
   });
 });
 

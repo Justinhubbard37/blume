@@ -252,4 +252,73 @@ describe("renderOgImage", () => {
       expect(css2Requests).toHaveLength(1);
     });
   });
+
+  it("loads a local font file without touching the network", async () => {
+    // Local entries are read from disk (a real woff2 shipped by katex), so no
+    // fetch stub is needed — any network call here would hit the real fetch
+    // and fail loudly in CI.
+    await expectPng({
+      fonts: [
+        {
+          name: "Local Main",
+          src: createRequire(import.meta.url).resolve(
+            "katex/dist/fonts/KaTeX_Main-Regular.woff2"
+          ),
+          style: "normal",
+          weight: 400,
+        },
+      ],
+      title: "Local face",
+    });
+  });
+
+  it("mixes Google families and local files in one render", async () => {
+    await withStubbedFonts(async () => {
+      await expectPng({
+        description: "Body text in the local face.",
+        families: { body: "Local Main", title: "Noto Sans JP" },
+        fonts: [
+          "Noto Sans JP",
+          {
+            name: "Local Main",
+            src: createRequire(import.meta.url).resolve(
+              "katex/dist/fonts/KaTeX_Main-Regular.woff2"
+            ),
+          },
+        ],
+        repo: "acme/docs",
+        site: "docs.acme.com",
+        title: "こんにちは",
+      });
+    });
+  });
+
+  it("rejects when a local font file is missing", async () => {
+    // Same fail-fast as a Google fetch failure: a broken path fails the build
+    // with the file in the cause instead of silently shipping tofu.
+    await expect(
+      renderOgImage({
+        fonts: [{ name: "Ghost", src: "/definitely/missing.woff2" }],
+        title: "Hi",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("applies role families to a card with title and body text", async () => {
+    // families only steers font-family selection; render must succeed with a
+    // family name that maps to a loaded local face.
+    await expectPng({
+      description: "Styled body copy.",
+      families: { body: "Local Main", title: "Local Main" },
+      fonts: [
+        {
+          name: "Local Main",
+          src: createRequire(import.meta.url).resolve(
+            "katex/dist/fonts/KaTeX_Main-Regular.woff2"
+          ),
+        },
+      ],
+      title: "Styled title",
+    });
+  });
 });

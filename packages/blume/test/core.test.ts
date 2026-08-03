@@ -179,6 +179,12 @@ describe("config schema", () => {
   });
 });
 
+/** A minimal local `theme.fonts` value for template emission tests. */
+const localFamily = (name: string) => ({
+  name,
+  variants: [{ src: `./fonts/${name}.woff2` }],
+});
+
 describe("astro config template", () => {
   it("emits dual light and dark Shiki themes", () => {
     const config = blumeConfigSchema.parse({});
@@ -323,6 +329,73 @@ describe("astro config template", () => {
     expect(output).toContain('name: "Geist"');
     expect(output).toContain('name: "Inter Tight"');
     expect(output).toContain('cssVariable: "--blume-ff-ibm-plex-mono"');
+  });
+
+  it("emits a custom Google family with its configured weights", () => {
+    const output = configTemplate(
+      blumeConfigSchema.parse({
+        theme: {
+          fonts: { body: { name: "Noto Sans JP", weights: [400, 700] } },
+        },
+      })
+    );
+    expect(output).toContain(
+      'provider: fontProviders.google(), name: "Noto Sans JP", cssVariable: "--blume-ff-noto-sans-jp", weights: [400,700]'
+    );
+  });
+
+  it("emits non-Google remote providers by name", () => {
+    const output = configTemplate(
+      blumeConfigSchema.parse({
+        theme: { fonts: { body: { name: "Supreme", provider: "fontsource" } } },
+      })
+    );
+    expect(output).toContain(
+      'provider: fontProviders.fontsource(), name: "Supreme"'
+    );
+  });
+
+  it("emits a local family with absolute variant sources", () => {
+    const output = configTemplate(
+      blumeConfigSchema.parse({
+        theme: {
+          fonts: {
+            mono: {
+              name: "Berkeley Mono",
+              variants: [
+                { src: "./fonts/bm.woff2", weight: 400 },
+                { src: "fonts/bm-bold.woff2", style: "normal", weight: 700 },
+              ],
+            },
+          },
+        },
+      })
+    );
+    expect(output).toContain("provider: fontProviders.local()");
+    expect(output).toContain('name: "Berkeley Mono"');
+    expect(output).toContain('cssVariable: "--blume-ff-berkeley-mono"');
+    expect(output).toContain(
+      'options: { variants: [{"weight":400,"src":["/r/fonts/bm.woff2"]},{"weight":700,"style":"normal","src":["/r/fonts/bm-bold.woff2"]}] }'
+    );
+  });
+
+  it("still imports fontProviders when every role is a local family", () => {
+    const output = configTemplate(
+      blumeConfigSchema.parse({
+        theme: {
+          fonts: {
+            body: localFamily("body"),
+            display: localFamily("display"),
+            mono: localFamily("mono"),
+          },
+        },
+      })
+    );
+    expect(output).toContain(
+      'import { defineConfig, fontProviders } from "astro/config";'
+    );
+    expect(output).not.toContain("fontProviders.google()");
+    expect(output).toContain("provider: fontProviders.local()");
   });
 
   it("always wires Twoslash in through Blume's pinned-TypeScript transformer", () => {

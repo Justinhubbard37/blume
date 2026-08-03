@@ -149,9 +149,13 @@ Every palette color accepts any CSS color — hex, `oklch(…)`, `rgb(…)`, and
 
 Emoji in a page title or site title render as [Twemoji](https://github.com/jdecked/twemoji) glyphs, fetched from a CDN while the card renders — so a build whose titles contain emoji needs network access. Each glyph is fetched once per build, however many pages use it.
 
-### Non-Latin titles
+### Card fonts
 
-The card's built-in font covers only Latin glyphs, so a title in another script (Japanese, Chinese, Korean, Arabic, …) renders as tofu — empty boxes. List one or more [Google Fonts](https://fonts.google.com) families in `og.fonts` that cover your script, by name:
+By default the card renders in Takumi's built-in font, which covers only Latin glyphs — a title in another script (Japanese, Chinese, Korean, Arabic, …) would render as tofu, empty boxes.
+
+**Set [`theme.fonts`](/docs/configuration/theming#fonts) and the card follows it.** When your config picks its own fonts, the generated cards automatically render the headline in your display font and the description and footer in your body font, so shared links match the site — including non-Latin coverage, with nothing to configure here. (Families from non-Google providers are skipped — the card renderer can only fetch from Google Fonts — but local font files work.)
+
+To use different fonts on cards than on the site, or to add script coverage without touching the theme, set `og.fonts` explicitly — it always wins over the theme-derived fonts:
 
 ```ts blume.config.ts lineNumbers
 seo: {
@@ -159,12 +163,17 @@ seo: {
     fonts: [
       "Noto Sans JP",
       { name: "Inter", weight: [400, 700] },
+      { name: "Berkeley Mono", src: "./fonts/BerkeleyMono-Regular.woff2" },
     ],
   },
 }
 ```
 
-Each entry is a family name, or an object pinning its `weight` (a number, a list, or a variable range like `"100..900"`) and `style` (`"normal"`, `"italic"`, or both). The families are fetched from Google Fonts at build — so a build that uses them needs network access — and the renderer only pulls the glyph subsets each title actually uses. Fallback is per-glyph, so adding a family only affects glyphs the built-in font can't draw; Latin text renders exactly as before.
+Each entry is a Google Fonts family name, an object pinning its `weight` (a number, a list, or a variable range like `"100..900"`) and `style` (`"normal"`, `"italic"`, or both), or a local font file — `src` resolves from the project root, with optional `weight` and `style` when the file's own metadata shouldn't decide.
+
+Google families are fetched at build — so a build that uses them needs network access — and the renderer only pulls the glyph subsets each title actually uses. Fallback is per-glyph, so adding a family only affects glyphs the other fonts can't draw.
+
+An explicit `og.fonts: []` opts out entirely: cards keep the built-in font even when `theme.fonts` is set.
 
 ### Custom page titles
 

@@ -1,4 +1,3 @@
-import type { OgFont } from "../og/card.ts";
 import type { UIStrings } from "./i18n-ui.ts";
 import type { ResolvedConfig, SearchProvider } from "./schema.ts";
 import type { Navigation, RouteAlternate } from "./types.ts";
@@ -116,11 +115,13 @@ export interface BlumeDataConfig {
   logo: BlumeLogo | null;
   /** Hosted MCP server, or `null` when MCP is off. */
   mcp: { name: string; route: string } | null;
-  /** Open Graph image generation. */
+  /**
+   * Open Graph image generation. Card fonts are baked into the generated OG
+   * endpoint (they can carry absolute build-machine paths) and deliberately
+   * kept out of this snapshot, which pages serialize into HTML.
+   */
   og: {
     enabled: boolean;
-    /** Extra Google Font family specs for the card renderer, fetched at build. */
-    fonts?: OgFont[];
     logo?: string;
     palette?: ResolvedConfig["seo"]["og"]["palette"];
   };

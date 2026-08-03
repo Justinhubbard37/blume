@@ -76,6 +76,11 @@ export interface BlumeProject {
   /** The instantiated content sources, for lazy entry reads (search/AI/raw). */
   sources: ContentSource[];
   /**
+   * Whether the config file set `theme.fonts` itself (see
+   * {@link ConfigLoadResult.themeFontsConfigured}); gates OG font derivation.
+   */
+  themeFontsConfigured: boolean;
+  /**
    * Discovered `examples/` sources keyed by `<Component path>`, attached by the
    * runtime/eject layer after {@link scanProject} (example discovery is an Astro
    * concern, so core doesn't run it). Undefined until then; the agent-facing
@@ -306,5 +311,6 @@ export const scanProject = async (
     manifest,
     mode,
     sources,
+    themeFontsConfigured: configResult.themeFontsConfigured,
   };
 };

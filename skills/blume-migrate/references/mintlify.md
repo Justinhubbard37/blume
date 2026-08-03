@@ -27,7 +27,7 @@ Resolve `$ref` includes first (Mintlify splits config across files). Map only wh
 | `background.color.{light,dark}` | `theme.background` (`{ light, dark }`) | one field now: `background: { light: …, dark: … }` (a bare string applies to both) |
 | `background.image` | `theme.backgroundImage` (`{ light, dark }`) | same per-mode shape as `background` |
 | `background.decoration` | **drop** | no Blume equivalent |
-| `fonts.family` / `fonts.{heading,body}.family` | `theme.fonts.{display,body}` | only if the family is a curated Google-font slug (kebab-case, e.g. `space-grotesk`); otherwise drop and tell the user to add `@font-face` in `theme.css` |
+| `fonts.family` / `fonts.{heading,body}.family` | `theme.fonts.{display,body}` | a curated slug (kebab-case, e.g. `space-grotesk`) maps directly; any other Google family maps to the object form `{ name: "Family Name" }`; a self-hosted font (`fonts.*.src` URLs) maps to `{ name, variants: [{ src, weight }] }` after downloading the files into the project |
 | `banner` | `banner` (`{ content, dismissible, id, link }`) | **only** those keys — drop `banner.color`/`banner.type` |
 | `styling.latex: true` | **drop the field** — block math `$$…$$` renders in `.mdx` with no config | there is **no** `markdown.math` field; inline `$…$` is **not** supported — convert inline math to `$$…$$` or drop it (report) |
 | `styling.codeblocks.theme` | `markdown.codeBlocks.theme` (`{ light, dark }`) |  |
@@ -153,4 +153,4 @@ Mintlify serves every top-level dir (e.g. `/images`) at the site root. Blume ser
 - **`footer.socials`** → suggest the `github` config, or a Footer override.
 - **Per-language banners** (`navigation.languages[].banner`) → no equivalent.
 - **Dynamic redirects** (`:slug*`/`:id` params) → can't be static path-to-path; move to host rules (`_redirects`, `vercel.json`).
-- **`<Update>`** changelog components, `iconType`, `background.decoration`, `search.prompt`, `seo.metatags`, non-curated fonts.
+- **`<Update>`** changelog components, `iconType`, `background.decoration`, `search.prompt`, `seo.metatags`.

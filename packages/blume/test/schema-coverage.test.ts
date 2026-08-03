@@ -100,6 +100,40 @@ describe("navigation.featured", () => {
   });
 });
 
+describe("seo.og.fonts", () => {
+  it("accepts Google, pinned, and local file forms", () => {
+    const result = blumeConfigSchema.safeParse({
+      seo: {
+        og: {
+          fonts: [
+            "Noto Sans JP",
+            { name: "Inter", style: ["normal", "italic"], weight: "100..900" },
+            { name: "Custom", src: "./fonts/custom.woff2", weight: 600 },
+          ],
+        },
+      },
+    });
+    expect(result.success).toBeTrue();
+  });
+
+  it("rejects a local entry with a weight list or empty src", () => {
+    expect(
+      blumeConfigSchema.safeParse({
+        seo: {
+          og: {
+            fonts: [{ name: "Custom", src: "./f.woff2", weight: [400, 700] }],
+          },
+        },
+      }).success
+    ).toBeFalsy();
+    expect(
+      blumeConfigSchema.safeParse({
+        seo: { og: { fonts: [{ name: "Custom", src: "" }] } },
+      }).success
+    ).toBeFalsy();
+  });
+});
+
 describe("pruned Mintlify-compat config fields", () => {
   it("rejects config fields that were removed", () => {
     for (const field of [

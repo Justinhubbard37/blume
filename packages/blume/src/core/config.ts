@@ -55,7 +55,8 @@ import type { Diagnostic } from "./types.ts";
  *   and the header repo link.
  *
  * **Appearance**
- * - `theme` — `accent` color, `fonts` (curated Google Font slugs), `radius`,
+ * - `theme` — `accent` color, `fonts` (curated slugs, any provider family, or
+ *   local font files), `radius`,
  *   `mode` (`system`/`light`/`dark`), and `background`.
  * - `markdown` — `code` (language icons, inline highlighting, line wrap),
  *   `headingAnchors`, `imageZoom`, and opt-in KaTeX `math`.
@@ -149,6 +150,13 @@ export interface ConfigLoadResult {
   /** Absolute path of the config file used, or null when defaults were used. */
   configFile: string | null;
   diagnostics: Diagnostic[];
+  /**
+   * Whether the config file set `theme.fonts` itself. The schema always fills
+   * the roles with defaults, so the resolved config can't tell an intentional
+   * font choice from the fallback — and only intentional choices should flow
+   * into derived surfaces like OG card fonts.
+   */
+  themeFontsConfigured: boolean;
 }
 
 const importConfigModule = createModuleLoader();
@@ -181,6 +189,13 @@ export const loadConfig = async (
       });
     }
   }
+
+  // Read before parsing: schema defaults erase the set-vs-defaulted distinction.
+  const themeFontsConfigured = Boolean(
+    raw &&
+    typeof raw === "object" &&
+    (raw as { theme?: { fonts?: unknown } }).theme?.fonts !== undefined
+  );
 
   const parsed = blumeConfigSchema.safeParse(raw ?? {});
   if (!parsed.success) {
@@ -232,5 +247,6 @@ export const loadConfig = async (
     },
     configFile,
     diagnostics: [],
+    themeFontsConfigured,
   };
 };

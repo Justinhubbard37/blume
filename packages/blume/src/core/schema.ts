@@ -433,15 +433,57 @@ const sidebarItemSchema: z.ZodType<SidebarItemConfig, SidebarItemConfig> =
     ])
   );
 
-/** A curated Google Font slug (see `theme/fonts.ts`). */
-const fontSlug = z.string().superRefine((value, ctx) => {
-  if (!isFontSlug(value)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: `Unknown font "${value}". Supported fonts: ${FONT_SLUGS.join(", ")}.`,
-    });
-  }
+const fontFallbackSchema = z.enum(["sans", "serif", "mono"]);
+
+/** Any family from a zero-config Astro provider, by name. */
+const remoteFontSchema = z.strictObject({
+  fallback: fontFallbackSchema.optional(),
+  name: z.string().min(1),
+  provider: z
+    .enum(["google", "fontsource", "bunny", "fontshare"])
+    .default("google"),
+  weights: z
+    .array(
+      z.union([z.number().int().positive(), z.string().regex(/^\d+\.\.\d+$/u)])
+    )
+    .nonempty()
+    .optional(),
 });
+
+/** One local `@font-face`: a file plus optional weight/style (else inferred). */
+const localFontVariantSchema = z.strictObject({
+  src: z.string().min(1),
+  style: z.enum(["normal", "italic", "oblique"]).optional(),
+  weight: z
+    .union([
+      z.number().int().positive(),
+      z.string().regex(/^\d+(?:\.\.\d+)?$/u),
+    ])
+    .optional(),
+});
+
+/** A self-hosted family loaded from font files in the project. */
+const localFontSchema = z.strictObject({
+  fallback: fontFallbackSchema.optional(),
+  name: z.string().min(1),
+  variants: z.array(localFontVariantSchema).nonempty(),
+});
+
+/**
+ * A role's font: a curated Google Font slug (see `theme/fonts.ts`), a
+ * remote-provider family, or local font files. Bare strings must be curated
+ * slugs so a typo fails with the supported list instead of a provider error.
+ */
+const fontValueSchema = z
+  .union([z.string(), remoteFontSchema, localFontSchema])
+  .superRefine((value, ctx) => {
+    if (typeof value === "string" && !isFontSlug(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Unknown font "${value}". Supported fonts: ${FONT_SLUGS.join(", ")}. For any other family, use the object form: { name: "..." } (remote provider) or { name: "...", variants: [...] } (local files).`,
+      });
+    }
+  });
 
 /**
  * An optional per-mode theme value: a string applies to both color modes; a
@@ -476,9 +518,9 @@ const themeConfigSchema = z.strictObject({
   backgroundImage: perModeValueSchema,
   fonts: z
     .strictObject({
-      body: fontSlug.default("inter"),
-      display: fontSlug.default("inter-tight"),
-      mono: fontSlug.default("ibm-plex-mono"),
+      body: fontValueSchema.default("inter"),
+      display: fontValueSchema.default("inter-tight"),
+      mono: fontValueSchema.default("ibm-plex-mono"),
     })
     .prefault({}),
   layout: z.enum(["sidebar"]).default("sidebar"),
@@ -960,10 +1002,11 @@ const ogPaletteSchema = z.strictObject({
 });
 
 /**
- * A Google Font family to load into the OG card renderer. A bare string is the
- * family name; the object form pins the weight (a number, a list, or a variable
- * range like `"100..900"`) and style. Fetched from Google Fonts at build and
- * handed to Takumi, which does per-glyph fallback so a family covering a script
+ * A font to load into the OG card renderer. A bare string is a Google Fonts
+ * family name; the name-only object form pins the weight (a number, a list, or
+ * a variable range like `"100..900"`) and style, fetched from Google Fonts at
+ * build. The `src` form reads a local font file from the project instead.
+ * Either way Takumi does per-glyph fallback, so a family covering a script
  * (e.g. Noto Sans JP for CJK) fixes tofu without touching how Latin renders.
  */
 const ogFontWeightSchema = z.union([
@@ -978,6 +1021,13 @@ const ogFontSchema = z.union([
     name: z.string(),
     style: z.union([ogFontStyleSchema, z.array(ogFontStyleSchema)]).optional(),
     weight: ogFontWeightSchema.optional(),
+  }),
+  /** A local font file, read from the project at build. */
+  z.strictObject({
+    name: z.string(),
+    src: z.string().min(1),
+    style: ogFontStyleSchema.optional(),
+    weight: z.number().int().positive().optional(),
   }),
 ]);
 

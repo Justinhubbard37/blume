@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { render } from "takumi-js";
 import type { RenderOptions } from "takumi-js";
 import { container, googleFonts, image, text } from "takumi-js/helpers";
@@ -5,11 +7,24 @@ import type { FontSubset, GoogleFontFamily, Node } from "takumi-js/helpers";
 
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH } from "./dimensions.ts";
 
+/** A local font file registered with the OG card renderer, read at build. */
+export interface OgLocalFont {
+  /** Family name the file's face registers under. */
+  name: string;
+  /** Absolute path to the font file. */
+  src: string;
+  /** Face weight; read from the file when omitted. */
+  weight?: number;
+  /** Face style; read from the file when omitted. */
+  style?: "normal" | "italic";
+}
+
 /**
- * A Google Font family to load into the OG card renderer. A bare string is the
- * family name (weight 400, normal style); the object form pins weight and style.
- * Handed straight to Takumi's `googleFonts` helper, which fetches the family
- * from Google Fonts at build and returns per-glyph coverage subsets.
+ * A font to load into the OG card renderer. A bare string is a Google Fonts
+ * family name (weight 400, normal style); the name-only object form pins
+ * weight and style. Both are handed to Takumi's `googleFonts` helper, which
+ * fetches the families from Google Fonts at build and returns per-glyph
+ * coverage subsets. The `src` form reads a local font file instead.
  */
 export type OgFont =
   | string
@@ -20,7 +35,24 @@ export type OgFont =
       weight?: number | number[] | string;
       /** `"normal"`, `"italic"`, or both. */
       style?: "normal" | "italic" | ("normal" | "italic")[];
-    };
+    }
+  | OgLocalFont;
+
+/** Type guard: is this OG font a local file entry? */
+const isLocalOgFont = (font: OgFont): font is OgLocalFont =>
+  typeof font !== "string" && "src" in font;
+
+/**
+ * Which loaded family each card role renders in. Takumi still falls back
+ * across every loaded font per glyph, so a family that misses a script
+ * degrades to the rest of the chain instead of tofu.
+ */
+export interface OgFontFamilies {
+  /** Family for the description and footer text. */
+  body?: string;
+  /** Family for the headline. */
+  title?: string;
+}
 
 const ACCENT_HEX: Record<string, string> = {
   blue: "#3b82f6",
@@ -75,11 +107,14 @@ export interface OgCardOptions {
    */
   images?: RenderOptions["images"];
   /**
-   * Google Font families for non-Latin titles. Takumi's built-in font covers
-   * only Latin, so a CJK (etc.) title renders as tofu without a family that
-   * covers its script — see {@link loadFonts}.
+   * Fonts for non-Latin titles and card branding. Takumi's built-in font
+   * covers only Latin, so a CJK (etc.) title renders as tofu without a family
+   * that covers its script — see {@link loadFonts}. Local entries are read
+   * from disk instead of Google Fonts.
    */
   fonts?: OgFont[];
+  /** Per-role families from the loaded fonts (title vs body text). */
+  families?: OgFontFamilies;
 }
 
 const WIDTH = OG_IMAGE_WIDTH;
@@ -117,7 +152,9 @@ const fontSubsetCache = new Map<string, Promise<FontSubset[]>>();
  * fetch failure rejects, failing the build with the cause rather than silently
  * shipping tofu — the same fail-fast the OG accent relies on.
  */
-const loadFonts = (fonts: OgFont[]): Promise<FontSubset[]> => {
+const loadFonts = (
+  fonts: Exclude<OgFont, OgLocalFont>[]
+): Promise<FontSubset[]> => {
   const key = JSON.stringify(fonts);
   let pending = fontSubsetCache.get(key);
   if (!pending) {
@@ -126,6 +163,20 @@ const loadFonts = (fonts: OgFont[]): Promise<FontSubset[]> => {
   }
   return pending;
 };
+
+/**
+ * A lazy loader for a local font file, matching the shape `render` accepts
+ * alongside Google subsets. Keyed by path so the shared renderer reads and
+ * registers each file once across a build's per-page renders; a missing file
+ * rejects at first use, failing the build with the path in the cause.
+ */
+const localFontLoader = (font: OgLocalFont) => ({
+  data: () => readFile(font.src),
+  key: font.src,
+  name: font.name,
+  ...(font.weight === undefined ? {} : { weight: font.weight }),
+  ...(font.style === undefined ? {} : { style: font.style }),
+});
 
 // Light neutral scale mirrored from the docs homepage theme tokens:
 // FOREGROUND = --foreground, MUTED = --muted-foreground, FAINT = that lighter,
@@ -229,6 +280,10 @@ const titleSize = (title: string): number => {
   return 76;
 };
 
+/** A spreadable `fontFamily` style, empty when no family is configured. */
+const familyStyle = (family?: string): { fontFamily?: string } =>
+  family ? { fontFamily: family } : {};
+
 /** Render a 1200x630 Open Graph card to a PNG buffer. */
 export const renderOgImage = async (
   options: OgCardOptions
@@ -243,6 +298,8 @@ export const renderOgImage = async (
   const description = options.description?.trim();
   const repo = options.repo?.trim();
   const site = options.site?.trim();
+  const titleFamily = familyStyle(options.families?.title);
+  const bodyFamily = familyStyle(options.families?.body);
 
   // Logo only — no brand-name label beside it. A wordmark logo already spells
   // the name, and rendering the site title next to it duplicated the brand
@@ -265,6 +322,7 @@ export const renderOgImage = async (
         lineHeight: 1.05,
         maxWidth: 1010,
         textWrap: "balance",
+        ...titleFamily,
       }),
       description
         ? text(truncate(description, 140), {
@@ -274,6 +332,7 @@ export const renderOgImage = async (
             marginTop: 28,
             maxWidth: 900,
             textWrap: "balance",
+            ...bodyFamily,
           })
         : container({}),
     ],
@@ -290,10 +349,10 @@ export const renderOgImage = async (
             container({
               children: [
                 repo
-                  ? text(repo, { color: muted, fontSize: 22 })
+                  ? text(repo, { color: muted, fontSize: 22, ...bodyFamily })
                   : container({}),
                 site
-                  ? text(site, { color: faint, fontSize: 22 })
+                  ? text(site, { color: faint, fontSize: 22, ...bodyFamily })
                   : container({}),
               ],
               style: {
@@ -324,12 +383,17 @@ export const renderOgImage = async (
   });
 
   const fonts = options.fonts ?? [];
+  const googleFamilies = fonts.filter((font) => !isLocalOgFont(font));
+  const localFonts = fonts.filter((font) => isLocalOgFont(font));
   // `render` registers only the subsets a card's text uses and skips files it
-  // has already loaded, so passing the full family list per page is cheap.
-  const fontSubsets = fonts.length ? await loadFonts(fonts) : undefined;
+  // has already loaded, so passing the full font list per page is cheap.
+  const fontSubsets = googleFamilies.length
+    ? await loadFonts(googleFamilies)
+    : [];
+  const cardFonts = [...fontSubsets, ...localFonts.map(localFontLoader)];
 
   return render(node, {
-    fonts: fontSubsets,
+    fonts: cardFonts.length ? cardFonts : undefined,
     format: "png",
     height: HEIGHT,
     images: resolveImages(options.images),

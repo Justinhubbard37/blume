@@ -426,39 +426,40 @@ describe("buildRuntimeData", () => {
     expect(data.config.og.logo).toBeUndefined();
   });
 
-  it("passes Open Graph Google Font families through to the runtime data", async () => {
+  it("keeps Open Graph fonts out of the runtime data", async () => {
+    // Card fonts can carry absolute build-machine paths and the runtime data
+    // is serialized into every page's client payload — fonts are baked into
+    // the generated OG endpoint instead (see the templates tests).
     const project = await scanProject(
       await writeProject({
         "blume.config.ts": `export default {
-  seo: {
-    og: {
-      fonts: [
-        "Noto Sans JP",
-        { name: "Inter", weight: [400, 700], style: "italic" },
-      ],
-    },
-  },
+  seo: { og: { fonts: ["Noto Sans JP"] } },
 };
 `,
         "docs/index.md": "# Home\n",
       })
     );
     const data = JSON.parse(buildRuntimeData(project));
-    expect(data.config.og.fonts).toEqual([
-      "Noto Sans JP",
-      { name: "Inter", style: "italic", weight: [400, 700] },
-    ]);
+    expect(data.config.og.fonts).toBeUndefined();
   });
 
-  it("omits Open Graph fonts when none are configured", async () => {
-    const project = await scanProject(
+  it("records whether the config set theme.fonts itself", async () => {
+    const configured = await scanProject(
       await writeProject({
-        "blume.config.ts": "export default {};\n",
+        "blume.config.ts":
+          'export default { theme: { fonts: { body: "geist" } } };\n',
         "docs/index.md": "# Home\n",
       })
     );
-    const data = JSON.parse(buildRuntimeData(project));
-    expect(data.config.og.fonts).toEqual([]);
+    expect(configured.themeFontsConfigured).toBeTrue();
+
+    const defaulted = await scanProject(
+      await writeProject({
+        "blume.config.ts": 'export default { theme: { accent: "green" } };\n',
+        "docs/index.md": "# Home\n",
+      })
+    );
+    expect(defaulted.themeFontsConfigured).toBeFalse();
   });
 
   it("reserves dimensions for per-mode SVG logos", async () => {
@@ -706,6 +707,45 @@ describe("generateRuntime", () => {
     const firstHash = first.match(hashPattern)?.groups?.hash;
     const secondHash = second.match(hashPattern)?.groups?.hash;
     expect(secondHash).not.toBe(firstHash);
+  });
+
+  it("bakes theme-derived fonts into the OG endpoint", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": `export default {
+  seo: { og: { enabled: true } },
+  theme: { fonts: { display: "geist" } },
+};
+`,
+        "docs/index.md": "# Home\n",
+      })
+    );
+    await generateRuntime(project);
+    const endpoint = await readFile(
+      join(project.context.outDir, "src", "pages", "og", "[...slug].png.ts"),
+      "utf-8"
+    );
+    expect(endpoint).toContain('"name":"Geist"');
+    // The untouched body default derives too, so the card matches the site.
+    expect(endpoint).toContain('"name":"Inter"');
+    expect(endpoint).toContain('{"title":"Geist","body":"Inter"}');
+  });
+
+  it("fails generation when a configured local font file is missing", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": `export default {
+  theme: {
+    fonts: {
+      body: { name: "Ghost", variants: [{ src: "./fonts/ghost.woff2" }] },
+    },
+  },
+};
+`,
+        "docs/index.md": "# Home\n",
+      })
+    );
+    expect(generateRuntime(project)).rejects.toThrow(/ghost\.woff2/u);
   });
 
   it("writes the full runtime for a feature-rich project", async () => {
