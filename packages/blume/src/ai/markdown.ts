@@ -30,6 +30,16 @@ export const agentMarkdown = (entry: RawMarkdownEntry): string =>
   entry.md ?? entry.mdx;
 
 /**
+ * Estimated token count of a Markdown document, for the `x-markdown-tokens`
+ * response header (the convention Cloudflare's Markdown for Agents ships; the
+ * tokenizer is unspecified there too, so this is the common ~4-characters-
+ * per-token estimate). Kept in sync with the inline computation in
+ * `rawMarkdownEndpointTemplate`, which can't import build-time code.
+ */
+export const markdownTokenCount = (text: string): number =>
+  Math.ceil(text.length / 4);
+
+/**
  * Map every route to its raw source Markdown. Powers the `<route>.md` and
  * `<route>.mdx` endpoints: `.mdx` serves the original source so tools can see
  * exactly what the author wrote, while `.md` downlevels supported components

@@ -1181,10 +1181,15 @@ export function getStaticPaths() {
 export function GET({ props }: { props: { route: string } }) {
   const entries = raw as Record<string, { md?: string; mdx?: string }>;
   const entry = entries[props.route];
-  return new Response(entry ? ${
+  const body = entry ? ${
     kind === "md" ? '(entry.md ?? entry.mdx ?? "")' : '(entry.mdx ?? "")'
-  } : "", {
-    headers: { "Content-Type": "text/markdown; charset=utf-8" },
+  } : "";
+  return new Response(body, {
+    headers: {
+      "Content-Type": "text/markdown; charset=utf-8",
+      // ~4 characters per token; keep in sync with markdownTokenCount.
+      "x-markdown-tokens": String(Math.ceil(body.length / 4)),
+    },
   });
 }
 `;

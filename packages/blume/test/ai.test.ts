@@ -9,7 +9,11 @@ import type { AskData } from "../src/ai/ask-context.ts";
 import { buildAskData } from "../src/ai/ask-data.ts";
 import { askBackendRuntimeDep, resolveAskBackend } from "../src/ai/ask.ts";
 import { buildLlmsFiles } from "../src/ai/llms.ts";
-import { buildRawMarkdown, markdownRoutePaths } from "../src/ai/markdown.ts";
+import {
+  buildRawMarkdown,
+  markdownRoutePaths,
+  markdownTokenCount,
+} from "../src/ai/markdown.ts";
 import {
   applyAgentVisibility,
   applyAudienceVisibility,
@@ -462,6 +466,15 @@ describe("buildRawMarkdown", () => {
       makeProject([makePage("a.md", "/", "Alpha")])
     );
     expect(raw["/"]?.mdx).toBe(sources.get("a.md") ?? "");
+  });
+});
+
+describe("markdownTokenCount", () => {
+  it("estimates ~4 characters per token, rounding up", () => {
+    expect(markdownTokenCount("")).toBe(0);
+    expect(markdownTokenCount("abcd")).toBe(1);
+    expect(markdownTokenCount("abcde")).toBe(2);
+    expect(markdownTokenCount("a".repeat(400))).toBe(100);
   });
 });
 

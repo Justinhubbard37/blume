@@ -14,7 +14,12 @@ import {
 } from "../../ai/api-catalog.ts";
 import { buildHomeLinkHeader } from "../../ai/link-headers.ts";
 import { buildLlmsFiles } from "../../ai/llms.ts";
-import { markdownRoutePaths } from "../../ai/markdown.ts";
+import {
+  agentMarkdown,
+  buildRawMarkdown,
+  markdownRoutePaths,
+  markdownTokenCount,
+} from "../../ai/markdown.ts";
 import {
   AGENT_SKILLS_DIR,
   buildSkillsIndex,
@@ -251,10 +256,11 @@ const emitWellKnownFiles = async (
  * straight to the project root (see `withAdapterRoot`).
  */
 const emitVercelNegotiation = async (
-  config: ResolvedConfig,
+  project: BlumeProject,
   routePaths: string[],
   root: string
 ): Promise<void> => {
+  const { config } = project;
   const configPath = join(root, ".vercel", "output", "config.json");
   if (!existsSync(configPath)) {
     return;
@@ -267,11 +273,17 @@ const emitVercelNegotiation = async (
       ? { [SIGNATURES_DIRECTORY_PATH.slice(1)]: SIGNATURES_DIRECTORY_TYPE }
       : {}),
   };
+  // The homepage rewrite serves `/index.md` from the static layer, so its
+  // `x-markdown-tokens` estimate has to ride the routing config; the runtime
+  // endpoint stamps it on dev/server-rendered responses itself.
+  const rawMarkdown = await buildRawMarkdown(project);
+  const home = rawMarkdown["/"];
   const injected = injectNegotiationRoutes(
     await readFile(configPath, "utf-8"),
     routePaths,
     buildHomeLinkHeader(config, routePaths),
-    overrides
+    overrides,
+    home ? markdownTokenCount(agentMarkdown(home)) : undefined
   );
   if (injected === null) {
     logger.warn(
@@ -707,11 +719,7 @@ export const buildCommand = defineCommand({
     }
 
     if (project.config.deployment.output === "server" && adapter === "vercel") {
-      await emitVercelNegotiation(
-        project.config,
-        markdownRoutePaths(project),
-        root
-      );
+      await emitVercelNegotiation(project, markdownRoutePaths(project), root);
     }
 
     await publishBuildArtifacts(

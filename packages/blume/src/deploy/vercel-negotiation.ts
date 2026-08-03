@@ -105,10 +105,15 @@ export interface NegotiationRoutes {
  * Build the routes for the given content-route paths (the routes that have a
  * raw-Markdown mirror, straight from the manifest). Paths are matched with an
  * optional trailing slash and rewritten `/{route}` → `/{route}.md`; the home
- * page's mirror lives at `/index.md`.
+ * page's mirror lives at `/index.md`. When `homeTokens` is given, the home
+ * rewrite also stamps `x-markdown-tokens` — the estimated token count of the
+ * homepage mirror (Cloudflare's Markdown for Agents convention). Only the home
+ * route can carry it: the other rewrites are chunked alternations spanning
+ * many pages, and a count is per-page.
  */
 export const buildNegotiationRoutes = (
-  routePaths: readonly string[]
+  routePaths: readonly string[],
+  homeTokens?: number
 ): NegotiationRoutes => {
   const home = routePaths.includes("/");
   const rest = routePaths
@@ -121,7 +126,10 @@ export const buildNegotiationRoutes = (
         {
           dest: "/index.md",
           has: ACCEPT_MARKDOWN_CONDITION,
-          headers: VARY_ACCEPT,
+          headers:
+            homeTokens === undefined
+              ? VARY_ACCEPT
+              : { ...VARY_ACCEPT, "x-markdown-tokens": String(homeTokens) },
           src: "^/$",
         },
       ]
@@ -187,7 +195,8 @@ export const injectNegotiationRoutes = (
   configText: string,
   routePaths: readonly string[],
   homeLinkHeader?: string | null,
-  contentTypeOverrides?: Record<string, string>
+  contentTypeOverrides?: Record<string, string>,
+  homeTokens?: number
 ): string | null => {
   const overrideEntries = Object.entries(contentTypeOverrides ?? {});
   if (
@@ -221,7 +230,10 @@ export const injectNegotiationRoutes = (
   if (filesystemIndex === -1) {
     return null;
   }
-  const { headerRoutes, rewriteRoutes } = buildNegotiationRoutes(routePaths);
+  const { headerRoutes, rewriteRoutes } = buildNegotiationRoutes(
+    routePaths,
+    homeTokens
+  );
   if (homeLinkHeader) {
     headerRoutes.push({
       continue: true,

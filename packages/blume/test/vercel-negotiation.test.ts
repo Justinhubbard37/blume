@@ -96,6 +96,19 @@ describe("buildNegotiationRoutes", () => {
     expect(vary.test("/guide")).toBe(true);
   });
 
+  it("stamps x-markdown-tokens on the home rewrite when a count is given", () => {
+    const { rewriteRoutes } = buildNegotiationRoutes(["/", "/guide"], 128);
+    expect(rewriteRoutes[0]?.headers).toStrictEqual({
+      vary: "Accept",
+      "x-markdown-tokens": "128",
+    });
+    // Chunked rewrites span many pages, so a per-page count never rides them.
+    expect(rewriteRoutes[1]?.headers).toStrictEqual({ vary: "Accept" });
+    // Without a count the home rewrite stays as before.
+    const plain = buildNegotiationRoutes(["/", "/guide"]);
+    expect(plain.rewriteRoutes[0]?.headers).toStrictEqual({ vary: "Accept" });
+  });
+
   it("percent-encodes and regex-escapes route paths", () => {
     const { rewriteRoutes } = buildNegotiationRoutes([
       "/ja/はじめに",
@@ -224,6 +237,37 @@ describe("injectNegotiationRoutes", () => {
         (route: { headers?: Record<string, string> }) => route.headers?.link
       )
     ).toHaveLength(1);
+  });
+
+  it("injects the home token count and stays idempotent", () => {
+    const once = injectNegotiationRoutes(
+      JSON.stringify(baseConfig),
+      ["/", "/docs/a"],
+      null,
+      undefined,
+      256
+    );
+    const config = JSON.parse(once ?? "");
+    const homeRewrite = config.routes.find(
+      (route: { dest?: string }) => route.dest === "/index.md"
+    );
+    expect(homeRewrite.headers).toStrictEqual({
+      vary: "Accept",
+      "x-markdown-tokens": "256",
+    });
+    // Re-injection with a fresh count replaces rather than duplicates.
+    const twice = injectNegotiationRoutes(
+      once ?? "",
+      ["/", "/docs/a"],
+      null,
+      undefined,
+      512
+    );
+    const updated = JSON.parse(twice ?? "").routes.filter(
+      (route: { dest?: string }) => route.dest === "/index.md"
+    );
+    expect(updated).toHaveLength(1);
+    expect(updated[0].headers["x-markdown-tokens"]).toBe("512");
   });
 
   it("replaces a previously injected Link route instead of duplicating it", () => {
