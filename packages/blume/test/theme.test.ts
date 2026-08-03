@@ -10,6 +10,7 @@ import {
   buildFontEntries,
   buildFontsCss,
   configuredCssVars,
+  slugifyFontName,
 } from "../src/theme/fonts.ts";
 import { hasIcon, resolveIcon } from "../src/theme/icons.ts";
 import {
@@ -402,6 +403,11 @@ describe("buildFontsCss", () => {
     expect(css).toContain(
       "--blume-font-mono-src: var(--blume-ff-berkeley-mono);"
     );
+  });
+
+  it("trims leading and trailing separator runs when slugifying", () => {
+    expect(slugifyFontName(" -- Noto Sans JP -- ")).toBe("noto-sans-jp");
+    expect(slugifyFontName("---")).toBe("");
   });
 
   it("skips an unknown slug string", () => {

@@ -210,7 +210,9 @@ export const slugifyFontName = (name: string): string =>
   name
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/gu, "-")
-    .replaceAll(/^-+|-+$/gu, "");
+    // The collapse above leaves only single dashes, so no quantifiers needed
+    // (an unanchored `-+$` backtracks quadratically on long dash runs).
+    .replaceAll(/^-|-$/gu, "");
 
 /** The CSS variable Astro populates for a given font (shared across roles). */
 const fontVar = (slug: string): string => `--blume-ff-${slug}`;
