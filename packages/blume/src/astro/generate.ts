@@ -19,7 +19,7 @@ import { glob } from "tinyglobby";
 
 import { buildAskData } from "../ai/ask-data.ts";
 import { resolveAskBackend } from "../ai/ask.ts";
-import { buildRawMarkdown } from "../ai/markdown.ts";
+import { buildRawMarkdown, markdownRoutePaths } from "../ai/markdown.ts";
 import { buildMcpData } from "../ai/mcp/data.ts";
 import { buildMcpDiscovery, buildMcpServerCard } from "../ai/mcp/discovery.ts";
 import { normalizeBasePath } from "../core/base-path.ts";
@@ -1608,7 +1608,7 @@ export const generateRuntime = async (
           aliases: resolveTsconfigAliases(context.root),
           askPath,
           config,
-          contentRoutes: project.manifest.routes.map((route) => route.path),
+          contentRoutes: markdownRoutePaths(project),
           contentWatchesRuntimeDir: contentWatchesRuntimeDir(
             hasFilesystemSource,
             docsCollection.base,

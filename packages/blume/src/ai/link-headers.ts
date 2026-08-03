@@ -40,9 +40,10 @@ export const buildHomeLinkHeader = (
       `<${deployBase}/llms.txt>; rel="describedby"; type="text/plain"`
     );
   }
-  // Same home-mirror condition as the Vercel negotiation routes: "/" is a
-  // content route only when the docs sit at the site root (no `basePath`) and
-  // the root page is real content, so `/index.md` exists exactly then.
+  // Same route list as the negotiation surfaces (`markdownRoutePaths`): "/"
+  // always has a mirror — the page's own source when the home route is a
+  // content page, the synthesized llms.txt fallback otherwise — so callers
+  // passing that list always advertise `/index.md` here.
   if (routePaths.includes("/")) {
     links.push(
       `<${deployBase}/index.md>; rel="alternate"; type="text/markdown"`

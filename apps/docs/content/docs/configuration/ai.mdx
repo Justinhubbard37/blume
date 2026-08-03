@@ -63,7 +63,7 @@ The `.md` variant _downlevels_ components to plain Markdown for consumers that c
 
 ### Content negotiation
 
-Agents don't need to know the `.md` convention: requesting a page's own URL with an [`Accept: text/markdown`](https://acceptmarkdown.com) header serves the Markdown variant at the same address, with `Vary: Accept` so caches keep the two apart. The dev server honors the header out of the box, and a [Vercel server build](/docs/deployment#server-rendering) wires the same negotiation into the deploy's routing rules automatically — no configuration needed. Other deploy targets serve prerendered pages from a static layer with no request-time hook, so agents there fetch the `.md` URL directly; the [agent readability manifest](#agent-readability) advertises `contentNegotiation` only on deployments that honor the header.
+Agents don't need to know the `.md` convention: requesting a page's own URL with an [`Accept: text/markdown`](https://acceptmarkdown.com) header serves the Markdown variant at the same address, with `Vary: Accept` so caches keep the two apart. The dev server honors the header out of the box, and a [Vercel server build](/docs/deployment#server-rendering) wires the same negotiation into the deploy's routing rules automatically — no configuration needed. The homepage always negotiates, even when it's a custom landing page rather than a content page: its Markdown mirror falls back to the [`llms.txt`](#llmstxt) index, so an agent asking the site root for Markdown gets the machine-readable map of the site. Other deploy targets serve prerendered pages from a static layer with no request-time hook, so agents there fetch the `.md` URL directly; the [agent readability manifest](#agent-readability) advertises `contentNegotiation` only on deployments that honor the header.
 
 ### Custom component serializers
 
@@ -324,7 +324,7 @@ Link: </agent-readability.json>; rel="describedby"; type="application/json",
   </index.md>; rel="alternate"; type="text/markdown"
 ```
 
-Each entry appears only when its feature is on, and the `alternate` link only when your homepage is a content page with a [raw Markdown](#raw-markdown) mirror. Sites that publish APIs also get a `rel="api-catalog"` entry pointing at the [generated API catalog](#api-catalog). The header rides on every surface Blume controls: the dev server (check it with `curl -I localhost:4321`), static builds via the emitted `_headers` file (Netlify and Cloudflare), and Vercel server builds via the deploy's routing rules. Hosts that ignore `_headers` on static output (GitHub Pages, S3) can't send custom response headers at all — there, agents still find everything through `llms.txt` and `agent-readability.json` at the site root.
+Each entry appears only when its feature is on. The `alternate` link points at the homepage's Markdown mirror — the page's own [raw Markdown](#raw-markdown) when the home route is a content page, or the synthesized `llms.txt` fallback when it's a landing page. Sites that publish APIs also get a `rel="api-catalog"` entry pointing at the [generated API catalog](#api-catalog). The header rides on every surface Blume controls: the dev server (check it with `curl -I localhost:4321`), static builds via the emitted `_headers` file (Netlify and Cloudflare), and Vercel server builds via the deploy's routing rules. Hosts that ignore `_headers` on static output (GitHub Pages, S3) can't send custom response headers at all — there, agents still find everything through `llms.txt` and `agent-readability.json` at the site root.
 
 ### API catalog
 

@@ -116,7 +116,9 @@ const isHomeUrl = (rawUrl: string | undefined, base?: string): boolean => {
  * the same negotiation from routing rules spliced into the Build Output config
  * (see `deploy/vercel-negotiation.ts`); every other build exposes the same
  * content at the `.md` URL. Only routes with a Markdown variant are rewritten,
- * so landing pages and user `.astro` pages keep serving HTML. The same
+ * so user `.astro` pages keep serving HTML — except the homepage, whose
+ * variant falls back to the synthesized llms.txt mirror when it's a landing
+ * page (see `markdownRoutePaths`). The same
  * middleware also stamps the homepage agent-discovery `Link` header, mirroring
  * what the deployed site sends via `_headers` / the Vercel routing config.
  */

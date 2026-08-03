@@ -9,7 +9,7 @@ import type { AskData } from "../src/ai/ask-context.ts";
 import { buildAskData } from "../src/ai/ask-data.ts";
 import { askBackendRuntimeDep, resolveAskBackend } from "../src/ai/ask.ts";
 import { buildLlmsFiles } from "../src/ai/llms.ts";
-import { buildRawMarkdown } from "../src/ai/markdown.ts";
+import { buildRawMarkdown, markdownRoutePaths } from "../src/ai/markdown.ts";
 import {
   applyAgentVisibility,
   applyAudienceVisibility,
@@ -447,6 +447,37 @@ describe("buildRawMarkdown", () => {
     expect(raw["/a"]?.mdx).toContain("title: Alpha");
     // Component-free pages don't store a second (identical) md variant.
     expect(raw["/a"]?.md).toBeUndefined();
+  });
+
+  it("synthesizes an llms.txt homepage mirror when / is not a content route", async () => {
+    const raw = await buildRawMarkdown(project());
+    const home = raw["/"];
+    expect(home?.mdx).toContain("# Docs");
+    expect(home?.mdx).toContain("> Desc");
+    expect(home?.mdx).toContain("- [Alpha](https://example.com/a): First");
+  });
+
+  it("keeps the real source when / is a content route", async () => {
+    const raw = await buildRawMarkdown(
+      makeProject([makePage("a.md", "/", "Alpha")])
+    );
+    expect(raw["/"]?.mdx).toBe(sources.get("a.md") ?? "");
+  });
+});
+
+describe("markdownRoutePaths", () => {
+  it("appends / for the synthesized homepage mirror", () => {
+    expect(markdownRoutePaths(project())).toStrictEqual([
+      "/b",
+      "/a",
+      "/c",
+      "/",
+    ]);
+  });
+
+  it("does not duplicate / when the home route is real content", () => {
+    const proj = makeProject([makePage("a.md", "/", "Alpha")]);
+    expect(markdownRoutePaths(proj)).toStrictEqual(["/"]);
   });
 });
 

@@ -14,6 +14,7 @@ import {
 } from "../../ai/api-catalog.ts";
 import { buildHomeLinkHeader } from "../../ai/link-headers.ts";
 import { buildLlmsFiles } from "../../ai/llms.ts";
+import { markdownRoutePaths } from "../../ai/markdown.ts";
 import {
   AGENT_SKILLS_DIR,
   buildSkillsIndex,
@@ -146,10 +147,7 @@ const emitHeaderFiles = async (
     join(distDir, "_headers"),
     buildNetlifyHeaders(
       config,
-      buildHomeLinkHeader(
-        config,
-        project.manifest.routes.map((route) => route.path)
-      )
+      buildHomeLinkHeader(config, markdownRoutePaths(project))
     ),
     "utf-8"
   );
@@ -711,7 +709,7 @@ export const buildCommand = defineCommand({
     if (project.config.deployment.output === "server" && adapter === "vercel") {
       await emitVercelNegotiation(
         project.config,
-        project.manifest.routes.map((route) => route.path),
+        markdownRoutePaths(project),
         root
       );
     }

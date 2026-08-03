@@ -60,8 +60,10 @@ const indexedNavigations = (
  * Build the compact `llms.txt` index: title and summary, then the sidebar tree
  * rendered as sections — group labels become headings, pages become link lists —
  * so the file mirrors how the docs are organized rather than one flat blob.
+ * Also serves as the homepage's synthesized Markdown mirror when the home
+ * route is a landing page (see `buildRawMarkdown`).
  */
-const buildIndex = (project: BlumeProject): string => {
+export const buildLlmsIndex = (project: BlumeProject): string => {
   const { config } = project;
   const { site } = config.deployment;
   const base = normalizeBasePath(config.deployment.base);
@@ -222,5 +224,5 @@ export const buildLlmsFiles = async (
   project: BlumeProject
 ): Promise<{ index: string; full: string }> => ({
   full: await buildFull(project),
-  index: buildIndex(project),
+  index: buildLlmsIndex(project),
 });

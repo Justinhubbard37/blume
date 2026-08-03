@@ -9,6 +9,7 @@ import {
   downlevelComponents,
   exampleComponentSerializers,
 } from "./component-markdown.ts";
+import { buildLlmsIndex } from "./llms.ts";
 import { applyAgentVisibility } from "./visibility.ts";
 
 /** One route's raw-Markdown variants. */
@@ -79,5 +80,27 @@ export const buildRawMarkdown = async (
       return [route.path, entry] as const;
     })
   );
-  return Object.fromEntries(entries);
+  const map = Object.fromEntries(entries);
+  // A landing-page homepage (user `.astro` page, or no home route at all) has
+  // no Markdown source, but agents negotiating `Accept: text/markdown` on `/`
+  // still expect a Markdown answer. The llms.txt index — the machine-readable
+  // representation of the site a landing page fronts — becomes its mirror, so
+  // `/index.md` always exists (see `markdownRoutePaths`).
+  if (!map["/"]) {
+    map["/"] = { mdx: buildLlmsIndex(project) };
+  }
+  return map;
+};
+
+/**
+ * Every route path with a raw-Markdown mirror: the manifest routes, plus the
+ * homepage when its mirror is the synthesized llms.txt fallback (see
+ * `buildRawMarkdown`). This is the route list the negotiation surfaces (dev
+ * middleware, Vercel routing config) and the homepage `Link` header build
+ * from, so `Accept: text/markdown` on `/` resolves even when the homepage is
+ * a landing page.
+ */
+export const markdownRoutePaths = (project: BlumeProject): string[] => {
+  const paths = project.manifest.routes.map((route) => route.path);
+  return paths.includes("/") ? paths : [...paths, "/"];
 };
