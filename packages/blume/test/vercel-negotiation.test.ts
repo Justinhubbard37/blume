@@ -144,7 +144,7 @@ const baseConfig = {
 };
 
 describe("injectNegotiationRoutes", () => {
-  it("splices rewrites before handle:filesystem and Vary routes after it", () => {
+  it("splices Vary routes then rewrites, all before handle:filesystem", () => {
     const injected = injectNegotiationRoutes(JSON.stringify(baseConfig), [
       "/docs/a",
     ]);
@@ -152,16 +152,16 @@ describe("injectNegotiationRoutes", () => {
     const config = JSON.parse(injected ?? "");
     expect(config.version).toBe(3);
     expect(config.routes.map((route: { src?: string }) => route.src)).toEqual([
+      "^(?:/docs/a)/?$",
       "^(/docs/a)/?$",
       undefined,
-      "^(?:/docs/a)/?$",
       "^/_astro/(.*)$",
       "^/api/ask/?$",
       "^/.*$",
     ]);
-    expect(config.routes[1]).toStrictEqual({ handle: "filesystem" });
-    expect(config.routes[0].dest).toBe("$1.md");
-    expect(config.routes[2].continue).toBe(true);
+    expect(config.routes[2]).toStrictEqual({ handle: "filesystem" });
+    expect(config.routes[0].continue).toBe(true);
+    expect(config.routes[1].dest).toBe("$1.md");
   });
 
   it("is idempotent across re-injection", () => {
@@ -181,7 +181,7 @@ describe("injectNegotiationRoutes", () => {
     expect(injected).toContain('\n\t"routes"');
   });
 
-  it("splices a homepage Link route after handle:filesystem when given", () => {
+  it("splices a homepage Link route before handle:filesystem when given", () => {
     const link = '</llms.txt>; rel="describedby"; type="text/plain"';
     const injected = injectNegotiationRoutes(
       JSON.stringify(baseConfig),
@@ -200,7 +200,9 @@ describe("injectNegotiationRoutes", () => {
       headers: { link },
       src: "^/$",
     });
-    expect(config.routes.indexOf(linkRoute)).toBeGreaterThan(filesystemIndex);
+    // Main phase: the marker starts the miss phase, which prerendered static
+    // responses (the homepage included) never reach.
+    expect(config.routes.indexOf(linkRoute)).toBeLessThan(filesystemIndex);
   });
 
   it("injects only the Link route when there are no content routes", () => {

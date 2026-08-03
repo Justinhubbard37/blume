@@ -85,9 +85,12 @@ const chunkPatterns = (patterns: readonly string[]): string[][] => {
 export interface NegotiationRoutes {
   /**
    * `Vary: Accept` for the plain-HTML side of every negotiated URL, so shared
-   * caches keep the two variants apart. Spliced *after* `handle: "filesystem"`
-   * — routes there run against filesystem matches (the same slot the Vercel
-   * adapter uses for its `_astro` cache headers).
+   * caches keep the two variants apart. Spliced *before* `handle:
+   * "filesystem"` with `continue`: main-phase headers accumulate and ride on
+   * whatever ultimately serves the request. Routes placed after the filesystem
+   * marker are the miss phase — they run only when no static file matches, and
+   * every Blume content page is a prerendered static file, so a header route
+   * there never fires.
    */
   headerRoutes: VercelRoute[];
   /**
@@ -170,9 +173,9 @@ const isNegotiationRoute = (route: VercelRoute): boolean =>
 /**
  * Splice the negotiation routes into a Build Output `config.json`, plus — when
  * given — a homepage `Link` header route for agent discovery (see
- * `ai/link-headers.ts`), applied the same way the `Vary` routes are: after
- * `handle: "filesystem"` with `continue`, so the header rides on the
- * prerendered homepage response. `contentTypeOverrides` maps static-dir
+ * `ai/link-headers.ts`), applied the same way the `Vary` routes are: in the
+ * main phase before `handle: "filesystem"` with `continue`, so the header
+ * rides on the prerendered homepage response. `contentTypeOverrides` maps static-dir
  * relative paths to media types via the Build Output `overrides` field — the
  * platform's mechanism for extensionless static files (e.g. the Web Bot Auth
  * signature directory). Returns the updated JSON text (tab-indented, like the
@@ -226,8 +229,10 @@ export const injectNegotiationRoutes = (
       src: HOME_SRC,
     });
   }
-  routes.splice(filesystemIndex + 1, 0, ...headerRoutes);
-  routes.splice(filesystemIndex, 0, ...rewriteRoutes);
+  // Headers first: `continue` routes accumulate, so a request the rewrite
+  // route then terminates (Markdown negotiation on the homepage) still carries
+  // the Link header.
+  routes.splice(filesystemIndex, 0, ...headerRoutes, ...rewriteRoutes);
   config.routes = routes;
   return `${JSON.stringify(config, null, "\t")}\n`;
 };
