@@ -670,8 +670,11 @@ describe("astroConfigTemplate", () => {
     // package root would leave that entry unoptimized. See the optimizeDeps
     // comment.
     expect(out).toContain(
-      'include: ["blume > mermaid", "blume > epub-gen-memory/bundle"]'
+      'include: ["blume > mermaid","blume > epub-gen-memory/bundle"]'
     );
+    // Without a pages dir or aliases, the optimizer scan still covers the
+    // convention islands dir so their deps land in the initial optimization.
+    expect(out).toContain('entries: ["/p/islands/**/*.{jsx,svelte,tsx,vue}"]');
     // Blume's render-time deps are forced external on both build environments so
     // native bindings load at runtime and isolated linkers don't bundle (and
     // strand the children of) symlinked store copies.
@@ -857,6 +860,11 @@ describe("astroConfigTemplate", () => {
     expect(out).toContain(
       `react({ babel: { plugins: [[${JSON.stringify(compilerPath)}, { target: "19" }]] }, ${String.raw`exclude: [/\/node_modules\/\.vite\//]`} })`
     );
+    // The Babel-injected `react/compiler-runtime` import is invisible to the
+    // optimizer's source scan, so it must ride the include list — otherwise its
+    // first request triggers a mid-session re-optimization whose new generation
+    // duplicates React and tears down every hydrated island (#157).
+    expect(out).toContain('"react/compiler-runtime"');
   });
 
   it("omits the compiler babel plugin when no compiler path is given", () => {
@@ -879,6 +887,8 @@ describe("astroConfigTemplate", () => {
       String.raw`react({ exclude: [/\/node_modules\/\.vite\//] })`
     );
     expect(out).not.toContain("babel-plugin-react-compiler");
+    // No compiler, no injected runtime import — keep it out of the optimizer.
+    expect(out).not.toContain('"react/compiler-runtime"');
   });
 
   it("prerenders cloudflare adapter builds in Node so build-time node: imports resolve", () => {
@@ -1112,6 +1122,31 @@ describe("astroConfigTemplate", () => {
     expect(out.indexOf('"@ui"')).toBeLessThan(out.indexOf('"@": '));
     // ...and both follow Blume's own aliases.
     expect(out.indexOf('"blume:theme"')).toBeLessThan(out.indexOf('"@ui"'));
+  });
+
+  it("points the optimizer scan at user pages, islands, and alias dirs", () => {
+    const out = astroConfigTemplate({
+      aliases: { "@": "/proj/src", "@ui": "/proj/src/components/ui" },
+      askPath: ASK_PATH,
+      config,
+      contentRoutes: [],
+      context: context({ pagesRoot: "/p/pages" }),
+      dataPath: DATA_PATH,
+      examplesPath: EXAMPLES_PATH,
+      examplesThemePath: EXAMPLES_THEME_PATH,
+      needsReact: false,
+      openapiPath: OPENAPI_PATH,
+      pages: [],
+      searchClientPath: SEARCH_CLIENT_PATH,
+      themePath: THEME_PATH,
+    });
+    // User sources live outside the Vite root (`.blume/`), so without explicit
+    // entries the scanner never crawls them and their deps are only discovered
+    // mid-session — the re-optimization that duplicates React (#157). Alias
+    // dirs are deduped and sorted so the generated config is deterministic.
+    expect(out).toContain(
+      'entries: ["/p/pages/**/*.astro","/p/islands/**/*.{jsx,svelte,tsx,vue}","/proj/src/**/*.{astro,jsx,svelte,tsx,vue}","/proj/src/components/ui/**/*.{astro,jsx,svelte,tsx,vue}"]'
+    );
   });
 });
 

@@ -370,6 +370,38 @@ const renderImageOption = (config: ResolvedConfig): string =>
     ? `\n  image: ${JSON.stringify(config.image)},`
     : "";
 
+/**
+ * Startup-scan entry points and forced includes for the dev dep optimizer:
+ * the Vite root is the generated runtime, so user pages, convention islands,
+ * and alias-reachable components all live outside it and are otherwise only
+ * crawled when first requested. The compiler runtime rides the include list
+ * because it is Babel-injected and no source scan can see it. See the
+ * optimizeDeps comment in the generated config for the failure this prevents.
+ */
+const resolveOptimizeDeps = (options: {
+  aliases: Record<string, string> | undefined;
+  context: ProjectContext;
+  needsReact: boolean;
+  reactCompilerPath: string | null | undefined;
+}): { optimizeDepsEntries: string[]; optimizeDepsInclude: string[] } => {
+  const { context } = options;
+  const optimizeDepsEntries = [
+    ...(context.pagesRoot ? [`${context.pagesRoot}/**/*.astro`] : []),
+    `${context.root}/islands/**/*.{jsx,svelte,tsx,vue}`,
+    ...[...new Set(Object.values(options.aliases ?? {}))]
+      .toSorted()
+      .map((dir) => `${dir}/**/*.{astro,jsx,svelte,tsx,vue}`),
+  ];
+  const optimizeDepsInclude = [
+    "blume > mermaid",
+    "blume > epub-gen-memory/bundle",
+    ...(options.needsReact && options.reactCompilerPath
+      ? ["react/compiler-runtime"]
+      : []),
+  ];
+  return { optimizeDepsEntries, optimizeDepsInclude };
+};
+
 export const astroConfigTemplate = (options: {
   context: ProjectContext;
   config: ResolvedConfig;
@@ -423,6 +455,13 @@ export const astroConfigTemplate = (options: {
   // The project root plus the workspace root, so hoisted dependencies (e.g.
   // KaTeX fonts under a monorepo's root node_modules) stay servable in dev.
   const fsAllow = [...new Set([findWorkspaceRoot(context.root), context.root])];
+
+  const { optimizeDepsEntries, optimizeDepsInclude } = resolveOptimizeDeps({
+    aliases: options.aliases,
+    context,
+    needsReact,
+    reactCompilerPath: options.reactCompilerPath,
+  });
 
   const adapterImport =
     server && deployment.adapter
@@ -642,24 +681,32 @@ ${userConfigSetup}export default defineConfig({
   devToolbar: { enabled: false },
   vite: {
     plugins: [tailwindcss(), prerenderDepsPlugin(), serverAppResolvePlugin()],
-    // The lazy client-side imports both land on CJS/UMD files: mermaid (for
-    // diagrams) statically imports dayjs as CJS (\`dayjs/dayjs.min.js\`), and
-    // epub-gen-memory's browser bundle is a browserified UMD. In dev, an
-    // un-pre-bundled dependency is served as raw ESM, where such a file
-    // exposes no \`default\` export — mermaid throws on load and diagrams
-    // render blank, and the EPUB export throws \`epub is not a function\`
-    // (the UMD finds no \`exports\`/\`define\` and strands its callable on
-    // \`window.epubGen\` instead). Forcing them through the dep optimizer
-    // restores the CJS interop. In a standalone install these dynamic imports
-    // live inside \`node_modules/blume\`, which Vite's optimizer scan doesn't
-    // crawl, so neither is discovered on its own — hence the explicit
-    // includes. They resolve through the \`blume\` package (they aren't direct
-    // deps of the generated project), so the nested \`blume > x\` form is
-    // required, and epub-gen-memory must name the \`/bundle\` subpath that is
-    // actually imported: optimizing the package root leaves that entry out.
-    // Production (Rollup) already handles the interop, so this only affects dev.
+    // Everything hydration can reach must be part of the dev dep optimizer's
+    // FIRST run. The Vite root is the generated runtime, so user pages,
+    // islands, and aliased components live outside it and are only crawled
+    // when first requested — and \`react/compiler-runtime\` is Babel-injected,
+    // so no source scan can ever see it. A dependency discovered after
+    // hydration begins triggers a mid-session re-optimization whose new
+    // generation imports React through new \`?v=\` URLs; the browser then
+    // evaluates a second React copy and every island tears down with
+    // "Invalid hook call" (#157). \`entries\` points the startup scanner at
+    // the user's files (the scanner follows their imports, so their deps land
+    // in the initial optimization); the compiler runtime rides the include
+    // list because only the transform pipeline knows it exists.
+    //
+    // The mermaid/epub includes fix CJS interop instead: both lazy client-side
+    // imports land on CJS/UMD files (mermaid statically imports dayjs as CJS,
+    // epub-gen-memory's browser bundle is a browserified UMD) that break when
+    // served as raw ESM — mermaid throws on load and the EPUB export throws
+    // \`epub is not a function\`. They resolve through the \`blume\` package
+    // (they aren't direct deps of the generated project), so the nested
+    // \`blume > x\` form is required, and epub-gen-memory must name the
+    // \`/bundle\` subpath that is actually imported: optimizing the package
+    // root leaves that entry out. Production (Rollup) already handles the
+    // interop, so all of this only affects dev.
     optimizeDeps: {
-      include: ["blume > mermaid", "blume > epub-gen-memory/bundle"],
+      entries: ${JSON.stringify(optimizeDepsEntries)},
+      include: ${JSON.stringify(optimizeDepsInclude)},
     },
     // Blume's render-time deps are forced external on both build environments so
     // native bindings resolve at runtime and isolated linkers don't bundle
