@@ -23,5 +23,7 @@ jobs:
         run: bun run typecheck
       - name: Test
         run: bun run test
+      - name: Check translations
+        run: cd apps/docs && bun run translate --check
       - name: Build docs
         run: cd apps/docs && bun run build
