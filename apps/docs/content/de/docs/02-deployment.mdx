@@ -23,7 +23,7 @@ Ein statischer Build enthält:
 
 - jede Dokumentations- und benutzerdefinierte Seite als statisches HTML
 - einen lokalen Suchindex (standardmäßig Orama, Pagefind optional)
-- eine [`sitemap.xml`](/docs/configuration/seo#sitemap) und `robots.txt` ([`robots.txt`](/docs/configuration/seo#robots)), wenn `deployment.site` gesetzt ist
+- eine [`sitemap.xml`](/docs/configuration/seo#sitemap) und [`robots.txt`](/docs/configuration/seo#robots), wenn `deployment.site` gesetzt ist
 - `llms.txt` und `llms-full.txt` für KI-Tools
 - Weiterleitungsseiten
 - vorgerenderte [Open-Graph-Bilder](/docs/configuration/seo#open-graph-images), wenn `seo.og.enabled` aktiviert ist
@@ -102,7 +102,7 @@ Auf **Vercel**, **Netlify** und **Cloudflare Pages** wählt Blume den passenden 
 
 Ein Server-Build enthält alles, was ein statischer Build enthält, sowie alle Astro-Endpunkte oder Middleware, die du hinzufügst. Der `node`-Adapter erzeugt einen eigenständigen Server, den du direkt ausführen kannst.
 
-Auf Vercel aktiviert ein Server-Build außerdem die [Content Negotiation über `Accept: text/markdown`](/docs/configuration/ai#content-negotiation): Blume fügt header-abhängige Rewrites in die Routing-Konfiguration des Deployments ein, sodass ein Agent, der eine beliebige Inhaltsseite mit diesem Header anfragt, unter derselben URL deren Roh-Markdown-Spiegelung erhält.
+Auf Vercel und Cloudflare aktiviert ein Server-Build außerdem die [Content Negotiation über `Accept: text/markdown`](/docs/configuration/ai#content-negotiation), sodass ein Agent, der eine beliebige Inhaltsseite mit diesem Header anfragt, unter derselben URL deren Roh-Markdown-Spiegelung erhält. Auf Vercel fügt Blume header-abhängige Rewrites in die Routing-Konfiguration des Deployments ein; auf Cloudflare erzeugt es einen kleinen Worker vor dem Astro-Worker und beschränkt `assets.run_worker_first` auf die Inhaltsrouten, da die Plattform andernfalls die vorgerenderten Seiten ausliefern würde, bevor Servercode ausgeführt wird — andere Assets behalten ihren schnellen Pfad ohne Worker.
 
 :::note
 Serverfunktionen haben ihre eigene Konfiguration — Ask AI benötigt beispielsweise einen API-Schlüssel für ein Modell. Zur Einrichtung siehe den [KI-Leitfaden](/docs/configuration/ai).
