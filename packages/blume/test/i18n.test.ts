@@ -15,6 +15,7 @@ import {
   localeDir,
   localePlacement,
   localePrefix,
+  localeTargetPath,
   localizeRoute,
   resolveFallbackLocale,
 } from "../src/core/i18n.ts";
@@ -331,6 +332,60 @@ describe("per-locale navigation", () => {
     // so render-time scoping recognizes `/fr` as the root tab, not a section.
     expect(graph.navigationByLocale.fr?.root).toBe("/fr");
     expect(graph.navigationByLocale.en?.root).toBe("/");
+  });
+
+  it("resolves per-locale tab labels with default-locale fallback", async () => {
+    const resolved = blumeConfigSchema.parse({
+      i18n: {
+        defaultLocale: "en",
+        locales: [
+          { code: "en", label: "English" },
+          { code: "fr", label: "Français" },
+          { code: "de", label: "Deutsch" },
+        ],
+      },
+      navigation: {
+        tabs: [
+          {
+            items: [
+              {
+                label: { en: "Getting started", fr: "Premiers pas" },
+                path: "/docs/start",
+              },
+            ],
+            label: { en: "Docs", fr: "Documentation" },
+            path: "/docs",
+          },
+          // A plain string label renders as-is in every locale.
+          { label: "CLI", path: "/cli" },
+        ],
+      },
+    });
+    const { graph } = await buildProject(resolved);
+
+    const labels = (locale: string): string[] =>
+      (graph.navigationByLocale[locale]?.tabs ?? []).map((tab) => tab.label);
+    expect(labels("en")).toEqual(["Docs", "CLI"]);
+    expect(labels("fr")).toEqual(["Documentation", "CLI"]);
+    // A locale missing from the map falls back to the default locale's label.
+    expect(labels("de")).toEqual(["Docs", "CLI"]);
+    // Dropdown item labels resolve the same way.
+    expect(graph.navigationByLocale.fr?.tabs?.[0]?.items?.[0]?.label).toBe(
+      "Premiers pas"
+    );
+    expect(graph.navigationByLocale.de?.tabs?.[0]?.items?.[0]?.label).toBe(
+      "Getting started"
+    );
+  });
+
+  it("resolves a per-locale tab label to its first entry without i18n", async () => {
+    const resolved = blumeConfigSchema.parse({
+      navigation: {
+        tabs: [{ label: { de: "Doku", en: "Docs" }, path: "/docs" }],
+      },
+    });
+    const { graph } = await buildProject(resolved);
+    expect(graph.navigation.tabs.map((tab) => tab.label)).toEqual(["Doku"]);
   });
 
   it("localizes internal featured link hrefs per locale", async () => {
@@ -687,6 +742,50 @@ describe("dot parser and shared files", () => {
     });
   });
 
+  it("resolves translation targets under the dir parser", () => {
+    const i18n = i18nOf();
+    expect(localeTargetPath("guides/x.mdx", ".mdx", "fr", i18n)).toBe(
+      "fr/guides/x.mdx"
+    );
+    expect(localeTargetPath("index.md", ".md", "fr", i18n)).toBe("fr/index.md");
+  });
+
+  it("resolves translation targets under the dot parser", () => {
+    const i18n = i18nOf({ parser: "dot" });
+    expect(localeTargetPath("guides/x.mdx", ".mdx", "fr", i18n)).toBe(
+      "guides/x.fr.mdx"
+    );
+    // Symmetric authoring: an explicit default-locale suffix is swapped, not
+    // stacked (`x.en.mdx` → `x.fr.mdx`, never `x.en.fr.mdx`).
+    expect(localeTargetPath("guides/x.en.mdx", ".mdx", "fr", i18n)).toBe(
+      "guides/x.fr.mdx"
+    );
+    // A non-locale dotted name keeps its suffix.
+    expect(localeTargetPath("intro.v2.mdx", ".mdx", "fr", i18n)).toBe(
+      "intro.v2.fr.mdx"
+    );
+    // A dot in a directory name is not a locale suffix.
+    expect(localeTargetPath("v2.5/intro.mdx", ".mdx", "fr", i18n)).toBe(
+      "v2.5/intro.fr.mdx"
+    );
+  });
+
+  it("matches an existing dot suffix case-insensitively when retargeting", () => {
+    const i18n = i18nOf({
+      locales: [
+        { code: "en", label: "English" },
+        { code: "pt-BR", label: "Português" },
+      ],
+      parser: "dot",
+    });
+    expect(localeTargetPath("intro.EN.mdx", ".mdx", "pt-BR", i18n)).toBe(
+      "intro.pt-BR.mdx"
+    );
+    expect(localeTargetPath("intro.mdx", ".mdx", "pt-BR", i18n)).toBe(
+      "intro.pt-BR.mdx"
+    );
+  });
+
   it("hoists a dir-parser locale directory in front of the source prefix", async () => {
     const contentRoot = await tempContent({
       "fr/guides/meta.ts": 'export default { title: "Guides FR" };\n',
@@ -777,10 +876,14 @@ describe("UI dictionaries", () => {
     expect(EN_UI.changelog.showReleases).toContain("{version}");
     expect(EN_UI.content.diagramError).toBe("Could not render this diagram.");
     expect(EN_UI.ask.you).toBe("You");
-    // A pack shipped before these keys existed still resolves them to English.
-    const dict = resolveUIStrings("de", { defaultLocale: "en" });
+    // A locale with no shipped pack still resolves every key to English.
+    const dict = resolveUIStrings("xx", { defaultLocale: "en" });
     expect(dict.nav.back).toBe("Back");
     expect(dict.search.popular).toBe("Popular");
+    // Shipped packs now carry the post-launch keys themselves.
+    expect(resolveUIStrings("de", { defaultLocale: "en" }).nav.back).toBe(
+      "Zurück"
+    );
   });
 
   it("localizes the banner dismiss label in every shipped pack", () => {

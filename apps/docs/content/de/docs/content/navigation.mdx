@@ -1,0 +1,245 @@
+---
+title: Navigation
+description: >-
+  Blume erstellt die Seitenleiste aus deinen Dateien und lässt dich sie dann per Frontmatter, Ordner-Meta oder Konfiguration verfeinern – Breadcrumbs und Gliederungen folgen automatisch.
+---
+
+Blume erstellt deine Seitenleiste aus dem Dateisystem und lässt dich sie dann so weit verfeinern, wie du möchtest – Seite für Seite, Ordner für Ordner oder mit einer einzigen expliziten Konfiguration. Breadcrumbs, Zurück-/Weiter-Links und die Gliederung auf der Seite ergeben sich alle aus demselben Modell, ganz ohne Verkabelung.
+
+## Die generierte Seitenleiste
+
+Standardmäßig spiegelt die Seitenleiste deinen Inhaltsbaum wider:
+
+- Ordner werden zu **Gruppen**, Dateien werden zu **Seiten**
+- Die Beschriftung einer Seite ist ihr Frontmatter-`title`; die Beschriftung einer Gruppe ist der lesbar gemachte Ordnername
+- Einträge werden nach [numerischem Präfix](/docs/content) sortiert, dann alphabetisch, und die `index`-Seite eines Ordners steht an erster Stelle
+
+Für viele Websites reicht das bereits – alles Weitere ist optional.
+
+## Seitenbeschriftung, Symbol und Badge
+
+Passe im Frontmatter unter `sidebar` an, wie eine einzelne Seite in der Seitenleiste erscheint:
+
+```yaml lineNumbers
+sidebar:
+  label: Quickstart # override the title in the sidebar
+  icon: rocket # an icon from Blume's built-in set
+  badge: New # a small label beside the entry
+  order: 1 # sort position within its group
+```
+
+Das vollständige Seitenschema findest du unter [Frontmatter](/docs/reference/frontmatter).
+
+## Ordnergruppen
+
+Jeder Ordner wird zu einer Gruppe in der Seitenleiste. Lege eine [`meta.ts`](/docs/content/meta) neben die Seiten, um Titel, Symbol und Reihenfolge der Gruppe sowie die Reihenfolge ihrer untergeordneten Einträge festzulegen:
+
+```ts meta.ts
+import { defineMeta } from "blume";
+
+export default defineMeta({
+  title: "Guides",
+  icon: "book-open",
+  pages: ["configuration", "theming", "deployment"],
+});
+```
+
+Unter [Ordner-Meta](/docs/content/meta) findest du alle Felder sowie Informationen zur Berechnung von Meta-Daten während des Scans.
+
+Das `meta.title` eines Ordners und das Frontmatter-`title` seiner eigenen `index`-Seite werden unabhängig voneinander aufgelöst – übersetzt du unter i18n das eine und vergisst das andere, entsteht eine korrekte Seitenleiste mit einem veralteten `<title>` bzw. einer veralteten Überschrift auf der Landing-Page selbst. Blume meldet eine `BLUME_NAV_INDEX_TITLE_MISMATCH`-Warnung, wenn beide voneinander abweichen. Nicht übersetzte Seiten, die aus der Fallback-Sprache ergänzt werden, sind davon ausgenommen – ihr Titel gehört zur Fallback-Sprache, und die Lösung besteht darin, die Seite zu übersetzen, nicht ihr Frontmatter zu bearbeiten.
+
+Um Seiten zu gruppieren, _ohne_ ein URL-Segment hinzuzufügen, verwende einen in Klammern gesetzten Ordnernamen – siehe [Seiten](/docs/content#group-folders).
+
+## Anzeigemodi
+
+`navigation.sidebar.display` legt fest, wie jede Gruppe in der Seitenleiste dargestellt wird:
+
+```ts blume.config.ts lineNumbers
+navigation: {
+  sidebar: {
+    display: "flat", // "flat" | "group" | "page"
+  },
+}
+```
+
+- **`flat`** (Standard) – eine nicht einklappbare Überschrift mit den darunter aufgelisteten Seiten. Seiten, die zu keiner Gruppe gehören, stehen immer zuerst, oberhalb der Gruppenabschnitte, damit sie nicht für untergeordnete Einträge einer Gruppe gehalten werden.
+- **`group`** – ein einklappbares `<details>`-Element pro Gruppe. Gruppen sind standardmäßig zunächst eingeklappt; eine Gruppe, welche die aktuelle Seite enthält, ist immer aufgeklappt, sodass nur der Abschnitt geöffnet ist, in dem du dich befindest. Setze `collapsed: false` im [Ordner-Meta](/docs/content/meta), um eine Gruppe unabhängig davon offen zu erzwingen.
+- **`page`** – jede Gruppe ist eine einzelne Zeile, die beim Anklicken die Seitenleiste in ein Unterpanel schiebt, das nur die Einträge dieser Gruppe zeigt, mit einem Zurück-Pfeil oben. Das Panel ist routen-bewusst, sodass beim direkten Aufruf einer Seite innerhalb der Gruppe sofort dorthin geöffnet wird.
+
+:::tip
+Der `page`-Modus hält tiefe Abschnitte aufgeräumt – greif darauf zurück, wenn Gruppen viele untergeordnete Einträge haben und du lieber in sie hineinnavigieren möchtest, als an ihnen vorbeizuscrollen.
+:::
+
+Eine Gruppe in einer [expliziten Seitenleiste](#explicit-sidebar) kann den globalen Modus mit einem eigenen `display` überschreiben.
+
+## Reihenfolge
+
+Wenn die Seitenleiste generiert wird, wird die Reihenfolge nach absteigender Priorität aufgelöst:
+
+<Steps>
+  <Step title="Konfigurierte Seitenleiste">
+    Eine explizite `navigation.sidebar` ersetzt den generierten Baum
+    vollständig.
+  </Step>
+  <Step title="Ordner-Meta">
+    Das `pages`-Array in `meta.ts` bestimmt die Reihenfolge einer Gruppe.
+  </Step>
+  <Step title="Frontmatter">`sidebar.order` auf einer Seite.</Step>
+  <Step title="Dateisystem">
+    Zuerst eine `index`-Seite, dann numerische Präfixe, dann alphabetisch nach
+    Beschriftung.
+  </Step>
+</Steps>
+
+Zwei gleichrangige Einträge mit derselben expliziten oder numerischen Reihenfolge werden untereinander alphabetisch sortiert – Blume meldet eine `BLUME_DUPLICATE_SIDEBAR_ORDER`-Warnung, damit der Gleichstand nicht unbemerkt bleibt.
+
+## Ausgeblendete Seiten
+
+Blende eine Seite aus der Seitenleiste – und aus der Zurück-/Weiter-Navigation – aus, während sie weiterhin gebaut und über ihre URL erreichbar bleibt:
+
+```yaml
+sidebar:
+  hidden: true
+```
+
+## Tabs
+
+Stelle Abschnitte der obersten Ebene als Tabs im Header dar – nützlich, um eine große Website in eigenständige Bereiche zu unterteilen, etwa Adapter, eine API und KI-Leitfäden. Ein Tab wird hervorgehoben, wenn die aktuelle Route unter seinen `path` fällt:
+
+```ts blume.config.ts lineNumbers
+navigation: {
+  tabs: [
+    { label: "Adapters", path: "/adapters", icon: "plug" },
+    { label: "API", path: "/api", icon: "rocket" },
+    { label: "AI", path: "/ai", icon: "sparkles" },
+  ],
+}
+```
+
+Eine aktivierte [OpenAPI- oder AsyncAPI-Referenz](/docs/advanced/api-reference) wird unter ihrer Route eingebunden, fügt aber nicht von sich aus einen Tab hinzu – richte einen Tab auf diese Route, um sie im Header sichtbar zu machen (und, beim nativen Renderer, um ihre Operations-Seitenleiste einzugrenzen), mit einer Beschriftung deiner Wahl:
+
+```ts blume.config.ts
+navigation: {
+  tabs: [
+    { label: "API", path: "/reference" },
+  ],
+}
+```
+
+Der `path` eines Tabs ist sein Abschnittspräfix und dient zugleich als Linkziel. Ein Abschnitt, dessen `path` keine eigene Seite ist – ein Ordner ohne `index.mdx` –, würde auf einen 404 verweisen, daher greift der Tab stattdessen auf die erste Seite im Abschnitt zurück. Setze `href`, wenn er woanders landen soll:
+
+```ts blume.config.ts
+navigation: {
+  tabs: [
+    { label: "Changelog", path: "/changelog", href: "/changelog" },
+  ],
+}
+```
+
+Das ist wichtig für Routen, die nicht Teil des Inhaltsbaums sind, da der Fallback sie nicht sehen kann: der generierte [Changelog](/docs/advanced/changelog)-Index oder eine [benutzerdefinierte Seite](/docs/advanced/custom-pages), die du unter `pages/` hinzugefügt hast. Ohne `href` landet ein `/changelog`-Tab auf dem neuesten Eintrag statt auf dem Index. Tabs, die kein `href` setzen, sind nicht betroffen.
+
+Auf einer [i18n](/docs/content/i18n)-Website kann die `label` eines Tabs (und die eines Dropdown-Eintrags) statt einer Zeichenkette eine Zuordnung pro Sprache sein – der Eintrag der aktiven Sprache gewinnt, danach der der Standardsprache:
+
+```ts blume.config.ts
+navigation: {
+  tabs: [
+    { label: { en: "Docs", fr: "Documentation" }, path: "/docs" },
+    { label: "CLI", path: "/cli" }, // a plain string renders as-is everywhere
+  ],
+}
+```
+
+Tabs **grenzen außerdem die Seitenleiste ein**: Wenn die aktuelle Route unter den `path` eines Tabs fällt, zeigt die Seitenleiste nur die Seiten dieses Abschnitts – `/adapters/*` listet also die Adapter und sonst nichts. Der Ordner am `path` eines Tabs wird zum Abschnitt, sodass dafür über die Tabs hinaus keine zusätzliche Konfiguration nötig ist; strukturiere deine Inhalte in einen Ordner pro Tab und richte jeden Tab darauf aus.
+
+Auf einer Route, die unter keinem Tab liegt (oder unter einem Tab, dessen `path` `/` ist), zeigt die Seitenleiste die Seiten, die _nicht_ zu einem Tab gehören – der Ordner jedes Tabs wird darin ausgeblendet, da dieser Abschnitt bereits einen eigenen Tab im Header hat. Eine Root-Landing-Page listet also deine losen Seiten der obersten Ebene, während die in Abschnitte gegliederten Inhalte hinter ihrem Tab bleiben – analog zu den Root-Ordnern von Fumadocs. Hat eine Route auf diese Weise keine eigenen Seiten anzuzeigen, wird stattdessen der vollständige Baum gezeigt, damit die Seitenleiste nie leer bleibt.
+
+## Selektoren
+
+Zum Wechseln zwischen ganzen Partitionen einer Website – einem Produkt, einer Version oder einer beliebigen gruppierten Menge von Zielen – füge einen `selector` hinzu. Jeder wird als Dropdown im Header dargestellt und zeigt die Option, deren `path` zur aktuellen Route passt:
+
+```ts blume.config.ts lineNumbers
+navigation: {
+  selectors: [
+    {
+      kind: "version",
+      label: "Version",
+      items: [
+        { label: "v2 (latest)", path: "/v2", icon: "rocket" },
+        { label: "v1", path: "/v1" },
+      ],
+    },
+  ],
+}
+```
+
+Jeder Eintrag nimmt ein `label`, einen `path` sowie optional `icon`, `description` und `tag` entgegen. `kind` (`dropdown`, `product`, `version` oder `language`) ist ein Hinweis darauf, wie der Selektor verwendet wird; alle stellen dasselbe Dropdown dar.
+
+## Hervorgehobene Links
+
+Hefte Links an den oberen Rand der Seitenleiste, über alle Abschnitte – ein Blog, ein Changelog, eine Kontakt- oder Supportseite, die immer nur einen Klick entfernt sein sollte. Anders als der generierte Baum sind hervorgehobene Links **nicht nach Tab eingegrenzt**: Sie erscheinen auf jeder Route und bei jedem Breakpoint.
+
+```ts blume.config.ts lineNumbers
+navigation: {
+  featured: [
+    { label: "Blog", href: "https://example.com/blog", icon: "newspaper" },
+    { label: "Contact", href: "/contact", icon: "headphones" },
+  ],
+}
+```
+
+Jeder Link nimmt ein `label`, ein `href` und optional ein `icon` entgegen (ein Name eines [eingebauten Symbols](/docs/content/components#icon), ein Bildpfad bzw. eine Bild-URL oder ein Inline-SVG – wie überall sonst auch). Ein `href` kann überallhin verweisen: Eine externe URL öffnet sich in einem neuen Tab, während eine interne Route (`/contact`) zur Build-Zeit gegen deine Seiten geprüft wird und dich warnt, wenn nichts übereinstimmt.
+
+## Explizite Seitenleiste
+
+Für volle Kontrolle listest du explizite Einträge in `navigation.sidebar` auf – ein bloßes Array ist eine Kurzform für `sidebar.items`, und die Objektform kombiniert sie mit einem globalen [`display`](#display-modes). Sind Einträge gesetzt, verwendet Blume sie unverändert und überspringt die Generierung aus dem Dateisystem:
+
+```ts blume.config.ts lineNumbers
+navigation: {
+  sidebar: [
+    "/", // a page, referenced by route
+    {
+      label: "Guides", // a group
+      collapsed: false,
+      items: ["/configuration", "/configuration/theming"],
+    },
+    { label: "GitHub", href: "https://github.com/owner/repo" }, // an external link
+  ],
+}
+```
+
+Jeder Eintrag ist eine Seitenroute (eine Zeichenkette), eine Gruppe (`label` + `items`) oder ein Link (`label` + `href`). Gruppen können verschachtelt werden, den globalen [`display`-Modus](#display-modes) überschreiben und `collapsed` starten.
+
+## Repository-Link
+
+Wenn du [`github`](/docs/configuration) in deiner Konfiguration setzt, zeigt Blume ein GitHub-Symbol im Header – neben dem Theme-Umschalter –, das auf dein Repository verlinkt. Es ist standardmäßig aktiviert; blende es mit `navigation.repo` aus:
+
+```ts blume.config.ts lineNumbers
+navigation: {
+  repo: false, // hide the header GitHub link (default: true)
+}
+```
+
+Der Link erscheint nur, wenn `github` konfiguriert ist, sodass Projekte ohne Repository so oder so nicht betroffen sind.
+
+## Breadcrumbs und Seitennavigation
+
+Diese ergeben sich kostenlos aus dem Seitenleistenbaum – ohne Konfiguration:
+
+- **Breadcrumbs** zeigen die übergeordnete Gruppe der aktuellen Seite über dem Titel.
+- **Zurück- und Weiter-Links** am Fuß jeder Seite folgen der Reihenfolge in der Seitenleiste und überspringen ausgeblendete Seiten.
+
+## Auf dieser Seite
+
+Aus den `##`- und `###`-Überschriften jeder Seite wird automatisch eine Gliederung in der rechten Spalte erzeugt, damit lange Seiten überschaubar bleiben. Auf schmaleren Bildschirmen, wo die rechte Spalte ausgeblendet ist, klappt sie zu einem „Auf dieser Seite“-Dropdown über dem Inhalt zusammen.
+
+## Seitenaktionen
+
+Unter dem Inhaltsverzeichnis zeigt jede Seite eine Reihe von Schnellaktionen:
+
+- **Auf GitHub bearbeiten** – verlinkt direkt auf die Quelldatei. Erscheint, sobald du [`github`](/docs/configuration) in deiner Konfiguration setzt.
+- **Nach oben scrollen** – kehrt sanft an den Anfang langer Seiten zurück.
+- **Feedback geben** – öffnet ein vorausgefülltes GitHub-Issue mit optionaler Reaktion und Notiz (benötigt ebenfalls `github`).
+
+Andere übergeben die Seite an KI-Tools – **Als Markdown kopieren** und **Im Chat öffnen** – beschrieben unter [KI](/docs/configuration/ai#copy-as-markdown).
+
+Mit aktiviertem [`export`](/docs/configuration/export) ermöglicht eine **Export**-Aktion Lesenden zusätzlich, die Seite als PDF oder EPUB herunterzuladen.

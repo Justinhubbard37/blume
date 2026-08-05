@@ -39,13 +39,45 @@ export default defineConfig({
     owner: "haydenbleasel",
     repo: "blume",
   },
+  i18n: {
+    defaultLocale: "en",
+    locales: [
+      { code: "en", label: "English" },
+      { code: "de", label: "Deutsch", style: "Informal du-form" },
+      { code: "hi", label: "हिन्दी", style: "Formal आप-form" },
+      { code: "ja", label: "日本語", style: "Polite です/ます form" },
+      {
+        code: "pt",
+        label: "Português",
+        style: "Brazilian Portuguese, informal você",
+      },
+    ],
+  },
   lastModified: true,
   logo: "/logo.svg",
   navigation: {
     tabs: [
-      { label: "Docs", path: "/docs" },
+      {
+        label: {
+          de: "Doku",
+          en: "Docs",
+          hi: "दस्तावेज़",
+          ja: "ドキュメント",
+          pt: "Documentação",
+        },
+        path: "/docs",
+      },
       { label: "CLI", path: "/cli" },
-      { label: "Changelog", path: "/changelog" },
+      {
+        label: {
+          de: "Änderungen",
+          en: "Changelog",
+          hi: "चेंजलॉग",
+          ja: "変更履歴",
+          pt: "Alterações",
+        },
+        path: "/changelog",
+      },
     ],
   },
   seo: {

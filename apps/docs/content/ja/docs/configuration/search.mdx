@@ -1,0 +1,195 @@
+---
+title: 検索
+description: >-
+  APIキー不要ですぐに使えるクライアントサイド検索。ドキュメントの成長に合わせて切り替えられる、ホスト型やセマンティック検索のバックエンドもオプションで利用できます。
+---
+
+Blume は、ホストされたインフラも API キーも不要なローカル検索を標準搭載しています。ブラウザ内で動作し、`blume dev` と `blume build` の両方で機能し、実際のコンテンツのみをインデックス化します — ナビゲーションの装飾部分や除外されたページはスキップされます。ローカル検索では足りなくなったら、検索の見た目や挙動を変えることなく、ホスト型やセマンティックのバックエンドに切り替えられます — 変わるのは設定する `search.provider` だけです。
+
+Blume は Fumadocs のプロバイダー群と同等の対応範囲を実現しています: **Orama**、**FlexSearch**、**Algolia**、**Orama Cloud**、**Typesense**、**Mixedbread**(さらに **Pagefind**)。設定したプロバイダーの SDK だけがプロジェクトにインストールされるため、あるバックエンドを選んでも他のバックエンドが取り込まれることはありません。
+
+## 検索の使い方
+
+<Badge variant="accent">⌘K</Badge>(または `Ctrl
+K`)で検索を開くか、入力フィールドにフォーカスしていないときに `/`
+を押します。`Esc` で閉じ、`⌘J`(または `Ctrl
+J`)で結果のプレビューペインを切り替えます。
+
+クエリはページの**タイトル**、**説明**、**本文**にマッチし、タイトルへのマッチが最も高くランク付けされ、説明が本文より上位になります。
+
+## 人気ページ
+
+読者がクエリを入力する前に、検索ダイアログには**人気**リストが表示されます。デフォルトではサイドバーの最初の 6 ページですが、複数タブのサイトでは意図しないセクションが表示されがちです。代わりに表示したいリンクを固定しましょう:
+
+```ts blume.config.ts lineNumbers
+search: {
+  popular: [
+    { href: "/guides/getting-started", icon: "rocket", label: "Getting started" },
+    { href: "/guides/install", icon: "download", label: "Install" },
+    { href: "/concepts/overview", label: "Overview" },
+  ],
+},
+```
+
+各エントリは `href`(内部ルートまたは外部 URL)と `label` を取り、オプションで `icon` を指定できます — [組み込みアイコン](/docs/content/components#icon)名、画像パス/URL、またはインライン SVG(ナビアイコンと同じ*入力形式*)で、デフォルトはファイルのグリフです。`popular` を省略するか空のままにすると、サイドバーのフォールバックが維持されます。
+
+`href` はサイトがルートにマウントされているかのように書いてください — `basePath` は自動的に適用され、`navigation.featured` と同じ扱いです。外部 URL はそのまま通されます。
+
+<Callout type="warning">
+  キュレーションされたリストは、すべての言語で共有される単一のリンク集です。
+  `i18n`
+  が設定されたサイトでは、サイドバーのフォールバックは読者のロケールに従いますが、
+  `popular` のエントリはその `href` が指す場所にリンクします —
+  そのため、すべての読者を その 1
+  つの言語に送りたい場合にのみ、ロケールプレフィックス付きのルートを固定してください。
+</Callout>
+
+## インデックス化される内容
+
+インデックス可能なすべてのページについて、Blume はタイトル、説明、そしてプレーンテキストに変換された本文をインデックス化します — コードブロック、画像、マークアップは取り除かれるため、検索結果の関連性が保たれます。インデックスはソースファイルから構築されるため、開発環境と本番環境で同一です。
+
+## タグ
+
+ページのフロントマターに `search.tags` を追加すると、検索ダイアログのフィルターの下にそのページがグループ化されます — 読者はクリック 1 つで結果をタグで絞り込めます。タグはホスト型プロバイダーではファセットにもなります。
+
+```yaml
+search:
+  tags: [api, reference]
+```
+
+## プロバイダー
+
+クライアントサイドのプロバイダーはキー不要で、追加の設定は必要ありません。ホスト型のプロバイダーは `blume.config.ts` に**公開**クレデンシャル(ブラウザに配布しても安全)を受け取り、ビルド時に環境変数から**シークレット**の管理キーを読み取ります — シークレットが設定ファイルやクライアントバンドルに含まれることはありません。
+
+### Orama(デフォルト)
+
+Blume のデフォルトエンジンです。`/blume-search.json` で配信される JSON インデックスを構築し、ブラウザ内でクエリを実行します — 即座に動作するクライアントサイド検索で、`blume dev` では編集に合わせてライブで更新されます。キーもサービスも不要です。
+
+```ts blume.config.ts lineNumbers
+search: {
+  provider: "orama", // default
+}
+```
+
+#### スペースで区切らない言語
+
+Orama の標準トークナイザーは、スペース区切りの文字体系にしか存在しない単語境界で分割するため、日本語、中国語、韓国語、タイ語のテキストは本来まったくマッチしません。Blume はこれを自動的に処理します: [`i18n.defaultLocale`](/docs/content/i18n) がこれらの言語のいずれかである場合、インデックスは単語分割トークナイザー(ブラウザと Node にネイティブな `Intl.Segmenter` をベースに構築)に切り替わります。サイトの言語を宣言するだけで済みます:
+
+```ts blume.config.ts lineNumbers
+i18n: {
+  defaultLocale: "ja",
+  locales: [{ code: "ja", label: "日本語" }],
+}
+```
+
+同じトークナイザーが検索ダイアログ、MCP サーバーの `search_docs` ツール、Ask AI のグラウンディングにも使われます。複数言語が混在するサイトでは、インデックス全体がデフォルトロケールのトークナイザーを共有します — これは安全です。ラテン文字の単語は分割処理を経ても無傷で残るため、英語(またはスペース区切りの任意の言語)のページはデフォルト言語のページと並んで検索可能なままです。
+
+日本語と中国語はさらに一歩進んだ処理が行われます。分割だけでは複合語がその構成要素としてインデックス化されてしまいます — 資金決済法が 資金、決済、法 になる — その結果、各構成要素をどこかで言及しているだけのページが、その用語を実際に扱っているページより上位に来てしまいます。そのため、漢字、ひらがな、カタカナはオーバーラップする文字ペアとしてインデックス化され、これらのインデックスに対するクエリは、用語のペアをまとめて含むページを優先し、すべてのペアを含むページがない場合は任意のペアのマッチに緩和されます。これにより、文全体を入力しても最も近いページが返されます。韓国語とタイ語は分割された単語のまま維持されます。
+
+### FlexSearch
+
+キー不要のクライアントサイドのもう 1 つの選択肢です。Orama が配信するのと同じ `/blume-search.json` インデックスを再利用し、ブラウザ内で [FlexSearch](https://github.com/nextapps-de/flexsearch) のドキュメントインデックスを構築します。`blume dev` と `blume build` の両方で動作します。
+
+FlexSearch には同等の分割フックがないため、日本語、中国語、韓国語、タイ語のサイトでは、Orama(デフォルト)か、`pagefind_extended` バイナリがこれらの言語をネイティブに分割する [Pagefind](#pagefind) を選ぶことをおすすめします。
+
+```ts blume.config.ts lineNumbers
+search: {
+  provider: "flexsearch",
+}
+```
+
+### Pagefind
+
+非常に大規模なドキュメントには [Pagefind](https://pagefind.app) を選択できます。ビルドされた HTML をインデックス化し、インデックスをシャード単位でオンデマンドに読み込むため、サイトがどれだけ大きくなっても初期ペイロードは小さいまま保たれます。
+
+```ts blume.config.ts lineNumbers
+search: {
+  provider: "pagefind",
+}
+```
+
+Pagefind は `blume build` の実行中のみ動作するため、このプロバイダーでは `blume dev` で検索を利用できません。
+
+### Algolia
+
+ブラウザが検索専用キーで [Algolia](https://www.algolia.com) に直接クエリを実行します。`blume build` のたびに、`ALGOLIA_ADMIN_API_KEY` の管理キーを使ってインデックスが置き換えられます(未設定の場合、ビルドは警告を出してアップロードをスキップします)。同期のたびにインデックス全体が置き換えられるため、削除やリネームしたページが古い検索結果として残ることはありません。
+
+```ts blume.config.ts lineNumbers
+search: {
+  provider: "algolia",
+  algolia: {
+    appId: "YOUR_APP_ID",
+    indexName: "docs",
+    searchApiKey: "YOUR_SEARCH_ONLY_KEY", // public
+  },
+}
+```
+
+### Orama Cloud
+
+ホスト型の Orama です。ブラウザは公開 API キーを使ってインデックスのエンドポイントにクエリを実行し、`blume build` は `ORAMA_PRIVATE_API_KEY` を使ってレコードをインデックスにプッシュします。同期を有効にするには `indexId` を設定してください。
+
+```ts blume.config.ts lineNumbers
+search: {
+  provider: "orama-cloud",
+  oramaCloud: {
+    endpoint: "https://cloud.orama.run/v1/indexes/your-index",
+    apiKey: "YOUR_PUBLIC_API_KEY",
+    indexId: "your-index-id", // for the build-time sync
+  },
+}
+```
+
+### Typesense
+
+セルフホストまたはクラウドの [Typesense](https://typesense.org) です。ブラウザは検索専用キーでコレクションにクエリを実行し、`blume build` は `TYPESENSE_ADMIN_API_KEY` を使ってコレクションを再作成し、ドキュメントをインポートします。同期のたびにコレクションは削除・再構築されるため、削除やリネームしたページが古い検索結果として残ることはありません — コレクションの設定を手動で調整している場合は、ビルド後に再適用してください。
+
+```ts blume.config.ts lineNumbers
+search: {
+  provider: "typesense",
+  typesense: {
+    host: "xyz.a1.typesense.net",
+    collection: "docs",
+    searchApiKey: "YOUR_SEARCH_ONLY_KEY", // public
+    // port + protocol default to 443 / https
+  },
+}
+```
+
+### Mixedbread
+
+[Mixedbread](https://www.mixedbread.com) によるセマンティック検索です。クエリはキーを保持する生成された `/api/search` エンドポイントを経由してプロキシされるため、このプロバイダーは**サーバー出力が必須**です(`deployment.output: "server"`)。エンドポイントは `MIXEDBREAD_API_KEY` を読み取ります。ビルド時に Mixedbread CLI でコンテンツをストアに同期してください。例: `mxbai vs sync <STORE_ID> ./content --ci`
+
+```ts blume.config.ts lineNumbers
+search: {
+  provider: "mixedbread",
+  mixedbread: {
+    storeId: "YOUR_STORE_ID",
+  },
+}
+```
+
+### 検索の無効化
+
+```ts blume.config.ts lineNumbers
+search: {
+  provider: "none",
+}
+```
+
+## ページの除外
+
+インデックス可能なページのみが検索対象になります。フロントマターで `search.exclude` を設定したページはインデックスから除外されます:
+
+```yaml
+search:
+  exclude: true
+```
+
+[非表示ページ](/docs/content/navigation#hidden-pages)もデフォルトで除外されます。それでもインデックス化したい場合は、オプトインしてください:
+
+```ts blume.config.ts lineNumbers
+search: {
+  indexing: { includeHiddenPages: true },
+}
+```
