@@ -1459,6 +1459,16 @@ describe("mcp templates", () => {
     );
   });
 
+  it("asserts the snapshot back to McpData at the JSON boundary", () => {
+    // JSON imports widen literal kinds (e.g. NavNode's "page") to string, so
+    // the endpoint must cast or `blume check` fails on the generated file.
+    const out = mcpEndpointTemplate("/mcp");
+    expect(out).toContain(
+      'import type { McpData } from "blume/ai/mcp/data.ts"'
+    );
+    expect(out).toContain("createMcpFetchHandler(data as McpData)");
+  });
+
   it("serializes a fixed payload for the discovery endpoint", () => {
     const out = staticJsonEndpointTemplate({ ok: true });
     expect(out).toContain("export const prerender = true;");
