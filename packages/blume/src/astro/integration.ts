@@ -114,7 +114,9 @@ const isHomeUrl = (rawUrl: string | undefined, base?: string): boolean => {
  * production the content pages are prerendered and served from the platform's
  * static layer, which this middleware never fronts. Vercel server builds get
  * the same negotiation from routing rules spliced into the Build Output config
- * (see `deploy/vercel-negotiation.ts`); every other build exposes the same
+ * (see `deploy/vercel-negotiation.ts`), Cloudflare server builds from a
+ * wrapper Worker routed to by `assets.run_worker_first` (see
+ * `deploy/cloudflare-negotiation.ts`); every other build exposes the same
  * content at the `.md` URL. Only routes with a Markdown variant are rewritten,
  * so user `.astro` pages keep serving HTML — except the homepage, whose
  * variant falls back to the synthesized llms.txt mirror when it's a landing

@@ -1201,6 +1201,16 @@ describe("agent-readability.json", () => {
       contentNegotiation: "text/markdown",
       pattern: "https://example.com/{route}.md",
     });
+    // A Cloudflare server build negotiates through the generated wrapper
+    // Worker (see deploy/cloudflare-negotiation.ts).
+    const cloudflare = buildAgentReadability(
+      makeProject([], {
+        deployment: { adapter: "cloudflare", output: "server" },
+      })
+    );
+    expect(markdownArtifact(cloudflare)).toMatchObject({
+      contentNegotiation: "text/markdown",
+    });
     const node = buildAgentReadability(
       makeProject([], { deployment: { adapter: "node", output: "server" } })
     );

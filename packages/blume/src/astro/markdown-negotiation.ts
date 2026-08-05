@@ -3,6 +3,11 @@
  * endpoints already serve a page's source verbatim; these helpers let the dev
  * server honor `Accept: text/markdown` by transparently rewriting a page
  * request to its `.md` variant.
+ *
+ * The Cloudflare negotiation Worker embeds a plain-JavaScript copy of these
+ * helpers (`deploy/cloudflare-negotiation.ts` — its deploy bundle is uploaded
+ * unbundled, so it cannot import this module); when editing here, mirror the
+ * change there. Parity is enforced by `test/cloudflare-negotiation.test.ts`.
  */
 
 interface AcceptEntry {

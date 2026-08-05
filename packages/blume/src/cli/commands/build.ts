@@ -42,6 +42,10 @@ import {
   servesClientSubdir,
   surfaceAdapterOutput,
 } from "../../deploy/adapter-output.ts";
+import {
+  injectWorkerNegotiation,
+  NEGOTIATION_WORKER_FILE,
+} from "../../deploy/cloudflare-negotiation.ts";
 import { buildNetlifyHeaders } from "../../deploy/headers.ts";
 import {
   applyBaseToPlatformRedirects,
@@ -324,6 +328,63 @@ const emitVercelNegotiation = async (
   await writeFile(configPath, injected, "utf-8");
   logger.success(
     "Wired Accept: text/markdown negotiation into the Vercel routing config"
+  );
+};
+
+const warnCloudflareNegotiationSkipped = (): void =>
+  logger.warn(
+    "Could not wire Accept: text/markdown negotiation into dist/server/wrangler.json — raw Markdown stays available at the .md URLs."
+  );
+
+/**
+ * Wire `Accept: text/markdown` negotiation into a Cloudflare server build. The
+ * ASSETS binding serves the prerendered content pages before the Worker runs —
+ * and even a request that reaches the Worker is answered by the adapter's
+ * handler from that binding, ahead of the only place middleware runs — so the
+ * negotiation lives in a generated wrapper Worker, routed to by
+ * `assets.run_worker_first` (see `deploy/cloudflare-negotiation.ts`). Both
+ * pieces are spliced into the adapter's emitted `dist/server` bundle.
+ */
+const emitCloudflareNegotiation = async (
+  project: BlumeProject,
+  routePaths: string[]
+): Promise<void> => {
+  const { config, context } = project;
+  const serverDir = join(
+    context.distDir ?? join(context.root, "dist"),
+    "server"
+  );
+  const wranglerPath = join(serverDir, "wrangler.json");
+  if (!existsSync(wranglerPath)) {
+    warnCloudflareNegotiationSkipped();
+    return;
+  }
+  // The homepage mirror is served from the static layer, so its
+  // `x-markdown-tokens` estimate rides the wrapper Worker, mirroring the
+  // Vercel routing config.
+  const rawMarkdown = await buildRawMarkdown(project);
+  const home = rawMarkdown["/"];
+  const injected = injectWorkerNegotiation(
+    await readFile(wranglerPath, "utf-8"),
+    {
+      base: config.deployment.base,
+      homeLinkHeader: buildHomeLinkHeader(config, routePaths),
+      homeTokens: home ? markdownTokenCount(agentMarkdown(home)) : undefined,
+      routePaths,
+    }
+  );
+  if (injected === null) {
+    warnCloudflareNegotiationSkipped();
+    return;
+  }
+  await writeFile(
+    join(serverDir, NEGOTIATION_WORKER_FILE),
+    injected.worker,
+    "utf-8"
+  );
+  await writeFile(wranglerPath, injected.wrangler, "utf-8");
+  logger.success(
+    "Wired Accept: text/markdown negotiation into the Cloudflare Worker"
   );
 };
 
@@ -752,6 +813,13 @@ export const buildCommand = defineCommand({
 
     if (project.config.deployment.output === "server" && adapter === "vercel") {
       await emitVercelNegotiation(project, markdownRoutePaths(project), root);
+    }
+
+    if (
+      project.config.deployment.output === "server" &&
+      adapter === "cloudflare"
+    ) {
+      await emitCloudflareNegotiation(project, markdownRoutePaths(project));
     }
 
     await publishBuildArtifacts(

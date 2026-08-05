@@ -93,12 +93,15 @@ export const buildAgentReadability = (
 
   // Advertise `Accept: text/markdown` negotiation only where the deployed site
   // actually honors it — a Vercel server build, whose routing config gets the
-  // rewrite rules (see `deploy/vercel-negotiation.ts`). Static builds and other
-  // adapters serve prerendered pages from a static layer with no request-time
-  // hook, so agents there should fetch the `.md` pattern directly.
+  // rewrite rules (see `deploy/vercel-negotiation.ts`), and a Cloudflare server
+  // build, whose deploy bundle gets a wrapper Worker (see
+  // `deploy/cloudflare-negotiation.ts`). Static builds and other adapters serve
+  // prerendered pages from a static layer with no request-time hook, so agents
+  // there should fetch the `.md` pattern directly.
   const negotiates =
     config.deployment.output === "server" &&
-    config.deployment.adapter === "vercel";
+    (config.deployment.adapter === "vercel" ||
+      config.deployment.adapter === "cloudflare");
   const artifacts: Record<string, unknown> = {
     markdown: {
       ...(negotiates ? { contentNegotiation: "text/markdown" } : {}),
