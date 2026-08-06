@@ -13,6 +13,10 @@ export interface OramaDoc {
   title: string;
   /** Locale code; indexed as an enum so queries can filter to one language. */
   locale?: string;
+  /** Resolved page `type`; indexed as an enum so queries can filter by type. */
+  contentType?: string;
+  /** Declared facet values (`content.types.<type>.facets`), key → value. */
+  facets?: Record<string, string>;
   /** Carried through for the search dialog's breadcrumb + filter pills. Stored
    * but not indexed, so they ride along on the returned document untouched. */
   breadcrumb?: string[];
@@ -21,12 +25,21 @@ export interface OramaDoc {
 
 const SCHEMA = {
   content: "string",
+  // Enums (not full-text "string") so `where` does an exact-match filter.
+  contentType: "enum",
   description: "string",
-  // Enum (not full-text "string") so `where` does an exact-match filter.
+  // Facets, flattened to `key:value` terms — enum[] so one static schema
+  // serves every project's facet keys, with `containsAll` matching a filter
+  // set. Derived from `facets` at insert time.
+  facetTerms: "enum[]",
   locale: "enum",
   route: "string",
   title: "string",
 } as const;
+
+/** Flatten a facet map to the `key:value` terms the `facetTerms` enum holds. */
+const toFacetTerms = (facets: Record<string, string>): string[] =>
+  Object.entries(facets).map(([key, value]) => `${key}:${value}`);
 
 /** Title and description outrank body text, matching the search dialog. */
 const BOOST = { description: 2, title: 3 };
@@ -169,17 +182,36 @@ export const buildOramaIndex = async (
     schema: SCHEMA,
     ...(tokenizer ? { components: { tokenizer } } : {}),
   });
-  await insertMultiple(db, documents);
+  await insertMultiple(
+    db,
+    documents.map((doc) =>
+      doc.facets ? { ...doc, facetTerms: toFacetTerms(doc.facets) } : doc
+    )
+  );
   return db;
 };
 
 /** Orama keeps only documents matching every token at a threshold of 0. */
 const ALL_TOKENS = 0;
 
+/** Optional exact-match filters applied to a query via Orama's `where`. */
+export interface OramaQueryFilters {
+  /** Keep only documents whose `contentType` is in this list. */
+  contentTypes?: string[];
+  /**
+   * Keep only documents matching every facet, key → required value. Facet
+   * keys and values come from the `facets` field on the indexed documents.
+   */
+  facets?: Record<string, string>;
+  /** Keep only documents in this locale. */
+  locale?: string;
+}
+
 /**
  * Query the index, returning the matching documents (highest-ranked first).
- * When `locale` is given, results are filtered to that language via an exact
- * `where` match on the `locale` enum.
+ * `filters` narrows results by exact `where` matches on the enum fields:
+ * `locale` to one language, `contentTypes` to a set of page types, `facets`
+ * to documents carrying every requested `key:value` term.
  *
  * On a bigrammed index the strict pass runs first: a term is only meant to
  * match where its bigrams sit together, and scoring them independently lets a
@@ -191,14 +223,24 @@ export const queryOramaIndex = async (
   db: AnyOrama,
   term: string,
   limit: number,
-  locale?: string
+  filters?: OramaQueryFilters
 ): Promise<OramaDoc[]> => {
+  const facetTerms = filters?.facets ? toFacetTerms(filters.facets) : [];
+  const where = {
+    ...(filters?.locale ? { locale: { eq: filters.locale } } : {}),
+    ...(filters?.contentTypes && filters.contentTypes.length > 0
+      ? { contentType: { in: filters.contentTypes } }
+      : {}),
+    ...(facetTerms.length > 0
+      ? { facetTerms: { containsAll: facetTerms } }
+      : {}),
+  };
   const params = {
     boost: BOOST,
     limit,
     properties: ["title", "description", "content"],
     term,
-    ...(locale ? { where: { locale: { eq: locale } } } : {}),
+    ...(Object.keys(where).length > 0 ? { where } : {}),
   };
   const bigrammed = BIGRAM_LANGUAGES.has(db.tokenizer?.language ?? "");
   const strict = bigrammed

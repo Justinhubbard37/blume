@@ -33,6 +33,22 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Expose-Headers": "Mcp-Session-Id",
 };
 
+/** The optional content-type filter `search_docs` and `list_pages` share. */
+const CONTENT_TYPES_SCHEMA = {
+  description:
+    'Only include pages of these content types (frontmatter `type`, e.g. `["doc", "rfc"]`). `list_pages` shows each page\'s type. Omit to include every type.',
+  items: { type: "string" },
+  type: "array",
+} as const;
+
+/** The optional facet filter `search_docs` and `list_pages` share. */
+const FILTERS_SCHEMA = {
+  additionalProperties: { type: "string" },
+  description:
+    'Only include pages matching every facet, key → required value (e.g. `{"status": "enforced"}`). Facets are metadata the site declares per content type; `list_pages` shows each page\'s facet values. Omit for no facet filtering.',
+  type: "object",
+} as const;
+
 /** JSON Schema for each tool's input, keyed by tool name. */
 const INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
   get_navigation: { properties: {}, type: "object" },
@@ -46,9 +62,17 @@ const INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
     required: ["route"],
     type: "object",
   },
-  list_pages: { properties: {}, type: "object" },
+  list_pages: {
+    properties: {
+      contentTypes: CONTENT_TYPES_SCHEMA,
+      filters: FILTERS_SCHEMA,
+    },
+    type: "object",
+  },
   search_docs: {
     properties: {
+      contentTypes: CONTENT_TYPES_SCHEMA,
+      filters: FILTERS_SCHEMA,
       limit: {
         description: `Maximum hits to return (default ${DEFAULT_SEARCH_LIMIT}).`,
         maximum: MAX_SEARCH_LIMIT,
@@ -73,6 +97,39 @@ const TOOL_DEFINITIONS = MCP_TOOLS.map((tool) => ({
 
 const asString = (value: unknown): string =>
   typeof value === "string" ? value : "";
+
+/**
+ * The `contentTypes` filter as a string array, or `undefined` when absent or
+ * empty — an agent sending `[]` means "no filter", not "match nothing". A bare
+ * string is accepted as a one-element list.
+ */
+const asContentTypes = (value: unknown): string[] | undefined => {
+  const list = Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [value].filter((entry): entry is string => typeof entry === "string");
+  return list.length > 0 ? list : undefined;
+};
+
+/**
+ * The `filters` facet map with only its string-valued entries, or `undefined`
+ * when nothing usable remains — an empty `{}` means "no filter".
+ */
+const asFacetFilters = (value: unknown): Record<string, string> | undefined => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return;
+  }
+  const entries = Object.entries(value).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string"
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
+
+/** Whether a page's facet values satisfy every requested filter entry. */
+const matchesFacets = (
+  facets: Record<string, string> | undefined,
+  filters: Record<string, string>
+): boolean =>
+  Object.entries(filters).every(([key, value]) => facets?.[key] === value);
 
 const asLimit = (value: unknown): number => {
   const num = typeof value === "number" ? value : Number(value);
@@ -181,12 +238,18 @@ export const buildServer = (
       const hits = await queryOramaIndex(
         db,
         asString(args.query),
-        asLimit(args.limit)
+        asLimit(args.limit),
+        {
+          contentTypes: asContentTypes(args.contentTypes),
+          facets: asFacetFilters(args.filters),
+        }
       );
       // `route` is the key `get_page` takes (the tool descriptions promise
       // it); `url` is where the page is served.
       const results = hits.map((doc: OramaDoc) => ({
+        contentType: doc.contentType,
         excerpt: excerptFor(doc),
+        facets: doc.facets,
         route: doc.route,
         title: doc.title,
         url: urlFor(doc.route, data),
@@ -207,11 +270,19 @@ export const buildServer = (
     }
 
     if (name === "list_pages") {
+      const contentTypes = asContentTypes(args.contentTypes);
+      const filters = asFacetFilters(args.filters);
+      const routes = data.routes.filter(
+        (route) =>
+          (!contentTypes || contentTypes.includes(route.contentType)) &&
+          (!filters || matchesFacets(route.facets, filters))
+      );
       return text(
         JSON.stringify(
-          data.routes.map((route) => ({
+          routes.map((route) => ({
             contentType: route.contentType,
             description: route.description,
+            facets: route.facets,
             lastModified: route.lastModified,
             route: route.route,
             title: route.title,
