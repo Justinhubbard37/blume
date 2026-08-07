@@ -8,6 +8,10 @@ import {
 import { AUDIT_VIDEO_DURATION, AuditVideo } from "./audit-composition";
 import { LaunchVideo } from "./composition";
 import { EVAL_VIDEO_DURATION, EvalVideo } from "./eval-composition";
+import {
+  TRANSLATE_VIDEO_DURATION,
+  TranslateVideo,
+} from "./translate-composition";
 
 export const RemotionRoot: React.FC = () => (
   <>
@@ -31,6 +35,14 @@ export const RemotionRoot: React.FC = () => (
       id="EvalVideo"
       component={EvalVideo}
       durationInFrames={EVAL_VIDEO_DURATION}
+      fps={30}
+      width={1920}
+      height={1080}
+    />
+    <Composition
+      id="TranslateVideo"
+      component={TranslateVideo}
+      durationInFrames={TRANSLATE_VIDEO_DURATION}
       fps={30}
       width={1920}
       height={1080}

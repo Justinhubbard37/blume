@@ -12,6 +12,22 @@ export interface SharedAxisYProps {
   className?: string;
 }
 
+interface Segment {
+  text: string;
+  /** Whether a word gap follows — spaced text staggers by word with 0.25em
+   * margins; spaceless text (CJK) staggers per character, flush. */
+  spaced: boolean;
+}
+
+// Spaced text animates word by word, exactly as before. A line with no spaces
+// (Japanese, Chinese) would otherwise be a single "word" that pops in as one
+// block, so it segments per character instead — on a tighter stagger, below,
+// so long lines still land inside a swap beat.
+const segment = (text: string): Segment[] =>
+  text.includes(" ")
+    ? text.split(" ").map((word) => ({ spaced: true, text: word }))
+    : Array.from(text).map((char) => ({ spaced: false, text: char }));
+
 export function SharedAxisY({
   fromText,
   toText,
@@ -23,13 +39,13 @@ export function SharedAxisY({
 }: SharedAxisYProps) {
   const frame = useCurrentFrame() * speed;
 
-  const fromWords = fromText.split(" ");
-  const toWords = toText.split(" ");
+  const fromWords = segment(fromText);
+  const toWords = segment(toText);
 
   const enterDur = 5;
   const exitDur = 4;
-  const enterStagger = 2;
-  const exitStagger = 2;
+  const enterStagger = toWords[0]?.spaced === false ? 1 : 2;
+  const exitStagger = fromWords[0]?.spaced === false ? 1 : 2;
   const overlapF = 0;
   const microDelayF = 1;
 
@@ -78,11 +94,11 @@ export function SharedAxisY({
                 key={i}
                 style={{
                   display: "inline-block",
-                  marginRight: "0.25em",
+                  marginRight: word.spaced ? "0.25em" : 0,
                   opacity,
                 }}
               >
-                {word}
+                {word.text}
               </span>
             );
           })}
@@ -119,11 +135,11 @@ export function SharedAxisY({
                 key={j}
                 style={{
                   display: "inline-block",
-                  marginRight: "0.25em",
+                  marginRight: word.spaced ? "0.25em" : 0,
                   opacity,
                 }}
               >
-                {word}
+                {word.text}
               </span>
             );
           })}
