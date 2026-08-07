@@ -189,6 +189,7 @@ content: {
 | `exclude` | `["**/_*", "**/.*"]` | 無視する glob（アンダースコアおよびドットで始まるファイル）。 |
 | `pages` | `"pages"` | カスタム `.astro` ページ用のフォルダ。 |
 | `defaultType` | `"doc"` | フロントマターで指定がない場合に使われるページの `type`。 |
+| `types` | `{}` | タイプごとのコンテンツ定義 — 特定の `type` のページにのみ適用されるカスタムフロントマターキー。[フロントマター](#frontmatter) を参照してください。 |
 
 静的アセットは `public/` に置きます。`public/logo.png` にあるファイルは `/logo.png` で配信されるため、`![](/images/create.png)` のような参照は `public/images/create.png` に解決されます。**相対パス**で参照される画像（`![](./diagram.png)`）はコンテンツの隣に配置し、[ビルド時に最適化されます](/docs/content/syntax#links-and-images)。
 
@@ -229,6 +230,31 @@ export default defineConfig({
 ```
 
 任意の [Standard Schema](https://standardschema.dev) ライブラリが利用できます — Zod（プロジェクトがインストールしているバージョンを問わず）、Valibot、ArkType など。拡張の外側のキーは引き続き厳格に検証されるため、タイプミスの検出はこれまでどおりです。検証のセマンティクスについては [カスタムキー](/docs/reference/frontmatter#custom-keys) を参照してください。
+
+`extend` の下のキーはサイト全体に適用されます。特定のコンテンツタイプのページにだけキーを必須にしたい場合 — RFC の `status`、ランブックの `service` など — は、代わりに `content.types` の下でタイプごとに宣言してください:
+
+```ts blume.config.ts lineNumbers
+import { defineConfig } from "blume";
+import { z } from "zod";
+
+export default defineConfig({
+  content: {
+    types: {
+      rfc: {
+        facets: ["domain", "status"],
+        frontmatter: {
+          domain: z.string(),
+          status: z.enum(["draft", "review", "enforced"]),
+        },
+      },
+    },
+  },
+});
+```
+
+1 つのキーはサイト全体かタイプごとのどちらかで宣言でき、両方はできません。スコープがどう解決されるかは [タイプごとのキー](/docs/reference/frontmatter#per-type-keys) を参照してください。
+
+`facets` は、その値がフィルタ可能なメタデータになるカスタムキーを指定します。これらは検索ドキュメント（`blume-search.json` と MCP インデックス）に付随し、[MCP ツール](/docs/configuration/ai#mcp-server) はそれらに対して照合を行う `filters` 入力を受け付けます。そのため、エージェントは例えば `architecture` ドメインの `enforced` な RFC だけを取得できます。各ファセットは宣言済みのカスタムキー（タイプごと、またはサイト全体）である必要があり、ファセットになるのは文字列（あるいは文字列化された数値・真偽値）の値のみです。
 
 ## GitHub
 

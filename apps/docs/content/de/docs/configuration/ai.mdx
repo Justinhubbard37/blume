@@ -258,6 +258,20 @@ Der Server stellt schreibgeschützte Tools bereit — `search_docs`, `get_page`,
 
 `search_docs` betreibt seinen eigenen Volltextindex und funktioniert damit unabhängig von deinem [Such](/docs/configuration/search)-Anbieter — und sogar, wenn die Suche auf `none` gesetzt ist. Der MCP-Server ist eine von der Suche auf der Seite getrennte Funktion.
 
+`search_docs` und `list_pages` akzeptieren beide einen optionalen `contentTypes`-Filter, der die Ergebnisse auf Seiten der angegebenen Frontmatter-[`type`s](/docs/reference/frontmatter) eingrenzt — `["rfc"]`, `["blog", "changelog"]` —, sodass ein Agent, der mit einer Website arbeitet, die Dokumentation mit RFCs, Runbooks oder Richtlinien mischt, den Abruf auf die Art von Seite eingrenzen kann, die er benötigt. Jedes Ergebnis nennt seinen Inhaltstyp, und die Ausgabe von `list_pages` zeigt die verwendeten Typen.
+
+Beide Tools akzeptieren außerdem ein `filters`-Objekt, das gegen die Facetten abgleicht, die eine Website pro Inhaltstyp deklariert ([`content.types.<type>.facets`](/docs/configuration#frontmatter)) — eigene Frontmatter-Schlüssel, deren Werte zu filterbaren Metadaten werden:
+
+```json
+{
+  "query": "OpenAPI request schemas",
+  "contentTypes": ["rfc"],
+  "filters": { "domain": "architecture", "status": "enforced" }
+}
+```
+
+Jeder `filters`-Eintrag muss zutreffen (Ergebnisse tragen ihre Facettenwerte, und `list_pages` zeigt die jeder Seite), sodass eine Wissensdatenbank Agent-Workflows mit progressiver Offenlegung antreiben kann — die verbindlichen Standards aufzählen, nur innerhalb dieser suchen — ganz ohne eigenen Server.
+
 ### Server-Ausgabe erforderlich
 
 Der MCP-Server ist ein aktiver Endpunkt (`/mcp`) und kann daher nicht auf einem statischen Build laufen. Wechsle zur Server-Ausgabe und wähle einen Adapter:

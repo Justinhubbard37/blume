@@ -258,6 +258,20 @@ O servidor expõe ferramentas somente leitura — `search_docs`, `get_page`, `li
 
 `search_docs` roda seu próprio índice de texto completo, então funciona independentemente do seu provedor de [busca](/docs/configuration/search) — e mesmo quando a busca está definida como `none`. O servidor MCP é um recurso separado da busca na página.
 
+Tanto `search_docs` quanto `list_pages` aceitam um filtro opcional `contentTypes`, que restringe os resultados a páginas dos [`type`s](/docs/reference/frontmatter) de frontmatter indicados — `["rfc"]`, `["blog", "changelog"]` — para que um agente trabalhando com um site que mistura documentação com RFCs, runbooks ou políticas possa restringir a recuperação ao tipo de página de que precisa. Todo resultado informa seu tipo de conteúdo, e a saída do `list_pages` mostra os tipos em uso.
+
+As duas ferramentas também aceitam um objeto `filters` que casa com as facetas que um site declara por tipo de conteúdo ([`content.types.<type>.facets`](/docs/configuration#frontmatter)) — chaves de frontmatter personalizadas cujos valores viram metadados filtráveis:
+
+```json
+{
+  "query": "OpenAPI request schemas",
+  "contentTypes": ["rfc"],
+  "filters": { "domain": "architecture", "status": "enforced" }
+}
+```
+
+Toda entrada de `filters` precisa casar (os resultados carregam seus valores de faceta, e o `list_pages` mostra os de cada página), então uma base de conhecimento pode conduzir fluxos de trabalho de agentes com divulgação progressiva — enumerar os padrões em vigor, buscar só dentro deles — sem nenhum servidor próprio.
+
 ### Saída de servidor obrigatória
 
 O servidor MCP é um endpoint ativo (`/mcp`), então ele não pode rodar em um build estático. Mude para saída de servidor e escolha um adaptador:

@@ -190,6 +190,7 @@ content: {
 | `exclude` | `["**/_*", "**/.*"]` | Globs a ignorar (ficheiros com underscore e com ponto). |
 | `pages` | `"pages"` | Pasta para páginas `.astro` personalizadas. |
 | `defaultType` | `"doc"` | `type` de página usado quando o frontmatter o omite. |
+| `types` | `{}` | Definições de conteúdo por tipo — chaves de frontmatter personalizadas limitadas às páginas de um `type`. Consulta [Frontmatter](#frontmatter). |
 
 Os recursos estáticos vivem em `public/` — um ficheiro em `public/logo.png` é servido em `/logo.png`, pelo que uma referência como `![](/images/create.png)` é resolvida a partir de `public/images/create.png`. As imagens referenciadas por **caminho relativo** (`![](./diagram.png)`) vivem antes junto ao teu conteúdo e são [otimizadas no momento da compilação](/docs/content/syntax#links-and-images).
 
@@ -230,6 +231,31 @@ export default defineConfig({
 ```
 
 Funciona com qualquer biblioteca [Standard Schema](https://standardschema.dev) — Zod (qualquer que seja a versão que o teu projeto instale), Valibot, ArkType. As chaves fora da extensão continuam validadas de forma estrita, pelo que a deteção de erros de escrita mantém-se inalterada. Consulta [Chaves personalizadas](/docs/reference/frontmatter#custom-keys) para a semântica de validação.
+
+As chaves em `extend` aplicam-se a todo o site. Para exigires chaves apenas em páginas de um tipo de conteúdo — o `status` de um RFC, o `service` de um runbook — declara-as antes por tipo em `content.types`:
+
+```ts blume.config.ts lineNumbers
+import { defineConfig } from "blume";
+import { z } from "zod";
+
+export default defineConfig({
+  content: {
+    types: {
+      rfc: {
+        facets: ["domain", "status"],
+        frontmatter: {
+          domain: z.string(),
+          status: z.enum(["draft", "review", "enforced"]),
+        },
+      },
+    },
+  },
+});
+```
+
+Uma chave pode ser declarada para todo o site ou por tipo, não ambos. Consulta [Chaves por tipo](/docs/reference/frontmatter#per-type-keys) para saberes como o âmbito é resolvido.
+
+`facets` indica as chaves personalizadas cujos valores se tornam metadados filtráveis: acompanham os documentos de pesquisa (`blume-search.json` e o índice MCP), e as [ferramentas MCP](/docs/configuration/ai#mcp-server) aceitam um input `filters` que faz correspondência com elas, para que um agente possa obter, por exemplo, apenas os RFCs com estado `enforced` no domínio `architecture`. Cada faceta tem de ser uma chave personalizada declarada — por tipo ou para todo o site — e apenas os valores do tipo string (ou números/booleanos convertidos em string) funcionam como facetas.
 
 ## GitHub
 

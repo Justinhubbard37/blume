@@ -111,6 +111,39 @@ reviewedAt: 2026-06-20
 
 Os schemas são aceitos pela interface [Standard Schema](https://standardschema.dev), então Zod (qualquer que seja a versão instalada pelo seu projeto), Valibot e ArkType funcionam. Toda chave declarada é validada em cada página — inclusive as ausentes — de modo que um schema obrigatório impõe a chave em todo o site; marque-a como `.optional()` para validar apenas onde estiver presente. Todas as demais chaves permanecem estritamente validadas, e os campos integrados não podem ser redeclarados.
 
+### Chaves por tipo
+
+Para exigir chaves apenas em um tipo de conteúdo — o `status` de uma RFC, a `severity` de um relatório de incidente — declare-as em [`content.types`](/docs/configuration#content), organizadas pelo `type` do frontmatter ao qual se aplicam:
+
+```ts blume.config.ts lineNumbers
+import { defineConfig } from "blume";
+import { z } from "zod";
+
+export default defineConfig({
+  content: {
+    types: {
+      rfc: {
+        frontmatter: {
+          domain: z.string(),
+          status: z.enum(["draft", "review", "enforced"]),
+        },
+      },
+    },
+  },
+});
+```
+
+```yaml rfcs/openapi-request-schemas.mdx
+---
+title: OpenAPI request schemas
+type: rfc
+domain: architecture
+status: enforced
+---
+```
+
+As chaves por tipo seguem as mesmas regras de validação de `extend`, restritas às páginas cujo `type` resolvido corresponda — incluindo páginas que não definem nenhum `type`, quando a declaração é para [`content.defaultType`](/docs/configuration#content). Uma chave pertence a uma única declaração, no site inteiro ou por tipo, nunca às duas. E uma chave declarada apenas para outro tipo continua desconhecida nos demais, então um `status` perdido numa página de doc comum ainda faz a build falhar.
+
 Uma página que falha na validação faz `blume build` falhar com um diagnóstico nomeando o arquivo e a chave. Com [`--no-strict`](/docs/reference/cli#common-flags), a build é bem-sucedida mesmo assim e as páginas com falha são removidas da saída — o resumo da build informa quantas.
 
 Os schemas são exportados de `blume/schema` para ferramentas de edição e migração.

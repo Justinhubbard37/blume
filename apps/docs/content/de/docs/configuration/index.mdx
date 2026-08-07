@@ -190,6 +190,7 @@ content: {
 | `exclude` | `["**/_*", "**/.*"]` | Zu ignorierende Globs (Dateien mit Unterstrich und Punkt am Anfang). |
 | `pages` | `"pages"` | Ordner für benutzerdefinierte `.astro`-Seiten. |
 | `defaultType` | `"doc"` | Seiten-`type`, der verwendet wird, wenn das Frontmatter ihn weglässt. |
+| `types` | `{}` | Inhaltsdefinitionen pro Typ — benutzerdefinierte Frontmatter-Schlüssel, die auf Seiten eines `type` beschränkt sind. Siehe [Frontmatter](#frontmatter). |
 
 Statische Assets liegen in `public/` — eine Datei unter `public/logo.png` wird unter `/logo.png` ausgeliefert, sodass eine Referenz wie `![](/images/create.png)` auf `public/images/create.png` verweist. Bilder, die über einen **relativen Pfad** referenziert werden (`![](./diagram.png)`), liegen stattdessen neben deinen Inhalten und werden [beim Build optimiert](/docs/content/syntax#links-and-images).
 
@@ -230,6 +231,31 @@ export default defineConfig({
 ```
 
 Jede [Standard-Schema](https://standardschema.dev)-Bibliothek funktioniert — Zod (in der Version, die dein Projekt installiert), Valibot, ArkType. Schlüssel außerhalb der Erweiterung bleiben streng validiert, das Erkennen von Tippfehlern ändert sich also nicht. Zur Validierungssemantik siehe [Benutzerdefinierte Schlüssel](/docs/reference/frontmatter#custom-keys).
+
+Schlüssel unter `extend` gelten websiteweit. Um Schlüssel nur auf Seiten eines Inhaltstyps vorzuschreiben — der `status` eines RFCs, der `service` eines Runbooks — deklariere sie stattdessen pro Typ unter `content.types`:
+
+```ts blume.config.ts lineNumbers
+import { defineConfig } from "blume";
+import { z } from "zod";
+
+export default defineConfig({
+  content: {
+    types: {
+      rfc: {
+        facets: ["domain", "status"],
+        frontmatter: {
+          domain: z.string(),
+          status: z.enum(["draft", "review", "enforced"]),
+        },
+      },
+    },
+  },
+});
+```
+
+Ein Schlüssel kann websiteweit oder pro Typ deklariert werden, nicht beides. Wie die Zuordnung aufgelöst wird, erfährst du unter [Schlüssel pro Typ](/docs/reference/frontmatter#per-type-keys).
+
+`facets` benennt die benutzerdefinierten Schlüssel, deren Werte zu filterbaren Metadaten werden: Sie werden mit den Suchdokumenten mitgeführt (`blume-search.json` und der MCP-Index), und die [MCP-Tools](/docs/configuration/ai#mcp-server) akzeptieren eine `filters`-Eingabe, die gegen sie abgeglichen wird, sodass ein Agent zum Beispiel nur `enforced`-RFCs in der Domäne `architecture` abrufen kann. Jedes Facet muss ein deklarierter benutzerdefinierter Schlüssel sein — pro Typ oder websiteweit — und nur Zeichenketten-Werte (oder in Zeichenketten umgewandelte Zahlen/Booleans) werden facettiert.
 
 ## GitHub
 
