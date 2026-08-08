@@ -27,18 +27,23 @@
  * exempted from worker-first routing with negative rules, keeping their
  * `_headers` treatment and their zero-Worker serving path.
  *
- * Configured redirects need the same exemption, for a sharper reason. `_headers`
- * is cosmetic on a worker-first route; `_redirects` is the *only* thing that
- * serves a redirect with its configured status. On a server build Blume routes
- * `redirects` through Astro's own config, and `@astrojs/cloudflare` turns those
- * into `_redirects` entries carrying the exact status — a file the static layer
- * reads and a worker-first route never reaches. Astro's SSR redirect handler
- * then answers instead, and it honors the configured status only when the
- * destination resolves to a discrete route: Blume serves every page from
- * `[...slug]`, so it never does, and `computeRedirectStatus` defaults a GET to
- * **301**. A configured 302 swallowed by a content group therefore ships as a
- * permanent redirect that browsers cache indefinitely. Every redirect a
- * positive rule would claim is excluded here so the static layer keeps it.
+ * Configured redirects are baked into the wrapper as well, and answered there
+ * with their exact configured status. On a server build Blume routes
+ * `redirects` through Astro's own config, and `@astrojs/cloudflare` turns
+ * those into `_redirects` entries carrying the exact status — but only
+ * Cloudflare's static layer reads that file, and a worker-first route never
+ * reaches it. Astro's SSR redirect handler would answer instead, and it honors
+ * the configured status only when the destination resolves to a discrete
+ * route: Blume serves every page from `[...slug]`, so it never does, and
+ * `computeRedirectStatus` defaults a GET to **301** — a permanent redirect
+ * that browsers cache indefinitely. The wrapper checking its own redirect
+ * table before delegating closes that hole at zero rule cost: unlike negative
+ * `run_worker_first` exemptions, a baked-in table spends nothing against
+ * Wrangler's 100-rule / 100-character limits, cannot collide with
+ * user-configured rules (or a bare `true`), and needs no basing gymnastics —
+ * its keys are full served URLs, which is exactly what the Worker sees.
+ * Redirects outside every worker-first rule still never invoke the Worker;
+ * the static layer serves them from `_redirects` as before.
  */
 
 import { normalizePath } from "../core/base-path.ts";
@@ -70,141 +75,10 @@ const FALLBACK_RULES = ["/*", "!/_astro/*", "!/*.md", "!/*.mdx", "!/*.txt"];
 const basePrefix = (base?: string): string =>
   base && base !== "/" ? base.replace(/\/$/u, "") : "";
 
-/**
- * Whether a `run_worker_first` rule claims a served path, following
- * Cloudflare's glob semantics: a trailing `*` is a prefix match, anything else
- * matches the path exactly.
- */
-const ruleClaims = (rule: string, path: string): boolean =>
-  rule.endsWith("*") ? path.startsWith(rule.slice(0, -1)) : rule === path;
-
 const isNegativeRule = (rule: string): boolean => rule.startsWith("!");
 
 const ruleBody = (rule: string): string =>
   isNegativeRule(rule) ? rule.slice(1) : rule;
-
-/**
- * Fit each exemption under Wrangler's per-rule length cap. An over-long rule
- * collapses to the glob of its longest ancestor whose rule fits — but only
- * when no content route lives at or under that ancestor, since the glob would
- * take the route off the Worker and silently disable its negotiation. With no
- * safe ancestor the over-long rule is kept, so the caller's limits check skips
- * the negotiation instead of shipping the redirect as a permanent 301 (see
- * `injectWorkerNegotiation` on that ordering) — but one pathological path no
- * longer costs the whole site its negotiation when a safe glob exists.
- */
-const fitExemptions = (
-  rules: readonly string[],
-  routes: readonly string[]
-): string[] => {
-  const fitted = rules.map((rule) => {
-    if (rule.length <= MAX_RULE_LENGTH) {
-      return rule;
-    }
-    const path = ruleBody(rule).replace(/\/\*?$/u, "");
-    for (
-      let cut = path.lastIndexOf("/");
-      cut > 0;
-      cut = path.lastIndexOf("/", cut - 1)
-    ) {
-      const ancestor = path.slice(0, cut);
-      if (`!${ancestor}/*`.length > MAX_RULE_LENGTH) {
-        continue;
-      }
-      // A shorter ancestor's glob covers everything this one does, so a
-      // shadowed first candidate ends the search.
-      return routes.some(
-        (route) => route === ancestor || route.startsWith(`${ancestor}/`)
-      )
-        ? rule
-        : `!${ancestor}/*`;
-    }
-    return rule;
-  });
-  return [...new Set(fitted)];
-};
-
-/**
- * Negative rules exempting the configured redirects that `positives` would
- * otherwise claim, so Cloudflare's static layer keeps serving them from
- * `_redirects` with their configured status (see the module comment).
- *
- * A redirect that no positive rule claims gets no rule at all — it is already
- * on the static layer, and every rule spent here counts against Wrangler's cap
- * of 100. For the same reason a claimed redirect is exempted only in the
- * request spellings (with and without the trailing slash) a positive actually
- * claims. A path that is also a content route is never exempted: the page owns
- * it, and taking it off the Worker would silently disable its negotiation.
- *
- * A redirect that is itself the parent of other redirects collapses to a
- * `{path}` + `{path}/*` pair, which is two rules however many URLs the retired
- * section held — but only when no content route lives underneath, since the
- * glob would take that route off the Worker too.
- *
- * `routePaths` must be based the same way `redirectPaths` are — on a subpath
- * deploy both sides carry the full `{deployment.base}{basePath}` stack, or the
- * content-route guards silently compare disjoint namespaces.
- */
-const redirectExemptions = (
-  redirectPaths: readonly string[],
-  routePaths: readonly string[],
-  positives: readonly string[]
-): string[] => {
-  const routes = [
-    ...new Set(routePaths.map((route) => encodeURI(normalizePath(route)))),
-  ];
-  const routeSet = new Set(routes);
-  const claimsBare = (path: string): boolean =>
-    positives.some((rule) => ruleClaims(rule, path));
-  const claimsSlashed = (path: string): boolean =>
-    positives.some((rule) => ruleClaims(rule, `${path}/`));
-  const claimed = [
-    ...new Set(
-      redirectPaths
-        .map((path) => encodeURI(normalizePath(path)))
-        .filter(
-          (path) =>
-            path.startsWith("/") &&
-            !routeSet.has(path) &&
-            (claimsBare(path) || claimsSlashed(path))
-        )
-    ),
-    // Shortest first, so an outer redirect collapses its own descendants.
-  ].toSorted();
-  const rules: string[] = [];
-  const absorbed = new Set<string>();
-  for (const path of claimed) {
-    if (absorbed.has(path)) {
-      continue;
-    }
-    if (path === "/") {
-      // `!//` is malformed and `!/*` would exempt the whole site.
-      rules.push("!/");
-      continue;
-    }
-    const nested = claimed.filter((other) => other.startsWith(`${path}/`));
-    if (
-      nested.length > 0 &&
-      !routes.some((route) => route.startsWith(`${path}/`))
-    ) {
-      for (const other of nested) {
-        absorbed.add(other);
-      }
-      if (claimsBare(path)) {
-        rules.push(`!${path}`);
-      }
-      rules.push(`!${path}/*`);
-      continue;
-    }
-    if (claimsBare(path)) {
-      rules.push(`!${path}`);
-    }
-    if (claimsSlashed(path)) {
-      rules.push(`!${path}/`);
-    }
-  }
-  return fitExemptions(rules, routes);
-};
 
 /**
  * The `run_worker_first` rules for the given content routes: the routes that
@@ -216,9 +90,9 @@ const redirectExemptions = (
  * the Worker hop. On a subpath deploy the whole base is routed as one group —
  * every route lives under it anyway.
  *
- * Redirect exemptions are not emitted here: `injectWorkerNegotiation` derives
- * them from the *merged* rule set, so redirects claimed by user-configured
- * rules are exempted exactly like ones claimed by these.
+ * Configured redirects need no exemption from these rules: the wrapper Worker
+ * answers any it claims from its baked-in redirect table with the configured
+ * status (see the module comment).
  */
 export const buildRunWorkerFirstRules = (
   routePaths: readonly string[],
@@ -309,6 +183,19 @@ const withinWranglerLimits = (rules: string[] | true): boolean =>
   (rules.length <= MAX_RULES &&
     rules.every((rule) => rule.length <= MAX_RULE_LENGTH));
 
+/** A configured redirect the wrapper Worker serves itself. */
+export interface WorkerRedirect {
+  /**
+   * Served path of the redirect, based the way the host platform matches it
+   * (see `applyBaseToPlatformRedirects`) — the full URL path the Worker sees.
+   */
+  from: string;
+  /** Configured HTTP status (301, 302, 307, or 308). */
+  status: number;
+  /** Destination, percent-encoded into the `Location` header. */
+  to: string;
+}
+
 export interface NegotiationWorkerOptions {
   /** Import specifier of the adapter's built entry, relative to the Worker. */
   mainSpecifier: string;
@@ -322,6 +209,8 @@ export interface NegotiationWorkerOptions {
   homeLinkHeader?: string | null;
   /** Estimated token count of the homepage Markdown mirror. */
   homeTokens?: number;
+  /** Configured redirects the wrapper answers with their exact status. */
+  redirects?: readonly WorkerRedirect[];
 }
 
 /**
@@ -340,12 +229,25 @@ export const buildNegotiationWorker = (
   const homeTokens = JSON.stringify(
     options.homeTokens === undefined ? null : String(options.homeTokens)
   );
+  // Keyed by the normalized served path; the runtime lookup decodes and
+  // trims the request path the same way, so both spellings of a URL match.
+  // The destination is percent-encoded here because it ships as a `Location`
+  // header, which cannot carry non-ASCII.
+  const redirects = JSON.stringify(
+    Object.fromEntries(
+      (options.redirects ?? []).map((redirect) => [
+        normalizePath(redirect.from),
+        [encodeURI(redirect.to), redirect.status],
+      ])
+    )
+  );
   return `// Generated by Blume. Do not edit; this file is recreated on each build.
 //
 // Request-time \`Accept: text/markdown\` negotiation for a Cloudflare server
 // build. \`assets.run_worker_first\` routes content-page requests here instead
 // of the platform's static layer; a client that prefers Markdown gets the
-// page's prerendered \`.md\` mirror from the assets binding, and every other
+// page's prerendered \`.md\` mirror from the assets binding, a configured
+// redirect is answered with its exact configured status, and every other
 // request is delegated to the Astro Worker untouched. \`_headers\` does not
 // apply to worker-first routes, so the homepage Link header and the Markdown
 // charset are re-stamped here.
@@ -356,6 +258,23 @@ const BASE_PREFIX = ${prefix};
 const ASSETS_BINDING = ${binding};
 const HOME_LINK_HEADER = ${homeLinkHeader};
 const HOME_TOKENS = ${homeTokens};
+const REDIRECTS = ${redirects};
+
+// Configured redirects live in \`_redirects\`, which only the static layer
+// reads — a worker-first route never reaches it. Answering from this baked-in
+// copy keeps the exact configured status; delegating instead would let Astro's
+// SSR handler default a GET to a permanent 301.
+const redirectFor = (pathname) => {
+  const trimmed =
+    pathname !== "/" && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+  let path = trimmed;
+  try {
+    path = decodeURIComponent(trimmed);
+  } catch {
+    // Keep the raw path; it simply won't match a configured redirect.
+  }
+  return Object.hasOwn(REDIRECTS, path) ? REDIRECTS[path] : null;
+};
 
 const parseAccept = (accept) =>
   accept.split(",").map((part) => {
@@ -430,10 +349,19 @@ const withHeaders = (response, apply) => {
 
 export default {
   async fetch(request, env, context) {
+    const url = new URL(request.url);
+    // Before the method guard: the static layer applies \`_redirects\` to every
+    // method, so the wrapper does too.
+    const redirect = redirectFor(url.pathname);
+    if (redirect !== null) {
+      return new Response(null, {
+        headers: { location: redirect[0] },
+        status: redirect[1],
+      });
+    }
     if (request.method !== "GET" && request.method !== "HEAD") {
       return server.fetch(request, env, context);
     }
-    const url = new URL(request.url);
     const variant = markdownVariantUrl(url.pathname + url.search);
     const home = isHomePath(url.pathname);
     const assets = env[ASSETS_BINDING];
@@ -489,17 +417,11 @@ export interface WorkerNegotiationOptions extends Omit<
   "assetsBinding" | "mainSpecifier"
 > {
   /**
-   * Served paths of the configured redirects, based the way the host platform
-   * matches them (see `applyBaseToPlatformRedirects`). Exempted from
-   * worker-first routing so they keep their configured status.
-   */
-  redirectPaths?: readonly string[];
-  /**
    * The manifest content routes, based like `routePaths` — the guard that
-   * keeps redirect exemptions off real pages. Defaults to `routePaths`, which
-   * also carries the synthesized homepage mirror (see `markdownRoutePaths`);
-   * passing the manifest routes keeps that synthetic `/` from blocking the
-   * exemption of a configured root redirect.
+   * keeps the wrapper's redirect table off real pages. Defaults to
+   * `routePaths`, which also carries the synthesized homepage mirror (see
+   * `markdownRoutePaths`); passing the manifest routes keeps that synthetic
+   * `/` from blocking a configured root redirect.
    */
   contentRoutePaths?: readonly string[];
 }
@@ -514,16 +436,14 @@ export interface WorkerNegotiationOptions extends Omit<
  * it), an already-swapped `main` (the original entry is unrecoverable), or a
  * rule set that cannot fit Wrangler's limits even after the coarse fallback.
  *
- * The redirect exemptions are derived from the *merged* rule set — the user's
- * own `run_worker_first` rules claim a redirect exactly like the generated
- * ones, and a user's `true` (rewritten to its array spelling `/*` so the
- * negatives can ride along) claims everything. They also ride along into the
- * coarse fallback, where they matter more rather than less: `/*` claims every
- * path, so without them every configured redirect would lose its status. If
- * even that set cannot fit, the negotiation is skipped entirely. That ordering
- * is deliberate — a redirect served as a permanent 301 is a cached,
- * user-visible defect, while skipping negotiation only means the raw Markdown
- * stays at its explicit `.md` URL.
+ * The configured redirects are baked into the wrapper, which answers any the
+ * worker-first rules claim with the exact configured status (see the module
+ * comment) — whichever rules do the claiming: the generated groups, the
+ * coarse fallback's `/*`, or the user's own (including a bare `true`). A
+ * redirect at a content route's own path is never baked: the page owns it,
+ * and answering a redirect there would take a real page off the air. When
+ * `null` is returned no rule set is written at all, so every request stays on
+ * the static layer and `_redirects` serves the configured statuses as before.
  */
 export const injectWorkerNegotiation = (
   wranglerText: string,
@@ -559,40 +479,33 @@ export const injectWorkerNegotiation = (
   }
   const {
     contentRoutePaths = options.routePaths,
-    redirectPaths = [],
+    redirects = [],
     ...workerOptions
   } = options;
-  // The exemption guards compare content routes against `redirectPaths`, which
-  // carry the full `{deployment.base}{basePath}` stack; the routes carry only
+  // The content-route guard compares against redirect `from`s, which carry the
+  // full `{deployment.base}{basePath}` stack; the routes carry only
   // `basePath`, so the deployment base is applied here.
   const deployPrefix = basePrefix(options.base);
-  const guardRoutes = deployPrefix
-    ? contentRoutePaths.map((route) =>
-        route === "/" ? deployPrefix : `${deployPrefix}${route}`
+  const guardRoutes = new Set(
+    contentRoutePaths.map((route) =>
+      normalizePath(
+        deployPrefix && route !== "/"
+          ? `${deployPrefix}${route}`
+          : deployPrefix || route
       )
-    : contentRoutePaths;
-  const withRedirectExemptions = (merged: string[] | true): string[] | true => {
-    const positives =
-      merged === true ? ["/*"] : merged.filter((rule) => !isNegativeRule(rule));
-    const exemptions = redirectExemptions(
-      redirectPaths,
-      guardRoutes,
-      positives
-    );
-    return exemptions.length === 0
-      ? merged
-      : mergeRunWorkerFirstRules(merged === true ? ["/*"] : merged, exemptions);
-  };
-  let rules = withRedirectExemptions(
-    mergeRunWorkerFirstRules(
-      assets.run_worker_first,
-      buildRunWorkerFirstRules(options.routePaths, options.base)
     )
   );
+  const workerRedirects = redirects.filter(
+    (redirect) =>
+      redirect.from.startsWith("/") &&
+      !guardRoutes.has(normalizePath(redirect.from))
+  );
+  let rules = mergeRunWorkerFirstRules(
+    assets.run_worker_first,
+    buildRunWorkerFirstRules(options.routePaths, options.base)
+  );
   if (!withinWranglerLimits(rules)) {
-    rules = withRedirectExemptions(
-      mergeRunWorkerFirstRules(assets.run_worker_first, FALLBACK_RULES)
-    );
+    rules = mergeRunWorkerFirstRules(assets.run_worker_first, FALLBACK_RULES);
   }
   if (!withinWranglerLimits(rules)) {
     return null;
@@ -607,6 +520,7 @@ export const injectWorkerNegotiation = (
     ...workerOptions,
     assetsBinding: assets.binding,
     mainSpecifier,
+    redirects: workerRedirects,
   });
   // The adapter and Wrangler both write this file unformatted; match them.
   return { worker, wrangler: JSON.stringify(config) };

@@ -28,11 +28,14 @@ const ROUTES = [
 const HOME_LINK = '</llms.txt>; rel="describedby"; type="text/plain"';
 
 /**
- * Served paths of configured redirects, as `deploy/redirects.ts` bases them for
- * a host platform file: the retired `/docs/api` section of a site whose content
- * lives under `basePath: "/docs"`.
+ * Configured redirects as `deploy/redirects.ts` bases them for a host
+ * platform: a retired page and a non-ASCII page, both with non-default
+ * statuses so a defaulted 301 cannot pass by accident.
  */
-const REDIRECTS = ["/docs/api", "/docs/api/get-trace", "/docs/api/run-query"];
+const REDIRECTS = [
+  { from: "/docs/api", status: 302, to: "/docs/api-reference" },
+  { from: "/ja/古い", status: 307, to: "/ja/新しい" },
+];
 
 /** The adapter-shaped `dist/server/wrangler.json` the injection rewrites. */
 const wranglerConfig = (overrides: Record<string, unknown> = {}): string =>
@@ -366,6 +369,83 @@ describe("negotiation worker — responses", () => {
   });
 });
 
+describe("negotiation worker — configured redirects", () => {
+  /**
+   * Configured redirects keep their status only in `_redirects`, which only
+   * Cloudflare's static layer reads — a worker-first route never reaches it,
+   * and Astro's SSR handler would default a GET to a permanent 301 (its
+   * destination never resolves to a discrete route under `[...slug]`). The
+   * wrapper answers from its baked-in table instead, so a worker-first claim
+   * cannot degrade the configured status.
+   */
+  it("answers a configured redirect with its exact status", async () => {
+    const worker = await loadWorker(workerText({ redirects: REDIRECTS }));
+    const { calls, env } = makeEnv();
+    const response = await worker.fetch(
+      new Request("https://site.test/docs/api", {
+        headers: { accept: "text/markdown" },
+      }),
+      env,
+      {}
+    );
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/docs/api-reference");
+    // Neither the Astro Worker nor the assets binding is consulted.
+    expect(calls.server).toStrictEqual([]);
+    expect(calls.assets).toStrictEqual([]);
+  });
+
+  it("matches the trailing-slash spelling and percent-encoded paths", async () => {
+    const worker = await loadWorker(workerText({ redirects: REDIRECTS }));
+    const slashed = await worker.fetch(
+      new Request("https://site.test/docs/api/"),
+      makeEnv().env,
+      {}
+    );
+    expect(slashed.status).toBe(302);
+    const encoded = await worker.fetch(
+      new Request("https://site.test/ja/%E5%8F%A4%E3%81%84"),
+      makeEnv().env,
+      {}
+    );
+    expect(encoded.status).toBe(307);
+    // The destination is percent-encoded at generation time — a `Location`
+    // header cannot carry non-ASCII.
+    expect(encoded.headers.get("location")).toBe(
+      "/ja/%E6%96%B0%E3%81%97%E3%81%84"
+    );
+  });
+
+  it("applies redirects to every method, like the static layer", async () => {
+    const worker = await loadWorker(workerText({ redirects: REDIRECTS }));
+    const { calls, env } = makeEnv();
+    const response = await worker.fetch(
+      new Request("https://site.test/docs/api", { method: "POST" }),
+      env,
+      {}
+    );
+    expect(response.status).toBe(302);
+    expect(calls.server).toStrictEqual([]);
+  });
+
+  it("leaves non-redirect paths on the normal negotiation path", async () => {
+    const worker = await loadWorker(workerText({ redirects: REDIRECTS }));
+    const { calls, env } = makeEnv();
+    const response = await worker.fetch(
+      new Request("https://site.test/docs/quickstart/", {
+        headers: { accept: "text/markdown" },
+      }),
+      env,
+      {}
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe(
+      "text/markdown; charset=utf-8"
+    );
+    expect(calls.assets.length).toBe(1);
+  });
+});
+
 describe("buildRunWorkerFirstRules", () => {
   it("groups routes by first segment with .md/.mdx exemptions", () => {
     expect(buildRunWorkerFirstRules(ROUTES)).toStrictEqual([
@@ -528,362 +608,62 @@ describe("injectWorkerNegotiation", () => {
     ]);
   });
 
-  /**
-   * A configured redirect keeps its status only on Cloudflare's static layer,
-   * which reads the `_redirects` the adapter writes from Astro's `redirects`.
-   * Inside `run_worker_first` that layer never runs: the Worker answers, and
-   * Astro's SSR redirect handler defaults a GET to 301 unless the destination
-   * resolves to a discrete route — which it never does here, because Blume
-   * serves every page from `[...slug]`. So a redirect swallowed by a content
-   * group ships the user's 302 as a permanent 301. Exempting it is the fix.
-   */
-  it("exempts a redirect swallowed by a content group", () => {
+  it("bakes configured redirects into the wrapper instead of spending rules", () => {
     const result = injectWorkerNegotiation(wranglerConfig(), {
-      redirectPaths: ["/docs/api"],
+      redirects: [
+        ...REDIRECTS,
+        // Not a served path; never baked.
+        { from: "not-a-path", status: 302, to: "/docs" },
+      ],
       routePaths: ["/", "/docs/reference"],
     });
     const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/",
-      "/docs/*",
-      "!/docs/*.md",
-      "!/docs/*.mdx",
-      "!/docs/api",
-      "!/docs/api/",
-    ]);
+    // The worker-first rules are untouched — the table costs no rule budget,
+    // so redirects can never push the set over Wrangler's limits.
+    expect(config.assets.run_worker_first).toStrictEqual(
+      buildRunWorkerFirstRules(["/", "/docs/reference"])
+    );
+    expect(result?.worker).toContain('"/docs/api":["/docs/api-reference",302]');
+    expect(result?.worker).not.toContain("not-a-path");
   });
 
-  it("collapses a nested redirect family into one glob", () => {
-    // Wrangler rejects a rule another glob makes redundant, so the collapsed
-    // form pairs `!/docs/api` with `!/docs/api/*` and drops the members —
-    // exactly two rules however many URLs the retired section had.
-    const result = injectWorkerNegotiation(wranglerConfig(), {
-      redirectPaths: REDIRECTS,
-      routePaths: ["/", "/docs/reference"],
-    });
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/",
-      "/docs/*",
-      "!/docs/*.md",
-      "!/docs/*.mdx",
-      "!/docs/api",
-      "!/docs/api/*",
-    ]);
-    // Wrangler rejects a set with no positive rule, so one must always survive.
-    expect(
-      config.assets.run_worker_first.some(
-        (rule: string) => !rule.startsWith("!")
-      )
-    ).toBe(true);
-  });
-
-  it("does not collapse over a content route living under the redirect", () => {
-    // `/docs/api/*` would take `/docs/api/live` off the Worker and break its
-    // Markdown negotiation, so the members stay spelled out.
-    const result = injectWorkerNegotiation(wranglerConfig(), {
-      redirectPaths: ["/docs/api", "/docs/api/run-query"],
-      routePaths: ["/", "/docs/api/live"],
-    });
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/",
-      "/docs/*",
-      "!/docs/*.md",
-      "!/docs/*.mdx",
-      "!/docs/api",
-      "!/docs/api/",
-      "!/docs/api/run-query",
-      "!/docs/api/run-query/",
-    ]);
-  });
-
-  it("ignores a redirect no rule would have claimed", () => {
-    // `/github` is already on the static layer: a rule for it would be noise,
-    // and every rule spent here counts against Wrangler's cap of 100.
-    const result = injectWorkerNegotiation(wranglerConfig(), {
-      redirectPaths: ["/github"],
-      routePaths: ["/", "/docs/reference"],
-    });
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/",
-      "/docs/*",
-      "!/docs/*.md",
-      "!/docs/*.mdx",
-    ]);
-  });
-
-  it("never exempts a path that is also a content route", () => {
+  it("never bakes a redirect at a content route's own path", () => {
     // A page and a redirect cannot both own a path; the page wins, since
-    // exempting it would silently disable negotiation for a real route.
+    // answering a redirect there would take a real page off the air.
     const result = injectWorkerNegotiation(wranglerConfig(), {
-      redirectPaths: ["/docs/reference"],
+      redirects: [{ from: "/docs/reference", status: 302, to: "/docs" }],
       routePaths: ["/", "/docs/reference"],
     });
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/",
-      "/docs/*",
-      "!/docs/*.md",
-      "!/docs/*.mdx",
-    ]);
+    expect(result?.worker).toContain("const REDIRECTS = {};");
   });
 
-  it("exempts redirects under the base on a subpath deploy", () => {
+  it("bakes a root redirect when the homepage mirror is synthesized", () => {
+    // `routePaths` always carries `/` for the llms.txt mirror; only the
+    // manifest routes guard the table, so a docs-only site can still redirect
+    // its root with the configured status.
     const result = injectWorkerNegotiation(wranglerConfig(), {
-      base: "/site/",
-      redirectPaths: ["/site/docs/api", "/site/docs/api/run-query"],
-      routePaths: ["/", "/docs/a"],
+      contentRoutePaths: ["/docs/reference"],
+      redirects: [{ from: "/", status: 302, to: "/docs/reference" }],
+      routePaths: ["/", "/docs/reference"],
     });
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/site",
-      "/site/*",
-      "!/site/*.md",
-      "!/site/*.mdx",
-      "!/site/*.txt",
-      "!/site/_astro/*",
-      "!/site/docs/api",
-      "!/site/docs/api/*",
-    ]);
+    expect(result?.worker).toContain('"/":["/docs/reference",302]');
   });
 
-  it("guards content routes on a subpath deploy", () => {
-    // Redirect paths carry the full `{deployment.base}{basePath}` stack while
-    // the routes carry only `basePath`; the routes must be based before the
-    // guards compare them, or a nested redirect family collapses to a glob
-    // that takes `/site/docs/api/live` off the Worker — and a redirect at a
-    // content route's own path gets exempted.
+  it("guards content routes with the deployment base applied", () => {
+    // Redirect `from`s carry the full `{deployment.base}{basePath}` stack
+    // while the routes carry only `basePath`, so the guard bases the routes
+    // before comparing: a redirect at a page's own served URL is dropped, one
+    // at a retired URL is kept.
     const result = injectWorkerNegotiation(wranglerConfig(), {
       base: "/site/",
-      redirectPaths: [
-        "/site/docs/api",
-        "/site/docs/api/run-query",
-        "/site/docs/api/live",
+      redirects: [
+        { from: "/site/docs/api", status: 302, to: "/site/docs" },
+        { from: "/site/docs/api/live", status: 302, to: "/site/docs" },
       ],
       routePaths: ["/", "/docs/api/live"],
     });
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/site",
-      "/site/*",
-      "!/site/*.md",
-      "!/site/*.mdx",
-      "!/site/*.txt",
-      "!/site/_astro/*",
-      "!/site/docs/api",
-      "!/site/docs/api/",
-      "!/site/docs/api/run-query",
-      "!/site/docs/api/run-query/",
-    ]);
-  });
-
-  it("exempts a redirect claimed only by a user-configured rule", () => {
-    // The user's own positives claim a redirect exactly like the generated
-    // ones, so the exemptions are derived from the merged set (#169).
-    const result = injectWorkerNegotiation(
-      wranglerConfig({
-        assets: {
-          binding: "ASSETS",
-          directory: "../client",
-          run_worker_first: ["/legacy/*"],
-        },
-      }),
-      {
-        redirectPaths: ["/legacy/old"],
-        routePaths: ["/", "/docs/a"],
-      }
-    );
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/legacy/*",
-      "/",
-      "/docs/*",
-      "!/docs/*.md",
-      "!/docs/*.mdx",
-      "!/legacy/old",
-      "!/legacy/old/",
-    ]);
-  });
-
-  it("exempts only the request spellings a positive actually claims", () => {
-    // `/legacy/*` claims `/legacy/` but not the bare `/legacy`, which is
-    // already on the static layer — a `!/legacy` rule would exempt nothing
-    // while still counting against Wrangler's cap of 100.
-    const result = injectWorkerNegotiation(
-      wranglerConfig({
-        assets: {
-          binding: "ASSETS",
-          directory: "../client",
-          run_worker_first: ["/legacy/*"],
-        },
-      }),
-      {
-        redirectPaths: ["/legacy", "/legacy/old"],
-        routePaths: ["/", "/docs/a"],
-      }
-    );
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/legacy/*",
-      "/",
-      "/docs/*",
-      "!/docs/*.md",
-      "!/docs/*.mdx",
-      "!/legacy/*",
-    ]);
-  });
-
-  it("rewrites a user-configured `true` when redirects need exempting", () => {
-    // `true` cannot carry negatives, so it becomes its array spelling `/*`
-    // with the exemptions riding along — same routing, correct redirects.
-    const result = injectWorkerNegotiation(
-      wranglerConfig({
-        assets: {
-          binding: "ASSETS",
-          directory: "../client",
-          run_worker_first: true,
-        },
-      }),
-      {
-        redirectPaths: ["/docs/api"],
-        routePaths: ["/", "/docs/reference"],
-      }
-    );
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/*",
-      "!/docs/api",
-      "!/docs/api/",
-    ]);
-  });
-
-  it("exempts a configured root redirect", () => {
-    // `routePaths` always carries `/` for the synthesized llms.txt mirror;
-    // only the manifest routes guard the exemptions, so a docs-only site can
-    // still redirect its root with the configured status.
-    const result = injectWorkerNegotiation(wranglerConfig(), {
-      contentRoutePaths: ["/docs/reference"],
-      redirectPaths: ["/"],
-      routePaths: ["/", "/docs/reference"],
-    });
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/",
-      "/docs/*",
-      "!/docs/*.md",
-      "!/docs/*.mdx",
-      "!/",
-    ]);
-  });
-
-  it("collapses an exemption over the rule length limit to a safe ancestor glob", () => {
-    // One pathological path must not cost the whole site its negotiation:
-    // the over-long rule becomes the glob of its longest fitting ancestor,
-    // since no content route lives under `/docs/gone`.
-    const result = injectWorkerNegotiation(wranglerConfig(), {
-      redirectPaths: [`/docs/gone/${"x".repeat(100)}`],
-      routePaths: ["/", "/docs/intro"],
-    });
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/",
-      "/docs/*",
-      "!/docs/*.md",
-      "!/docs/*.mdx",
-      "!/docs/gone/*",
-    ]);
-  });
-
-  it("walks past an ancestor whose own glob rule would not fit", () => {
-    const result = injectWorkerNegotiation(
-      wranglerConfig({
-        assets: {
-          binding: "ASSETS",
-          directory: "../client",
-          run_worker_first: ["/docs/*"],
-        },
-      }),
-      {
-        redirectPaths: [`/docs/${"y".repeat(120)}/final`],
-        routePaths: ["/", "/blog/a"],
-      }
-    );
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/docs/*",
-      "/",
-      "/blog/*",
-      "!/blog/*.md",
-      "!/blog/*.mdx",
-      "!/docs/*",
-    ]);
-  });
-
-  it("skips the negotiation for an over-long top-level redirect", () => {
-    // A single-segment path has no ancestor to collapse to (`!/*` would exempt
-    // the whole site), so the over-long rule stands and the limits check bails.
-    expect(
-      injectWorkerNegotiation(
-        wranglerConfig({
-          assets: {
-            binding: "ASSETS",
-            directory: "../client",
-            run_worker_first: ["/*"],
-          },
-        }),
-        {
-          redirectPaths: [`/${"x".repeat(120)}`],
-          routePaths: ["/", "/docs/a"],
-        }
-      )
-    ).toBeNull();
-  });
-
-  it("skips the negotiation when an over-long exemption has no safe ancestor", () => {
-    // Every ancestor of the over-long rule shadows `/docs/intro`, so there is
-    // no glob that exempts the redirect without taking a content page off the
-    // Worker. Correct redirect statuses outrank negotiation: returning null
-    // leaves `run_worker_first` unset and the static layer serves everything.
-    expect(
-      injectWorkerNegotiation(wranglerConfig(), {
-        redirectPaths: [`/docs/${"x".repeat(100)}`],
-        routePaths: ["/", "/docs/intro"],
-      })
-    ).toBeNull();
-  });
-
-  it("keeps redirect exemptions when falling back to the coarse rules", () => {
-    // `/*` claims every path, so the exemptions matter more here, not less:
-    // without them every configured redirect would lose its status.
-    const result = injectWorkerNegotiation(wranglerConfig(), {
-      redirectPaths: ["/docs/api"],
-      routePaths: Array.from({ length: 80 }, (_, i) => `/page-${i}`),
-    });
-    const config = JSON.parse(result?.wrangler ?? "");
-    expect(config.assets.run_worker_first).toStrictEqual([
-      "/*",
-      "!/_astro/*",
-      "!/*.md",
-      "!/*.mdx",
-      "!/*.txt",
-      "!/docs/api",
-      "!/docs/api/",
-    ]);
-  });
-
-  it("skips the negotiation when the exemptions cannot fit", () => {
-    // Correct redirect statuses outrank negotiation: returning null leaves
-    // `run_worker_first` unset, so the static layer serves every redirect with
-    // the configured status and the raw `.md` URLs stay reachable directly.
-    const many = Array.from({ length: 60 }, (_, i) => `/docs/gone-${i}`);
-    expect(
-      injectWorkerNegotiation(wranglerConfig(), {
-        redirectPaths: many,
-        routePaths: ["/", "/docs/reference"],
-      })
-    ).toBeNull();
+    expect(result?.worker).toContain('"/site/docs/api":["/site/docs",302]');
+    expect(result?.worker).not.toContain('"/site/docs/api/live"');
   });
 
   it("returns null when even the fallback cannot fit", () => {

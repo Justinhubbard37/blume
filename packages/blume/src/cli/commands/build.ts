@@ -364,16 +364,17 @@ const emitCloudflareNegotiation = async (
     await readFile(wranglerPath, "utf-8"),
     {
       base: config.deployment.base,
-      // The manifest routes guard the redirect exemptions; `routePaths` also
-      // carries the synthesized homepage mirror, which must not block a
+      // The manifest routes guard the wrapper's redirect table; `routePaths`
+      // also carries the synthesized homepage mirror, which must not block a
       // configured root redirect.
       contentRoutePaths: project.manifest.routes.map((route) => route.path),
       homeLinkHeader: buildHomeLinkHeader(config, routePaths),
       homeTokens: home ? markdownTokenCount(agentMarkdown(home)) : undefined,
-      // Worker-first rules match the served URL, so the redirects are based
-      // the same way the platform files are — and they have to be exempted, or
-      // the Worker answers instead of `_redirects` and defaults their status.
-      redirectPaths: platformRedirects(config).map((redirect) => redirect.from),
+      // The wrapper Worker matches full served URLs, so the redirects are
+      // based the same way the platform files are — it answers any the
+      // worker-first rules claim, where `_redirects` is never consulted and
+      // Astro would default their status.
+      redirects: platformRedirects(config),
       routePaths,
     }
   );
