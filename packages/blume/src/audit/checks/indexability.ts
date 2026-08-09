@@ -8,12 +8,9 @@ import type { AuditContext, CheckModule, PageSnapshot } from "../types.ts";
 import { decodePath, normalizePath, siteOrigin } from "../url.ts";
 
 /** The canonical URL parsed, or null when it isn't a usable absolute URL. */
-const parseCanonical = (page: PageSnapshot): URL | null => {
-  if (!page.canonical) {
-    return null;
-  }
+const parseCanonical = (canonical: string): URL | null => {
   try {
-    return new URL(page.canonical);
+    return new URL(canonical);
   } catch {
     return null;
   }
@@ -48,7 +45,7 @@ const canonicalChecks = (
       : [];
   }
 
-  const canonical = parseCanonical(page);
+  const canonical = parseCanonical(page.canonical);
   if (!canonical) {
     return [
       finding(

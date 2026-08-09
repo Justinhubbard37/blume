@@ -246,6 +246,19 @@ describe("reportJson", () => {
     });
     expect(payload.audit.tiers.static).toBe(true);
   });
+
+  it("leaves a diagnostic with no source file untouched", () => {
+    // Only file paths are relativized; a URL-only finding has nothing to
+    // rewrite and must come through byte-identical.
+    const payload = JSON.parse(
+      reportJson(
+        result([finding("BLUME_AUDIT_TITLE_MISSING", { url: "/x" }, "x")]),
+        "/root"
+      )
+    );
+    expect(payload.diagnostics[0].file).toBeUndefined();
+    expect(payload.diagnostics[0].url).toBe("/x");
+  });
 });
 
 describe("formatCatalog", () => {

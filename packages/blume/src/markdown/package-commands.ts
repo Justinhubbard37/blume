@@ -79,10 +79,6 @@ const normalizeFlags = (args: string[]): string[] =>
  */
 const parseIntent = (input: string): Intent => {
   const tokens = input.trim().split(WHITESPACE).filter(Boolean);
-  if (tokens.length === 0) {
-    return { args: [], operation: "install" };
-  }
-
   const [first, ...rest] = tokens;
   if (first === undefined) {
     return { args: [], operation: "install" };

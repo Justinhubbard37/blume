@@ -197,6 +197,25 @@ describe("computeWorkList", () => {
     expect(meta[1]?.entries[0]?.status).toBe("stale");
   });
 
+  it("forces unstamped pages to stale and marks drifted meta stamps stale", async () => {
+    const root = await fixture();
+    const project = await scan(root);
+    const ledger = emptyLedger();
+    // A meta stamp that no longer matches the source hash is stale on its own.
+    stampLedger(ledger, "docs/guides/meta.ts", "fr", "0000000000000000");
+
+    const forced = await computeWorkList(project, ledger, { force: true });
+    // The hand-authored fr/index.mdx has no ledger stamp; under --force it is
+    // retranslated as stale instead of being adopted as untracked.
+    const index = pageItems(forced.items).find(
+      (item) => item.sourceRel === "docs/index.mdx" && item.locale === "fr"
+    );
+    expect(index?.status).toBe("stale");
+    expect(forced.untracked).toEqual([]);
+    const meta = metaItems(forced.items).find((item) => item.locale === "fr");
+    expect(meta?.entries[0]?.status).toBe("stale");
+  });
+
   it("targets dot-parser suffix paths and skips meta translation entirely", async () => {
     const root = await fixture({
       "blume.config.ts": CONFIG.replace(

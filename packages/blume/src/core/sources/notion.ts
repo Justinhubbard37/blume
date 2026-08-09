@@ -148,31 +148,25 @@ const SECOND_MS = 1000;
  * many concurrent block-children requests, so without this a single 429 would
  * reject the batch and abort the whole import.
  */
-const withNotionRetry = async <T>(call: () => Promise<T>): Promise<T> => {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
-    try {
-      // oxlint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- sequential retry attempts, not independent
-      return await call();
-    } catch (error) {
-      lastError = error;
-      const { status } = error as { status?: number };
-      if (status !== RATE_LIMITED || attempt === MAX_RETRIES) {
-        throw error;
-      }
-      const retryAfter = Number(
-        (error as { headers?: Record<string, string> }).headers?.["retry-after"]
-      );
-      const wait =
-        retryAfter > 0 ? retryAfter * SECOND_MS : BASE_DELAY_MS * 2 ** attempt;
-      // oxlint-disable-next-line no-await-in-loop -- back off before retrying
-      await sleep(wait);
+const withNotionRetry = async <T>(
+  call: () => Promise<T>,
+  attempt = 0
+): Promise<T> => {
+  try {
+    return await call();
+  } catch (error) {
+    const { status } = error as { status?: number };
+    if (status !== RATE_LIMITED || attempt === MAX_RETRIES) {
+      throw error;
     }
+    const retryAfter = Number(
+      (error as { headers?: Record<string, string> }).headers?.["retry-after"]
+    );
+    const wait =
+      retryAfter > 0 ? retryAfter * SECOND_MS : BASE_DELAY_MS * 2 ** attempt;
+    await sleep(wait);
+    return withNotionRetry(call, attempt + 1);
   }
-  // Unreachable — the loop always returns or rethrows — but keeps types honest.
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("Notion request failed after retries.");
 };
 
 /** Paginate a Notion list endpoint via recursion (no await-in-loop). */

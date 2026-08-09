@@ -210,6 +210,13 @@ describe("duplicate checks", () => {
     expect(found).toContain("DUPLICATE_CONTENT");
   });
 
+  it("still compares pages whose canonicals are unparseable", () => {
+    // A canonical that isn't a URL at all can't be "pointing elsewhere", so it
+    // must not exempt the page from the duplicate checks.
+    const ctx = context({ pages: twin({ canonical: "not a url" }) });
+    expect(run(duplicateChecks, ctx)).toContain("DUPLICATE_TITLE");
+  });
+
   it("does not treat two empty pages as duplicate content", () => {
     const ctx = context({
       pages: [
@@ -561,6 +568,19 @@ describe("social checks", () => {
     expect(run(socialChecks, ctx)).toContain("OG_INCOMPLETE");
   });
 
+  it("names the missing properties when only some tags are absent", () => {
+    // Half a card fails to render just like no card, but the fix is smaller —
+    // the message names exactly which properties to add.
+    const ctx = context({ pages: [snapshot({ og: { "og:title": "t" } })] });
+    const found = socialChecks.run(ctx) as Diagnostic[];
+    const incomplete = found.find(
+      (d) => d.code === "BLUME_AUDIT_OG_INCOMPLETE"
+    );
+    expect(incomplete?.message).toBe(
+      "Open Graph is missing og:type, og:description."
+    );
+  });
+
   it("does not demand og:url or og:image when no site is configured", () => {
     // Both need an absolute URL, which Blume cannot build without
     // `deployment.site`. SITE_NOT_SET reports that once.
@@ -721,6 +741,23 @@ describe("url checks", () => {
       ],
     });
     expect(run(urlChecks, ctx)).toEqual([]);
+  });
+
+  it("does not read an absolute href's // as a doubled slash", () => {
+    // Only site-relative hrefs can carry a doubled slash from a bad base; an
+    // absolute URL's interior // is the other origin's business.
+    const ctx = context({
+      pages: [
+        snapshot({
+          links: [
+            { content: true, href: "https://x.dev//y", rel: null, text: "y" },
+          ],
+          url: "/a",
+        }),
+      ],
+      site: SITE,
+    });
+    expect(run(urlChecks, ctx)).not.toContain("DOUBLE_SLASH_URL");
   });
 
   it("is silent on a normal URL", () => {
@@ -1020,6 +1057,20 @@ describe("robots checks", () => {
     expect(run(robotsChecks, ctx)).toContain("ROBOTS_DISALLOWS_INDEXABLE");
   });
 
+  it("skips a sitemap loc that is not a valid absolute URL", () => {
+    // The malformed loc is SITEMAP_INVALID's finding; the rule matching just
+    // moves on to the locs it can parse.
+    const ctx = robotsCtx("User-agent: *\nDisallow: /x\n", [
+      "%%%",
+      `${SITE}/x`,
+    ]);
+    expect(
+      run(robotsChecks, ctx).filter(
+        (code) => code === "ROBOTS_DISALLOWS_INDEXABLE"
+      )
+    ).toHaveLength(1);
+  });
+
   it("matches a trailing-slash rule against the loc as served", () => {
     // `Disallow: /page/` is a literal prefix — normalizing the slash away
     // before matching would silently miss it.
@@ -1276,6 +1327,22 @@ describe("anchor checks", () => {
     expect(run(linkChecks, ctx)).not.toContain("ANCHOR_BROKEN");
   });
 
+  it("still checks a fragment whose percent-encoding is malformed", () => {
+    // decodeURIComponent throws on "%E0%A4%A"; a malformed sequence can't
+    // have come from our encoder, so only the raw spelling is compared — and
+    // here it matches no id, which is a broken anchor like any other.
+    const ctx = context({
+      pages: [
+        snapshot({
+          ids: new Set(["setup"]),
+          links: [link("#%E0%A4%A")],
+          url: "/a",
+        }),
+      ],
+    });
+    expect(run(linkChecks, ctx)).toContain("ANCHOR_BROKEN");
+  });
+
   it("deduplicates a broken chrome anchor across pages", () => {
     // The table of contents is chrome, rendered on every page — one broken
     // target must not become one finding per page.
@@ -1451,6 +1518,21 @@ describe("future-dated pages", () => {
     );
     const undated = context({ pages: [snapshot({ url: "/a" })] });
     expect(run(contentChecks, undated)).not.toContain("FUTURE_DATED_PAGE");
+  });
+
+  it("treats a date that is neither string nor Date as undated", () => {
+    // YAML happily parses `date: [2999, 1]` to an array; that's not a date.
+    expect(run(contentChecks, dated("[2999, 1]"))).not.toContain(
+      "FUTURE_DATED_PAGE"
+    );
+  });
+
+  it("treats front matter that does not parse as undated", () => {
+    // js-yaml throws on the unclosed flow collection. The audit stays quiet:
+    // BLUME_FRONTMATTER_INVALID is the build's finding, not the audit's.
+    expect(run(contentChecks, dated("[unclosed"))).not.toContain(
+      "FUTURE_DATED_PAGE"
+    );
   });
 });
 

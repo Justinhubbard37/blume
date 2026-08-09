@@ -44,6 +44,8 @@ const hitSearch: SearchFn = () =>
     sections: [],
   });
 
+const emptySearch: SearchFn = () => Promise.resolve({ hits: [], sections: [] });
+
 const mangledSearch: SearchFn = () =>
   Promise.resolve({
     hits: [
@@ -104,6 +106,17 @@ describe("buildWebMcpTools", () => {
     // A working search with no matches is an answer, not an error.
     expect(empty.isError).toBeUndefined();
     expect(loads).toBe(2);
+  });
+
+  it("search_docs answers an empty result set without an error", async () => {
+    const search = tool(
+      toolsWith({ loadSearch: () => Promise.resolve(emptySearch) }),
+      "search_docs"
+    );
+
+    const result = await search.execute({ query: "zzz" });
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]?.text).toBe('No results for "zzz".');
   });
 
   it("search_docs leaves no markup fragment behind on mangled hits", async () => {

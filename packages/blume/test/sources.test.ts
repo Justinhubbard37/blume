@@ -255,6 +255,14 @@ describe("normalizeEntry", () => {
     expect(page({}, "changelog/")?.route).toBe("/changelog/page");
   });
 
+  it("drops empty ref segments instead of emitting a malformed route", () => {
+    // A doubled separator (or leading/trailing slash) in a ref yields an empty
+    // path part; keeping it would produce `//` in the route.
+    expect(entryRouteOf({ ref: "guide//setup.md" })?.route).toBe(
+      "/guide/setup"
+    );
+  });
+
   it("honors an adapter-supplied entry.slug, with frontmatter slug winning", () => {
     // The typed SPI documents slug as "logical route input; defaults to ref".
     expect(entryRouteOf({ slug: "custom/path" })?.route).toBe("/custom/path");
@@ -678,6 +686,10 @@ describe("mdxRemoteSource (files mode)", () => {
         sent.get("https://raw.githubusercontent.com/o/r/main/docs/intro.mdx")
           ?.authorization
       ).toBe("Bearer t0ken");
+
+      // An unparsable base URL can't be host-checked, so no token is sent.
+      await load("not-a-url", join(root, ".c3"));
+      expect(sent.get("not-a-url/intro.mdx")?.authorization).toBeUndefined();
     } finally {
       if (original === undefined) {
         delete process.env.GITHUB_TOKEN;

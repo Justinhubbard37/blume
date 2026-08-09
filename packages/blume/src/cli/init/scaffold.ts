@@ -195,28 +195,29 @@ const hasRemoteSource = (sources: SourceKind[]): boolean =>
  * Config snippets for each remote source kind, with placeholder values to
  * replace and comments naming the env var each source authenticates with.
  */
-const sourceSnippetFor = (kind: Exclude<SourceKind, "filesystem">): string => {
-  switch (kind) {
-    case "github-releases": {
-      return `      // Changelog entries from GitHub Releases. Private repos read
+const SOURCE_SNIPPETS: Record<Exclude<SourceKind, "filesystem">, string> = {
+  "github-releases": `      // Changelog entries from GitHub Releases. Private repos read
       // GITHUB_TOKEN from the environment.
       {
         type: "github-releases",
         owner: "your-org",
         repo: "your-repo",
         prefix: "changelog",
-      },`;
-    }
-    case "notion": {
-      return `      // Pages from a Notion database. Reads NOTION_TOKEN from the environment.
+      },`,
+  "mdx-remote": `      // MDX fetched from a GitHub repo. Private repos read GITHUB_TOKEN
+      // from the environment.
+      {
+        type: "mdx-remote",
+        github: { owner: "your-org", repo: "your-repo", path: "docs" },
+        prefix: "remote",
+      },`,
+  notion: `      // Pages from a Notion database. Reads NOTION_TOKEN from the environment.
       {
         type: "notion",
         database: "your-database-id",
         prefix: "notion",
-      },`;
-    }
-    case "sanity": {
-      return `      // Documents from a Sanity dataset. Private datasets read SANITY_TOKEN
+      },`,
+  sanity: `      // Documents from a Sanity dataset. Private datasets read SANITY_TOKEN
       // from the environment.
       {
         type: "sanity",
@@ -224,21 +225,7 @@ const sourceSnippetFor = (kind: Exclude<SourceKind, "filesystem">): string => {
         dataset: "production",
         query: \`*[_type == "doc"]\`,
         prefix: "sanity",
-      },`;
-    }
-    case "mdx-remote": {
-      return `      // MDX fetched from a GitHub repo. Private repos read GITHUB_TOKEN
-      // from the environment.
-      {
-        type: "mdx-remote",
-        github: { owner: "your-org", repo: "your-repo", path: "docs" },
-        prefix: "remote",
-      },`;
-    }
-    default: {
-      return kind satisfies never;
-    }
-  }
+      },`,
 };
 
 /**
@@ -263,7 +250,7 @@ const contentBlockFor = (answers: InitAnswers): string => {
     (kind) =>
       kind === "filesystem"
         ? `      { type: "filesystem", root: ${JSON.stringify(answers.contentDir)} },`
-        : sourceSnippetFor(kind)
+        : SOURCE_SNIPPETS[kind]
   );
   return `
   content: {

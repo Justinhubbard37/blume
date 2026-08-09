@@ -195,6 +195,15 @@ describe("blumeIntegration homepage Link header", () => {
     expect(runHandle(handle, "/other/").Link).toBeUndefined();
   });
 
+  it("stamps nothing on a request that carries no url", () => {
+    // Node types `IncomingMessage#url` as optional; a url-less request can
+    // never be the homepage.
+    const handle = handleWith();
+    expect(
+      runHandle(handle, undefined as unknown as string).Link
+    ).toBeUndefined();
+  });
+
   it("sends no Link header when none is configured", () => {
     const handle = serverSetup({ contentRoutes: ["/"] })[0]
       ?.handle as MiddlewareHandle;

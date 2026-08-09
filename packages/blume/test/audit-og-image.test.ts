@@ -161,6 +161,14 @@ describe("ogImageChecks", () => {
     expect(found.filter((code) => code === "OG_IMAGE_SMALL")).toHaveLength(2);
   });
 
+  it("stays quiet when the indexed file cannot be read back", async () => {
+    // The file index vouches for the path but the bytes are unreadable —
+    // existence was already established, so this is not a finding.
+    const dir = await staticDir({});
+    const ctx = context({ pages: [withOg(`${SITE}/og.png`)], site: SITE });
+    expect(await run(ctx, dir, new Map([["/og.png", 24]]))).toEqual([]);
+  });
+
   it("skips external images, unknown formats, and pages with no og:image", async () => {
     const dir = await staticDir({ "og.svg": Buffer.from("<svg/>") });
     const ctx = context({

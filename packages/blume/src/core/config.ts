@@ -219,14 +219,14 @@ export const loadConfig = async (
     // Surface every issue in one failing run — reporting only the first turns
     // a three-mistake config into three fix-rerun-fail loops.
     const moreIssues = rest.map((d) => `  - ${d.message}`).join("\n");
-    throw new BlumeError(
+    const detail =
       rest.length > 0
         ? {
             ...primary,
             message: `${primary.message}\n${rest.length} more config issue(s):\n${moreIssues}`,
           }
-        : primary
-    );
+        : primary;
+    throw new BlumeError(detail);
   }
 
   // Resolve the canonical site URL, then SEO defaults that depend on it.

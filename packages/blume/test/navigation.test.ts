@@ -424,6 +424,13 @@ describe("buildNavigation — explicit config sidebar", () => {
     expect(external.pageId).toBe("");
   });
 
+  it("drops an object item with no ref, root, href, or items", () => {
+    // A label-only entry names nothing navigable, so it can't become a node.
+    const sidebar: SidebarItemConfig[] = [{ label: "Dangling" }, "/foo"];
+    const nav = buildNavigation(pages, { folderMeta: empty, sidebar });
+    expect(labels(nav.sidebar)).toStrictEqual(["Foo"]);
+  });
+
   it("normalizes index refs and drops refs with no matching page", () => {
     const sidebar: SidebarItemConfig[] = ["index", "foo/index", "/bar", "nope"];
     const nav = buildNavigation(pages, { folderMeta: empty, sidebar });

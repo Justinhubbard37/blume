@@ -164,6 +164,14 @@ describe("parseSitemap lastmod", () => {
     expect(doc.lastmod?.has("https://x.dev/b")).toBe(false);
     expect(doc.urls).toEqual(["https://x.dev/a", "https://x.dev/b"]);
   });
+
+  it("reports XML the parser cannot read at all", () => {
+    // A truncated comment makes fast-xml-parser throw outright; that is the
+    // same finding as any other document with no urlset in it.
+    const doc = parseSitemap("/dist/sitemap.xml", "<urlset><!-- truncated", 22);
+    expect(doc.error).toBe("no <urlset> element");
+    expect(doc.urls).toEqual([]);
+  });
 });
 
 describe("parseLlms", () => {
@@ -216,6 +224,12 @@ const run = (module: { run: (c: never) => unknown }, ctx: unknown): string[] =>
 describe("uncommon branches", () => {
   it("ignores a malformed absolute href", () => {
     expect(resolveHref("/", "https://", SITE)).toEqual({ kind: "ignored" });
+  });
+
+  it("ignores a relative href the URL parser rejects", () => {
+    // "http:[" has no "//" so it slips past the absolute-URL detection, then
+    // throws in the URL parser when resolved against the page.
+    expect(resolveHref("/a", "http:[", SITE)).toEqual({ kind: "ignored" });
   });
 
   it("reports an hreflang href that is not an absolute URL", () => {

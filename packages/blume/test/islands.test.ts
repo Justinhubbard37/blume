@@ -24,6 +24,8 @@ const FILES: Record<string, string> = {
   "islands/Widget.vue": "<template><div /></template>",
   // Nested duplicate of <Counter> — should be ignored with a warning.
   "islands/nested/Counter.tsx": "export default function Counter() {}",
+  // Not an island extension — should be skipped silently.
+  "islands/notes.md": "# Island notes",
   // Lowercase filename can't be a JSX tag — should be skipped.
   "islands/widget.tsx": "export default function widget() {}",
 };
@@ -95,6 +97,12 @@ describe("discoverIslands", () => {
     const counters = result.islands.filter((i) => i.name === "Counter");
     expect(counters).toHaveLength(1);
     expect(result.warnings.some((w) => w.includes("<Counter>"))).toBe(true);
+  });
+
+  it("skips a non-island extension silently", async () => {
+    const result = await discoverIslands(root);
+    expect(result.islands.some((i) => i.file.endsWith("notes.md"))).toBe(false);
+    expect(result.warnings.some((w) => w.includes("notes.md"))).toBe(false);
   });
 
   it("returns no islands and no warnings when islands/ is absent", async () => {

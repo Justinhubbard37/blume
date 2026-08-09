@@ -1127,10 +1127,9 @@ export const searchClientTemplate = (config: ResolvedConfig): string => {
   if (search.provider === "orama" || search.provider === "flexsearch") {
     // Only Orama derives a tokenizer from the locale; FlexSearch has no
     // equivalent hook, so its client keeps the bare index URL.
-    return staticSearchClient(
-      search.provider,
-      search.provider === "orama" ? config.i18n?.defaultLocale : undefined
-    );
+    const locale =
+      search.provider === "orama" ? config.i18n?.defaultLocale : undefined;
+    return staticSearchClient(search.provider, locale);
   }
 
   const hosted = hostedSearchOptions(search);

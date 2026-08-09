@@ -147,6 +147,22 @@ describe("discoverExamples", () => {
 
     await rm(reg, { force: true, recursive: true });
   });
+
+  it("drops glob-swept files no framework renders, without a warning", async () => {
+    // A user glob can sweep in files outside the renderable extensions (e.g. a
+    // registry's `.md` notes); they are silently skipped, not wrapped.
+    const reg = await mkdtemp(join(tmpdir(), "blume-examples-skip-"));
+    const dir = join(reg, "registry", "examples");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "basic.tsx"), "export default function B() {}");
+    await writeFile(join(dir, "notes.md"), "# not an example");
+
+    const result = await discoverExamples(reg, "registry/examples/*");
+    expect(result.examples.map((e) => e.path)).toEqual(["basic"]);
+    expect(result.warnings).toEqual([]);
+
+    await rm(reg, { force: true, recursive: true });
+  });
 });
 
 describe("exampleMarkdownLookup", () => {

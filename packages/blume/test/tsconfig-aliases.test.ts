@@ -230,6 +230,19 @@ describe("resolveTsconfigAliases", () => {
     expect(resolveTsconfigAliases(root)).toEqual({});
   });
 
+  it("skips a paths entry whose fallback array is empty", async () => {
+    // An empty substitution list has no first target to alias to.
+    await writeConfig(
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@/*": ["./src/*"], "@bad/*": [] },
+        },
+      })
+    );
+
+    expect(resolveTsconfigAliases(root)).toEqual({ "@": join(root, "src") });
+  });
+
   it("returns {} when there's no config or it can't be parsed", async () => {
     expect(resolveTsconfigAliases(root)).toEqual({});
 

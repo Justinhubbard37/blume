@@ -149,6 +149,18 @@ describe("buildSnapshot", () => {
     expect(result.wordCount).toBe(6);
   });
 
+  it("measures a fragment with no content root at all as empty", () => {
+    // A bare fragment has no <main>, <article>, or <body> to root the prose
+    // in, so it counts as empty and its links all read as chrome.
+    const result = snap(
+      '<title>t</title><p>Loose prose.</p><a href="/x">x</a>'
+    );
+    expect(result.wordCount).toBe(0);
+    expect(result.links).toEqual([
+      { content: false, href: "/x", rel: null, text: "x" },
+    ]);
+  });
+
   it("carries the source file through from the route manifest", () => {
     const route = { sourcePath: "/docs/x.mdx" } as RouteManifestEntry;
     expect(snap(page("<main>x</main>"), route).source).toBe("/docs/x.mdx");

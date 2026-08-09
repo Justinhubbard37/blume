@@ -243,6 +243,36 @@ describe("buildLlmsFiles — navigation structure", () => {
     );
   });
 
+  it("keeps a group's own index page at the top of its section", async () => {
+    const { index } = await buildLlmsFiles(
+      makeProject(
+        [
+          makePage("guides/index.md", "/guides", "Guides Overview", {
+            body: { format: "md", text: "Overview body." },
+            navPath: "guides/index.md",
+          }),
+          makePage("guides/install.md", "/guides/install", "Install", {
+            body: { format: "md", text: "Install body." },
+            navPath: "guides/install.md",
+          }),
+        ],
+        {
+          navigation: {
+            sidebar: [
+              { items: ["guides/install"], label: "Guides", root: "guides" },
+            ],
+          },
+        }
+      )
+    );
+    // The explicit-config group links its index page on the group itself
+    // (`root`), not as a child; it still leads the section's link list.
+    expect(index).toContain(
+      "## Guides\n\n- [Guides Overview](https://example.com/guides)"
+    );
+    expect(index).toContain("- [Install](https://example.com/guides/install)");
+  });
+
   it("appends pages an explicit sidebar omits under Other, route-sorted", async () => {
     const { index } = await buildLlmsFiles(
       makeProject(

@@ -318,6 +318,24 @@ describe("ensureDepsLink", () => {
     expect(resolvesAstro(outDir)).toBe(true);
   });
 
+  it("leaves a junction already pointing at the right target in place", async () => {
+    // Second dev regeneration of the npm split layout: the walk still resolves
+    // astro from the hoisted root (the junction holds no `astro` entry), so the
+    // linking path runs again — and must leave the correct junction alone. An
+    // unconditional rm+recreate would open a window in which the Vite server's
+    // module resolution races a missing `node_modules` and 500s.
+    const { nestedDeps, outDir, pkgDir } = await npmSplitFixture();
+    await ensureDepsLink(outDir, pkgDir);
+    const link = join(outDir, "node_modules");
+    expect(await readlink(link)).toBe(nestedDeps);
+
+    await ensureDepsLink(outDir, pkgDir);
+
+    const stats = await lstat(link);
+    expect(stats.isSymbolicLink()).toBe(true);
+    expect(await readlink(link)).toBe(nestedDeps);
+  });
+
   it("warns (without linking) on a split layout the symlink can't fix", async () => {
     // Blume's astro is nested but @astrojs/mdx is hoisted beside the shadowing
     // astro — no single directory holds a consistent set, so a symlink can't

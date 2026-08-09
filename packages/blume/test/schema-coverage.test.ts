@@ -233,6 +233,9 @@ describe("code block themes", () => {
       { settings: {} },
       { colors: [], tokenColors: [] },
       { colors: {}, tokenColors: {} },
+      // Neither a theme name nor a theme object.
+      42,
+      ["github-dark"],
     ]) {
       const result = blumeConfigSchema.safeParse({
         markdown: { codeBlocks: { theme: { dark: theme } } },

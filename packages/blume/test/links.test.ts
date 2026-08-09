@@ -285,6 +285,20 @@ describe(validateLinks, () => {
     expect(diagnostics).toHaveLength(0);
   });
 
+  it("keeps a malformed percent-encoded target verbatim and reports it broken", async () => {
+    // `%E0%A4%A` is a truncated multi-byte sequence — decodeURIComponent
+    // throws, so the target must stay verbatim instead of crashing validation.
+    const diagnostics = await validate([
+      makePage({
+        id: "a.mdx",
+        links: [link("/caf%E0%A4%A")],
+        route: "/a",
+      }),
+      makePage({ id: "café.mdx", route: "/café" }),
+    ]);
+    expect(diagnostics.map((d) => d.code)).toStrictEqual(["BLUME_BROKEN_LINK"]);
+  });
+
   it("reports an info note for asset links when no public dir exists", async () => {
     const diagnostics = await validate([
       makePage({ id: "a.mdx", links: [link("/logo.png")], route: "/a" }),

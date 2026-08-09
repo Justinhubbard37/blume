@@ -194,6 +194,27 @@ describe("evalReportJson", () => {
       "the adapter is auto-detected",
     ]);
   });
+
+  it("passes a file-less diagnostic through without relativizing", () => {
+    const parsed = JSON.parse(
+      evalReportJson(
+        {
+          ...result,
+          diagnostics: [
+            {
+              code: "BLUME_EVAL_QUESTION_FAILED",
+              message: "Docs could not answer.",
+              severity: "error",
+            },
+          ],
+        },
+        "/root",
+        1
+      )
+    );
+    expect(parsed.diagnostics[0].file).toBeUndefined();
+    expect(parsed.summary).toEqual({ error: 1, info: 0, warning: 0 });
+  });
 });
 
 describe("writeEvalReport", () => {

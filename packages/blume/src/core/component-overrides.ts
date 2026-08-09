@@ -328,13 +328,6 @@ const finalize = (
     );
   }
 
-  if (client && !source) {
-    warnings.push(
-      `Override "${key}" declares client: "${client}" but its component couldn't be resolved to a file, so it can't hydrate. Reference it by an imported component or a path string.`
-    );
-    return { identifier, key, source: null };
-  }
-
   if (!client && source?.framework) {
     warnings.push(
       `Override "${key}" points to a ${FRAMEWORK_LABEL[source.framework]} component (${label}) but has no hydration mode, so it renders as static HTML with no interactivity. Add one, e.g. \`${key}: { component: ${JSON.stringify(label)}, client: "load" }\`.`

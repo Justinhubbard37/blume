@@ -401,6 +401,19 @@ describe("planComponentSlots", () => {
     expect(plan.module).not.toContain("__blumeSlot");
   });
 
+  it("leaves an unresolved inline-expression override on the runtime spread", () => {
+    // An inline function has no resolvable source file (already warned during
+    // analysis), so it stays on the runtime object instead of getting a slot.
+    const analysis = analyze(`
+      export default { mdx: { Widget: () => "inline" } };
+    `);
+    const plan = planComponentSlots(FILE, analysis);
+    expect(plan.wrappers).toEqual([]);
+    expect(plan.frameworks.size).toBe(0);
+    // No explicit entry — it rides through `...overrides.mdx`.
+    expect(plan.module).not.toContain("__blumeSlot");
+  });
+
   it("applies client:media with the query and client:only with the framework", () => {
     const analysis = analyze(`
       export default {

@@ -229,6 +229,32 @@ describe("notionSource", () => {
     expect(entries).toHaveLength(1);
   });
 
+  it("rethrows a non-rate-limit error without retrying", async () => {
+    let calls = 0;
+    const broken = {
+      ...client(),
+      databases: {
+        query: () => {
+          calls += 1;
+          return Promise.reject(
+            Object.assign(new Error("boom"), { status: 500 })
+          );
+        },
+      },
+    } as unknown as NotionClientLike;
+
+    const source = notionSource(
+      { client: broken, database: "db1", fetchImpl, name: "handbook" },
+      await ctxFor()
+    );
+    // No cache snapshot exists, so the rethrown error surfaces as a hard
+    // fetch failure — and the 500 was never retried.
+    await expect(source.load()).rejects.toMatchObject({
+      diagnostic: { code: "BLUME_SOURCE_FETCH_FAILED" },
+    });
+    expect(calls).toBe(1);
+  });
+
   it("converts blocks to MDX with Blume components", async () => {
     const source = notionSource(
       { client: client(), database: "db1", fetchImpl, name: "handbook" },

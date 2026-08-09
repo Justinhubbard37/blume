@@ -128,6 +128,14 @@ describe(toPackageCommands, () => {
     );
   });
 
+  it("runs an unrecognized yarn global verb as a script", () => {
+    // `yarn global upgrade` has no add/remove equivalent, so the global
+    // desugar falls through and the command runs as a script.
+    expect(toPackageCommands("yarn global upgrade typescript").yarn).toBe(
+      "yarn run global upgrade typescript"
+    );
+  });
+
   it("maps npx to each manager's exec command", () => {
     expect(toPackageCommands("npx astro add react")).toStrictEqual({
       bun: "bunx astro add react",

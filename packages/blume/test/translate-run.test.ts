@@ -465,6 +465,25 @@ describe("runTranslate meta", () => {
     expect(existsSync(join(root, "docs/fr/guides/meta.ts"))).toBe(false);
   });
 
+  it("surfaces an agent error as a failed meta batch", async () => {
+    const root = await scratch();
+    const item = metaItem(root, [metaOf(root, "guides", "Guides")]);
+    const { run } = claudeRunner([{ isError: true, result: "quota" }]);
+
+    const result = await runTranslate({
+      agent: "claude",
+      ledger: emptyLedger(),
+      project: project(root),
+      run,
+      workList: workListOf([item]),
+    });
+
+    expect(result.counts).toEqual({ failed: 1, partial: 0, translated: 0 });
+    expect(result.results[0]?.status).toBe("failed");
+    expect(result.results[0]?.detail).toBe("agent failed");
+    expect(existsSync(join(root, "docs/fr/guides/meta.ts"))).toBe(false);
+  });
+
   it("keys the root directory's title as '.' in the prompt", async () => {
     const root = await scratch();
     const item = metaItem(root, [metaOf(root, "", "Docs")]);

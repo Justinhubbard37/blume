@@ -83,7 +83,10 @@ export const discoverIslands = async (
   root: string
 ): Promise<IslandDiscovery> => {
   const dir = join(root, "islands");
-  const matches = await glob(["**/*.{jsx,svelte,tsx,vue}"], {
+  // Enumerate everything and let ISLAND_FILE do the filtering below, so
+  // unknown extensions take the skip guard instead of relying on a glob
+  // pattern staying in sync with the regex and framework map.
+  const matches = await glob(["**/*"], {
     absolute: true,
     cwd: dir,
     onlyFiles: true,

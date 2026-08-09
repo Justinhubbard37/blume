@@ -150,16 +150,18 @@ const fetchSpecText = async (spec: string): Promise<string> => {
     if ("text" in last) {
       return last.text;
     }
-    if (!last.retryable || attempt === MAX_ATTEMPTS - 1) {
-      throw last.error;
+    if (!last.retryable) {
+      break;
     }
-    // oxlint-disable-next-line no-await-in-loop -- back off before retrying
-    await sleep(
-      Math.min(
-        last.retryAfter ?? BASE_BACKOFF_MS * 2 ** attempt,
-        MAX_RETRY_WAIT_MS
-      )
-    );
+    if (attempt < MAX_ATTEMPTS - 1) {
+      // oxlint-disable-next-line no-await-in-loop -- back off before retrying
+      await sleep(
+        Math.min(
+          last.retryAfter ?? BASE_BACKOFF_MS * 2 ** attempt,
+          MAX_RETRY_WAIT_MS
+        )
+      );
+    }
   }
   throw last.error;
 };

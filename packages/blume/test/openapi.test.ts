@@ -629,6 +629,23 @@ describe("parse.parseSpec remote hardening", () => {
     }
   });
 
+  it("throws when the fetch fails and no cached copy exists", async () => {
+    const original = globalThis.fetch;
+    const cacheDir = await mkdtemp(join(tmpdir(), "blume-openapi-cache-"));
+    globalThis.fetch = queued([new Response("gone", { status: 404 })]).fetch;
+    try {
+      await expect(
+        parseSpec("https://api.test/openapi.json", "/", {
+          cacheDir,
+          refresh: true,
+        })
+      ).rejects.toThrow(/404/u);
+    } finally {
+      globalThis.fetch = original;
+      await rm(cacheDir, { force: true, recursive: true });
+    }
+  });
+
   it("is cache-first in dev: a cached spec skips the network", async () => {
     const original = globalThis.fetch;
     const cacheDir = await mkdtemp(join(tmpdir(), "blume-openapi-cache-"));
@@ -1423,6 +1440,10 @@ describe("helpers", () => {
     expect(exampleValue({ examples: [42] }, schemas)).toBe(42);
     expect(exampleValue({ default: "d" }, schemas)).toBe("d");
     expect(exampleValue(undefined, schemas)).toBeNull();
+    // An unresolvable $ref makes the sampler throw; the sample is best-effort.
+    expect(
+      exampleValue({ $ref: "#/components/schemas/Missing" }, {})
+    ).toBeNull();
     expect(toJson({ a: 1 })).toContain('"a": 1');
   });
 

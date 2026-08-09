@@ -94,6 +94,32 @@ describe("renderDiff", () => {
     expect(first).toContain("#040506");
   });
 
+  it("reuses the memoized name when the same theme object renders twice", async () => {
+    // The same object instance in the same mode hits the per-type memo on the
+    // second render instead of re-hashing and re-registering the theme.
+    const theme = {
+      colors: {
+        "editor.background": "#0a0b0c",
+        "editor.foreground": "#fefefe",
+      },
+      name: "acme-memo-dark",
+      tokenColors: [],
+      type: "dark" as const,
+    };
+    const options = {
+      lang: "ts",
+      new: "let value = 2;",
+      old: "const value = 1;",
+      theme: { dark: theme, light: "github-light" },
+    };
+
+    const first = await renderDiff(options);
+    const second = await renderDiff(options);
+
+    expect(second).toBe(first);
+    expect(first).toContain("#0a0b0c");
+  });
+
   it("registers a typeless theme object shared by both modes once per mode", async () => {
     // Without a per-mode memo, the light slot would reuse the dark-typed
     // registration made first. Rendering the shared object must match

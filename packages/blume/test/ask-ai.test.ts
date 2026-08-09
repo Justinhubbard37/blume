@@ -443,6 +443,36 @@ describe("AskAI open/close", () => {
     expect(aside(tree).props.inert).toBe(true);
   });
 
+  it("ignores an Escape aimed at a modal surface stacked on top", () => {
+    let tree = fresh();
+    byLabel(tree, "Ask AI").props.onClick();
+    tree = render();
+    expect(aside(tree).props.inert).toBe(false);
+
+    // The search dialog traps focus, so its Escape targets an element inside
+    // a <dialog>; that dismissal must not also close the panel underneath.
+    dispatch("keydown", {
+      ctrlKey: false,
+      key: "Escape",
+      metaKey: false,
+      target: {
+        closest: (selector: string) => (selector === "dialog" ? {} : null),
+      },
+    });
+    tree = render();
+    expect(aside(tree).props.inert).toBe(false);
+
+    // An Escape from outside any dialog still closes the panel.
+    dispatch("keydown", {
+      ctrlKey: false,
+      key: "Escape",
+      metaKey: false,
+      target: { closest: () => null },
+    });
+    tree = render();
+    expect(aside(tree).props.inert).toBe(true);
+  });
+
   it("accepts the search handoff event, with and without a forwarded query", () => {
     let tree = fresh();
     dispatch("blume:open-ask-ai", { detail: { query: "from search" } });

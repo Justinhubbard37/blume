@@ -997,6 +997,41 @@ describe("astroConfigTemplate", () => {
     }
   });
 
+  it("prefixes ./ when the wrangler config sits beside the generated config", async () => {
+    // The theoretical sibling case: `relative()` yields a bare filename, which
+    // must be normalized to an explicit `./` so it reads as a relative import.
+    const root = await mkdtemp(join(tmpdir(), "blume-cf-sibling-"));
+    try {
+      await writeFile(
+        join(root, "wrangler.toml"),
+        'compatibility_flags = ["nodejs_compat"]\n'
+      );
+      const cloudflareConfig = blumeConfigSchema.parse({
+        deployment: { adapter: "cloudflare", output: "server" },
+      });
+      const out = astroConfigTemplate({
+        askPath: ASK_PATH,
+        config: cloudflareConfig,
+        contentRoutes: [],
+        context: context({
+          outDir: root,
+          root,
+        }),
+        dataPath: DATA_PATH,
+        examplesPath: EXAMPLES_PATH,
+        examplesThemePath: EXAMPLES_THEME_PATH,
+        needsReact: false,
+        openapiPath: OPENAPI_PATH,
+        pages: [],
+        searchClientPath: SEARCH_CLIENT_PATH,
+        themePath: THEME_PATH,
+      });
+      expect(out).toContain('configPath: "./wrangler.toml"');
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("omits adapter options for adapters that need none", () => {
     const vercelConfig = blumeConfigSchema.parse({
       deployment: { adapter: "vercel", output: "server" },
