@@ -38,15 +38,6 @@ export const calloutTypeFor = (name: string): string | null => {
 };
 
 /**
- * Concatenate the plain text of a node, recursing through phrasing children so
- * formatted labels keep every word — `:::note[Read **this**]` yields
- * `Read this`, not `Read ` (the bolded run dropped). Image alt text is
- * excluded to preserve the historical child-values-only behavior.
- */
-const textOf = (node: MdastNode): string =>
-  mdastToString(node, { includeImageAlt: false });
-
-/**
  * Satteri MDAST plugin mapping container directives (`:::note`, `:::warning`,
  * `:::tip`, …) onto Blume's `<Callout>` component. The title comes from a
  * `[label]` or a `{title="…"}` attribute; the body becomes the callout content.
@@ -71,7 +62,10 @@ export const directiveToCalloutPlugin = () => ({
     if (labelIndex !== -1) {
       const [label] = children.splice(labelIndex, 1);
       if (label) {
-        title ??= textOf(label) || undefined;
+        // Flatten the label's phrasing children so `:::note[Read **this**]`
+        // yields `Read this`; image alt is excluded (an image is not label
+        // text), matching the historical child-values-only behavior.
+        title ??= mdastToString(label, { includeImageAlt: false }) || undefined;
       }
     }
 

@@ -1,3 +1,6 @@
+// html-escaper's five-entity table is XML-safe (`'` → the numeric `&#39;`).
+import { escape as escapeXml } from "html-escaper";
+
 import {
   customStaticRoutes,
   discoverPagesSync,
@@ -5,7 +8,6 @@ import {
 } from "../astro/pages.ts";
 import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
-import { escapeXml } from "./xml.ts";
 
 /**
  * Astro's reserved error routes. A user-authored override (`pages/404.astro`,

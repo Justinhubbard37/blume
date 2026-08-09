@@ -15,7 +15,6 @@ import { createSearch } from "../src/components/layout/search/endpoint.ts";
 import type { IndexedDocument } from "../src/components/layout/search/types.ts";
 import {
   buildResult,
-  escapeHtml,
   excerptFor,
   highlight,
   matchSnippet,
@@ -252,8 +251,10 @@ describe("server-proxied search endpoint", () => {
 });
 
 describe("search text helpers", () => {
-  it("escapes every HTML-significant character", () => {
-    expect(escapeHtml(`<a href="x">'&`)).toBe(
+  it("escapes every HTML-significant character in highlighted output", () => {
+    // Escaping is html-escaper's; this pins that highlight() routes every
+    // segment through it, complete five-entity table included.
+    expect(highlight(`<a href="x">'&`, "")).toBe(
       "&lt;a href=&quot;x&quot;&gt;&#39;&amp;"
     );
   });

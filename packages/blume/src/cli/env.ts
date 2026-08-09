@@ -9,16 +9,6 @@ import { dirname, join, resolve } from "pathe";
 // that gap: it cascades `.env`/`.env.local` from the working dir up to the repo
 // root, so a monorepo can keep one `.env` at the root and every app picks it up.
 
-/**
- * Parse `.env` text into key/value pairs with dotenv — the same parser Vite
- * runs over these files at build time, so a value means the same thing to the
- * pre-boot content scan and to the built site. Notably this handles
- * multi-line double-quoted values (PEM keys), which a line-based parser
- * silently truncates.
- */
-export const parseEnv = (content: string): Record<string, string> =>
-  parse(content);
-
 /** Apply parsed vars without clobbering anything already in `process.env`. */
 const applyEnv = (parsed: Record<string, string>): void => {
   for (const [key, value] of Object.entries(parsed)) {
@@ -31,7 +21,11 @@ const applyEnv = (parsed: Record<string, string>): void => {
 const loadFile = (path: string): void => {
   try {
     if (existsSync(path)) {
-      applyEnv(parseEnv(readFileSync(path, "utf-8")));
+      // dotenv is the same parser Vite runs over these files at build time,
+      // so a value means the same thing to the pre-boot content scan and the
+      // built site — including multi-line double-quoted values (PEM keys),
+      // which a line-based parser silently truncates.
+      applyEnv(parse(readFileSync(path, "utf-8")));
     }
   } catch {
     // Env files are best-effort; a read/parse failure must not abort a build.

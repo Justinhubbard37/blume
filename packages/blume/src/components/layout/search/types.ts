@@ -56,9 +56,6 @@ export const RESULT_POOL = 48;
 const REGEXP_SPECIAL = /[$()*+.?[\\\]^{|}]/gu;
 const WORD_BREAK = /\s+/u;
 
-/** Escape HTML so untrusted text renders literally inside the dialog. */
-export const escapeHtml = (text: string): string => escape(text);
-
 /** Split a query into escaped, non-empty search tokens. */
 const queryTokens = (query: string): string[] =>
   query
@@ -76,15 +73,13 @@ const queryTokens = (query: string): string[] =>
 export const highlight = (text: string, query: string): string => {
   const tokens = queryTokens(query);
   if (tokens.length === 0) {
-    return escapeHtml(text);
+    return escape(text);
   }
   const pattern = new RegExp(`(${tokens.join("|")})`, "giu");
   return text
     .split(pattern)
     .map((segment, index) =>
-      index % 2 === 1
-        ? `<mark>${escapeHtml(segment)}</mark>`
-        : escapeHtml(segment)
+      index % 2 === 1 ? `<mark>${escape(segment)}</mark>` : escape(segment)
     )
     .join("");
 };

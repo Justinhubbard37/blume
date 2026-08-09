@@ -33,14 +33,10 @@ export interface MdxRemoteSourceOptions {
   fetchImpl?: typeof fetch;
 }
 
-/**
- * Compile the include globs once into a single matcher. picomatch is what the
- * filesystem source's tinyglobby uses under the hood, so the same `include`
- * array means the same thing on every source type — negation, character
- * classes, nested braces, and extglobs included.
- */
-const includeMatcher = (patterns: string[]): ((ref: string) => boolean) =>
-  picomatch(patterns);
+// Include globs compile through picomatch — what the filesystem source's
+// tinyglobby uses under the hood — so the same `include` array means the same
+// thing on every source type: negation, character classes, nested braces, and
+// extglobs included. Compiled once per enumeration, not per ref.
 
 /** A file to fetch: its source-local ref plus where to read it from. */
 interface RemoteRef {
@@ -91,7 +87,7 @@ const enumerateGithub = async (
     truncated?: boolean;
   };
   const prefix = base ? `${base}/` : "";
-  const included = includeMatcher(include);
+  const included = picomatch(include);
   const refs = (body.tree ?? []).flatMap((node) => {
     if (!(node.type === "blob" && node.path.startsWith(prefix))) {
       return [];
@@ -149,7 +145,7 @@ export const mdxRemoteSource = (
       return await enumerateGithub(options.github, options.include, doFetch);
     }
     const base = (options.url ?? "").replace(/\/$/u, "");
-    const included = includeMatcher(options.include);
+    const included = picomatch(options.include);
     const refs = (options.files ?? []).flatMap((ref) =>
       included(ref)
         ? [{ editUrl: `${base}/${ref}`, fetchUrl: `${base}/${ref}`, ref }]

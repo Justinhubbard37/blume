@@ -171,11 +171,9 @@ const kbd = "rounded border border-border bg-muted px-1 py-0.5 font-mono";
   <script>
     import { chromeIcons as icons } from "../../theme/chrome-icons.ts";
     import { prefixBase } from "../islands/base-path.ts";
-    import {
-      escapeHtml,
-      highlight,
-      matchSnippet,
-    } from "./search/types.ts";
+    import { escape as escapeHtml } from "html-escaper";
+
+    import { highlight, matchSnippet } from "./search/types.ts";
     import type { SearchFn, SearchHit } from "./search/types.ts";
 
     interface Selectable {

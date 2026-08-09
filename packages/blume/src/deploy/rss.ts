@@ -1,7 +1,10 @@
+// html-escaper's five-entity table is XML-safe: `'` becomes the numeric
+// `&#39;` reference rather than `&apos;`, which XML accepts equally.
+import { escape as escapeXml } from "html-escaper";
+
 import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
 import type { PageRecord } from "../core/types.ts";
-import { escapeXml } from "./xml.ts";
 
 /** A single feed entry derived from a content page. */
 export interface RssItem {

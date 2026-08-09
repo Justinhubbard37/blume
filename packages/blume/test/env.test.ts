@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 
 import { join } from "pathe";
 
-import { loadEnvFiles, parseEnv } from "../src/cli/env.ts";
+import { loadEnvFiles } from "../src/cli/env.ts";
 
 const dirs: string[] = [];
 const touched: string[] = [];
@@ -29,56 +29,72 @@ afterEach(async () => {
   );
 });
 
-describe("parseEnv", () => {
-  it("parses exports, quotes, comments, and inline equals", () => {
-    const parsed = parseEnv(
+// Parsing itself is dotenv's; these pin the behaviors Blume relies on
+// end-to-end through the file loader — the format contract with Vite (which
+// parses the identical file with the same library at build time).
+describe("loadEnvFiles parsing (dotenv contract)", () => {
+  const load = async (content: string): Promise<string> => {
+    const base = await tempDir();
+    await mkdir(join(base, ".git"), { recursive: true });
+    await writeFile(join(base, ".env"), content, "utf-8");
+    loadEnvFiles(base);
+    return base;
+  };
+
+  it("parses exports, quotes, comments, and inline equals", async () => {
+    track(
+      "BLUME_ENVTEST_EXPORTED",
+      "BLUME_ENVTEST_DQ",
+      "BLUME_ENVTEST_SQ",
+      "BLUME_ENVTEST_PLAIN",
+      "BLUME_ENVTEST_WITHEQ"
+    );
+    await load(
       [
         "# a comment",
         "",
-        "export EXPORTED=yes",
-        'DQ="line\\nbreak"',
-        "SQ='raw\\nvalue'",
-        "PLAIN=hello world",
-        "WITHEQ=a=b",
+        "export BLUME_ENVTEST_EXPORTED=yes",
+        'BLUME_ENVTEST_DQ="line\\nbreak"',
+        "BLUME_ENVTEST_SQ='raw\\nvalue'",
+        "BLUME_ENVTEST_PLAIN=hello world",
+        "BLUME_ENVTEST_WITHEQ=a=b",
         "not a valid line",
       ].join("\n")
     );
-    expect(parsed).toStrictEqual({
-      DQ: "line\nbreak",
-      EXPORTED: "yes",
-      PLAIN: "hello world",
-      SQ: "raw\\nvalue",
-      WITHEQ: "a=b",
-    });
+    expect(process.env.BLUME_ENVTEST_EXPORTED).toBe("yes");
+    expect(process.env.BLUME_ENVTEST_DQ).toBe("line\nbreak");
+    expect(process.env.BLUME_ENVTEST_SQ).toBe("raw\\nvalue");
+    expect(process.env.BLUME_ENVTEST_PLAIN).toBe("hello world");
+    expect(process.env.BLUME_ENVTEST_WITHEQ).toBe("a=b");
   });
 
-  it("keeps a multi-line double-quoted value intact (PEM keys)", () => {
+  it("keeps a multi-line double-quoted value intact (PEM keys)", async () => {
     // The reason parsing goes through dotenv: a line-based parser truncates
     // this at the first newline and hands consumers a corrupt credential.
+    track("BLUME_ENVTEST_SIGNING_KEY", "BLUME_ENVTEST_AFTER");
     const key = [
       "-----BEGIN PRIVATE KEY-----",
       "abc123",
       "def456",
       "-----END PRIVATE KEY-----",
     ].join("\n");
-    const parsed = parseEnv(`SIGNING_KEY="${key}"\nAFTER=ok\n`);
-    expect(parsed.SIGNING_KEY).toBe(key);
-    expect(parsed.AFTER).toBe("ok");
+    await load(`BLUME_ENVTEST_SIGNING_KEY="${key}"\nBLUME_ENVTEST_AFTER=ok\n`);
+    expect(process.env.BLUME_ENVTEST_SIGNING_KEY).toBe(key);
+    expect(process.env.BLUME_ENVTEST_AFTER).toBe("ok");
   });
 
-  it("strips unquoted inline comments, like dotenv and Vite", () => {
-    const parsed = parseEnv(
+  it("strips unquoted inline comments, like dotenv and Vite", async () => {
+    track("BLUME_ENVTEST_TOKEN", "BLUME_ENVTEST_KEPT", "BLUME_ENVTEST_KEPT_SQ");
+    await load(
       [
-        "TOKEN=ghp_abc123 # personal token",
-        'KEPT="value # not a comment"',
-        "KEPT_SQ='value # not a comment'",
+        "BLUME_ENVTEST_TOKEN=ghp_abc123 # personal token",
+        'BLUME_ENVTEST_KEPT="value # not a comment"',
+        "BLUME_ENVTEST_KEPT_SQ='value # not a comment'",
       ].join("\n")
     );
-    expect(parsed).toStrictEqual({
-      KEPT: "value # not a comment",
-      KEPT_SQ: "value # not a comment",
-      TOKEN: "ghp_abc123",
-    });
+    expect(process.env.BLUME_ENVTEST_TOKEN).toBe("ghp_abc123");
+    expect(process.env.BLUME_ENVTEST_KEPT).toBe("value # not a comment");
+    expect(process.env.BLUME_ENVTEST_KEPT_SQ).toBe("value # not a comment");
   });
 });
 
