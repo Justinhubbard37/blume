@@ -117,6 +117,14 @@ interface Props {
   exportPdf?: boolean;
   exportEpub?: boolean;
   feeds?: { title: string; href: string }[];
+  /**
+   * Which agent-discovery resources exist, advertised as `describedby` head
+   * links on every page — so an agent entering on a deep page (a search
+   * result, a shared link) finds the machine-readable surface without probing
+   * the site root. The HTML counterpart of the homepage-only HTTP `Link`
+   * header (see `ai/link-headers.ts`).
+   */
+  discovery?: { agentReadability: boolean; llmsTxt: boolean } | null;
   siteUrl?: string | null;
   pageType?: string;
   published?: string | Date | null;
@@ -198,6 +206,7 @@ const {
   exportPdf,
   exportEpub,
   feeds,
+  discovery,
   siteUrl,
   pageType,
   published,
@@ -311,6 +320,15 @@ const formattedLastModified =
         resolveDateFormatOptions(dateFormat)
       ).format(lastModifiedDate)
     : null;
+
+// This page's raw-Markdown mirror, advertised as a `text/markdown` alternate
+// in the head. Content routes always have one (see `markdownRoutePaths`, which
+// serves the same `route === "/" ? "/index.md" : "<route>.md"` mapping as the
+// PageActions menu); the generated changelog index — the only "bare" page — is
+// not a content route and has none.
+const markdownMirror = isBare
+  ? null
+  : withBase(page.route === "/" ? "/index.md" : `${page.route}.md`);
 
 // The hosted MCP server's absolute URL, used by the page-actions install menu.
 // Needs a configured site to be useful, so the menu is hidden without one.
@@ -427,6 +445,29 @@ const bannerKey = banner?.dismissible ? banner.key : null;
           type="application/rss+xml"
         />
       ))
+    }
+    {/* Agent discovery on every page, not just the root: an agent that enters
+        on a deep page (a search result, a shared link) never sees the homepage
+        HTTP Link header, so the head carries the same describedby links plus
+        this page's own raw-Markdown mirror. Both rels are IANA-registered. */}
+    {
+      discovery?.agentReadability && (
+        <link
+          href={withBase("/agent-readability.json")}
+          rel="describedby"
+          type="application/json"
+        />
+      )
+    }
+    {
+      discovery?.llmsTxt && (
+        <link href={withBase("/llms.txt")} rel="describedby" type="text/plain" />
+      )
+    }
+    {
+      markdownMirror && (
+        <link href={markdownMirror} rel="alternate" type="text/markdown" />
+      )
     }
     {
       structuredDataJson && (

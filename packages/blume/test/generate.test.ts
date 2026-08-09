@@ -224,6 +224,35 @@ describe("buildRuntimeData", () => {
     expect(home.editUrl).toBeNull();
   });
 
+  it("serializes the discovery flags for the per-page head links", async () => {
+    const project = await scanProject(
+      await writeProject({ "docs/index.md": "# Home\n" })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.discovery).toStrictEqual({
+      agentReadability: true,
+      llmsTxt: true,
+    });
+  });
+
+  it("carries discovery opt-outs into runtime data", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": `export default {
+  ai: { llmsTxt: false },
+  seo: { agentReadability: false },
+};
+`,
+        "docs/index.md": "# Home\n",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.discovery).toStrictEqual({
+      agentReadability: false,
+      llmsTxt: false,
+    });
+  });
+
   it("serializes dateFormat, defaulting to the long style", async () => {
     const project = await scanProject(
       await writeProject({ "docs/index.md": "# Home\n" })

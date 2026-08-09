@@ -338,7 +338,21 @@ Link: </agent-readability.json>; rel="describedby"; type="application/json",
   </index.md>; rel="alternate"; type="text/markdown"
 ```
 
-Each entry appears only when its feature is on. The `alternate` link points at the homepage's Markdown mirror — the page's own [raw Markdown](#raw-markdown) when the home route is a content page, or the synthesized `llms.txt` fallback when it's a landing page. Sites that publish APIs also get a `rel="api-catalog"` entry pointing at the [generated API catalog](#api-catalog). The header rides on every surface Blume controls: the dev server (check it with `curl -I localhost:4321`), static builds via the emitted `_headers` file (Netlify and Cloudflare), and Vercel server builds via the deploy's routing rules. Hosts that ignore `_headers` on static output (GitHub Pages, S3) can't send custom response headers at all — there, agents still find everything through `llms.txt` and `agent-readability.json` at the site root.
+Each entry appears only when its feature is on. The `alternate` link points at the homepage's Markdown mirror — the page's own [raw Markdown](#raw-markdown) when the home route is a content page, or the synthesized `llms.txt` fallback when it's a landing page. Sites that publish APIs also get a `rel="api-catalog"` entry pointing at the [generated API catalog](#api-catalog). The header rides on every surface Blume controls: the dev server (check it with `curl -I localhost:4321`), static builds via the emitted `_headers` file (Netlify and Cloudflare), and Vercel server builds via the deploy's routing rules.
+
+Not every agent enters through the root, though — one following a search result or a shared link lands on a deep page and never sees the homepage header. So every rendered page also carries the same discovery links in its HTML `<head>`, using the same IANA-registered relations:
+
+```html
+<link
+  rel="describedby"
+  href="/agent-readability.json"
+  type="application/json"
+/>
+<link rel="describedby" href="/llms.txt" type="text/plain" />
+<link rel="alternate" href="/docs/example.md" type="text/markdown" />
+```
+
+Here the `alternate` link points at _that page's own_ [raw-Markdown mirror](#raw-markdown), so an agent can jump straight from the HTML it landed on to the token-efficient version. Because the head links travel with the prerendered HTML, they also work on hosts that ignore `_headers` and can't send custom response headers at all (GitHub Pages, S3) — no matter which page the agent enters on.
 
 ### API catalog
 

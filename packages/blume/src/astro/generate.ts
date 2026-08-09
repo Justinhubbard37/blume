@@ -1160,6 +1160,10 @@ export const buildRuntimeData = (project: BlumeProject): string => {
       codeWrap: config.markdown.code.wrap,
       dateFormat: config.dateFormat,
       description: config.description,
+      discovery: {
+        agentReadability: config.seo.agentReadability,
+        llmsTxt: config.ai.llmsTxt.enabled,
+      },
       favicon: resolveFavicon(project),
       feedback: config.feedback,
       i18n: i18n

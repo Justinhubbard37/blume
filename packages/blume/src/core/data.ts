@@ -107,6 +107,13 @@ export interface BlumeDataConfig {
   /** `dateFormat`: `Intl.DateTimeFormat` options for the date stamps. */
   dateFormat: ResolvedConfig["dateFormat"];
   description: string | undefined;
+  /**
+   * Which agent-discovery resources exist for the layout to advertise in every
+   * page's `<head>` (`seo.agentReadability`, `ai.llmsTxt.enabled`) — the HTML
+   * counterpart of the homepage-only HTTP `Link` header, for agents that enter
+   * on a deep page (see `ai/link-headers.ts`).
+   */
+  discovery: { agentReadability: boolean; llmsTxt: boolean };
   favicon: BlumeFavicon;
   feedback: boolean;
   i18n: BlumeDataI18n | null;
