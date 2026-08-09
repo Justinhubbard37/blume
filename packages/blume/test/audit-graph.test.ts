@@ -316,24 +316,18 @@ describe("parseSitemap", () => {
 });
 
 describe("parseRobots", () => {
-  it("reads disallow rules for the wildcard agent only", () => {
-    const doc = parseRobots(
-      "/dist/robots.txt",
-      [
-        "# a comment",
-        "User-agent: *",
-        "Disallow: /private",
-        "User-agent: Googlebot",
-        "Disallow: /google-only",
-        "",
-        "Sitemap: https://x.dev/sitemap.xml",
-      ].join("\n")
-    );
-    // A rule scoped to another agent says nothing about how our pages are
-    // indexed, so it must not be reported against them.
-    expect(doc.disallow).toEqual(["/private"]);
+  it("collects sitemap declarations and keeps the raw text for matching", () => {
+    const text = [
+      "# a comment",
+      "User-agent: *",
+      "Disallow: /private",
+      "",
+      "Sitemap: https://x.dev/sitemap.xml",
+    ].join("\n");
+    const doc = parseRobots("/dist/robots.txt", text);
     expect(doc.sitemaps).toEqual(["https://x.dev/sitemap.xml"]);
     expect(doc.invalid).toEqual([]);
+    expect(doc.raw).toBe(text);
   });
 
   it("records a line that is not a directive", () => {

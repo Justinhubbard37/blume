@@ -135,8 +135,12 @@ export interface LlmsDoc {
 /** A parsed `robots.txt`. */
 export interface RobotsDoc {
   file: string;
-  /** `Disallow:` paths for `User-agent: *`. */
-  disallow: string[];
+  /**
+   * The file's full text. Rule matching runs through robots-parser (which
+   * owns longest-match Allow/Disallow semantics), so the raw text is the
+   * source of truth rather than a pre-extracted rule list.
+   */
+  raw: string;
   /** `Sitemap:` declarations. */
   sitemaps: string[];
   /** Lines that aren't a recognized directive, with their 1-based line number. */

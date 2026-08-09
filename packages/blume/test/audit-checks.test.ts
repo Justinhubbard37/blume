@@ -8,7 +8,7 @@ import { indexabilityChecks } from "../src/audit/checks/indexability.ts";
 import { linkChecks } from "../src/audit/checks/links.ts";
 import { llmsChecks } from "../src/audit/checks/llms.ts";
 import { redirectChecks } from "../src/audit/checks/redirects.ts";
-import { disallowMatches, robotsChecks } from "../src/audit/checks/robots.ts";
+import { robotsChecks } from "../src/audit/checks/robots.ts";
 import { sitemapChecks } from "../src/audit/checks/sitemap.ts";
 import {
   socialChecks,
@@ -969,12 +969,20 @@ describe("sitemap checks", () => {
 });
 
 const robotsDoc = (extra = {}) => ({
-  disallow: [],
   file: "/dist/robots.txt",
   invalid: [],
+  raw: "User-agent: *\nDisallow:\n",
   sitemaps: [`${SITE}/sitemap.xml`],
   ...extra,
 });
+
+/** A context whose sitemap advertises `urls` against robots text `raw`. */
+const robotsCtx = (raw: string, urls: string[]) =>
+  context({
+    robots: robotsDoc({ raw }),
+    site: SITE,
+    sitemap: { bytes: 100, file: "/dist/sitemap.xml", urls },
+  });
 
 describe("robots checks", () => {
   const doc = robotsDoc;
@@ -1006,56 +1014,65 @@ describe("robots checks", () => {
   });
 
   it("reports a rule that blocks a page the sitemap advertises", () => {
-    const ctx = context({
-      pages: [snapshot({ url: "/docs/x" })],
-      robots: doc({ disallow: ["/docs/"] }),
-      site: SITE,
-      sitemap: {
-        bytes: 100,
-        file: "/dist/sitemap.xml",
-        urls: [`${SITE}/docs/x`],
-      },
-    });
+    const ctx = robotsCtx("User-agent: *\nDisallow: /docs/\n", [
+      `${SITE}/docs/x`,
+    ]);
     expect(run(robotsChecks, ctx)).toContain("ROBOTS_DISALLOWS_INDEXABLE");
   });
 
   it("matches a trailing-slash rule against the loc as served", () => {
     // `Disallow: /page/` is a literal prefix — normalizing the slash away
     // before matching would silently miss it.
-    const ctx = context({
-      pages: [snapshot({ url: "/page" })],
-      robots: doc({ disallow: ["/page/"] }),
-      site: SITE,
-      sitemap: {
-        bytes: 100,
-        file: "/dist/sitemap.xml",
-        urls: [`${SITE}/page/`],
-      },
-    });
+    const ctx = robotsCtx("User-agent: *\nDisallow: /page/\n", [
+      `${SITE}/page/`,
+    ]);
     expect(run(robotsChecks, ctx)).toContain("ROBOTS_DISALLOWS_INDEXABLE");
   });
 });
 
-describe("disallowMatches", () => {
-  it("matches a prefix", () => {
-    expect(disallowMatches("/docs", "/docs/x")).toBe(true);
-    expect(disallowMatches("/api", "/docs/x")).toBe(false);
+describe("robots rule matching (robots-parser semantics)", () => {
+  const blocked = (raw: string, url: string): boolean =>
+    run(robotsChecks, robotsCtx(raw, [url])).includes(
+      "ROBOTS_DISALLOWS_INDEXABLE"
+    );
+
+  it("matches prefixes, wildcards, and end anchors", () => {
+    expect(blocked("User-agent: *\nDisallow: /docs\n", `${SITE}/docs/x`)).toBe(
+      true
+    );
+    expect(blocked("User-agent: *\nDisallow: /api\n", `${SITE}/docs/x`)).toBe(
+      false
+    );
+    expect(
+      blocked("User-agent: *\nDisallow: /*/private\n", `${SITE}/a/private`)
+    ).toBe(true);
+    expect(blocked("User-agent: *\nDisallow: /docs$\n", `${SITE}/docs`)).toBe(
+      true
+    );
+    expect(blocked("User-agent: *\nDisallow: /docs$\n", `${SITE}/docs/x`)).toBe(
+      false
+    );
   });
 
-  it("honors a wildcard", () => {
-    expect(disallowMatches("/*/private", "/a/private")).toBe(true);
-    expect(disallowMatches("/*/private", "/a/public")).toBe(false);
+  it("lets a longer Allow win over a broad Disallow", () => {
+    // The common lockdown pattern: block everything, allow the docs. The
+    // previous hand-rolled matcher never read Allow, so every sitemap URL
+    // was flagged.
+    const raw = "User-agent: *\nDisallow: /\nAllow: /docs/\n";
+    expect(blocked(raw, `${SITE}/docs/x`)).toBe(false);
+    expect(blocked(raw, `${SITE}/private`)).toBe(true);
   });
 
-  it("honors an end anchor", () => {
-    expect(disallowMatches("/docs$", "/docs")).toBe(true);
-    expect(disallowMatches("/docs$", "/docs/x")).toBe(false);
+  it("applies consecutive user-agent lines as one group", () => {
+    // `*` and `Googlebot` head the same group, so its rules bind `*` too —
+    // the previous parser only honored the last user-agent line.
+    const raw = "User-agent: *\nUser-agent: Googlebot\nDisallow: /x\n";
+    expect(blocked(raw, `${SITE}/x`)).toBe(true);
   });
 
-  it("treats a wildcard before the anchor as a plain prefix", () => {
-    // `/docs*$` — the `*` absorbs the rest, so the anchor is always satisfied.
-    expect(disallowMatches("/docs*$", "/docs/api")).toBe(true);
-    expect(disallowMatches("/docs*$", "/blog")).toBe(false);
+  it("ignores rules scoped to another agent", () => {
+    const raw = "User-agent: Googlebot\nDisallow: /x\n";
+    expect(blocked(raw, `${SITE}/x`)).toBe(false);
   });
 });
 

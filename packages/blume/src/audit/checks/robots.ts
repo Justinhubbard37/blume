@@ -1,40 +1,16 @@
+import robotsParser from "robots-parser";
+
 import type { Diagnostic } from "../../core/types.ts";
 import { finding } from "../catalog.ts";
 import type { CheckModule } from "../types.ts";
 import { normalizePath } from "../url.ts";
 
 /**
- * Whether a robots.txt `Disallow` value covers a path. robots.txt matching is
- * prefix-based, with `*` as a wildcard and `$` anchoring the end.
+ * robots-parser needs full URLs on a single origin; the origin itself is
+ * irrelevant to path matching, so a fixed placeholder keeps the check
+ * independent of whether the project configured `deployment.site`.
  */
-export const disallowMatches = (rule: string, path: string): boolean => {
-  const anchored = rule.endsWith("$");
-  const pattern = anchored ? rule.slice(0, -1) : rule;
-  const parts = pattern.split("*");
-
-  let cursor = 0;
-  for (const [index, part] of parts.entries()) {
-    if (part === "") {
-      continue;
-    }
-    // The first segment is anchored to the start of the path (robots.txt rules
-    // are prefix matches); every later segment may appear anywhere after the
-    // previous one, which is what makes `*` a wildcard.
-    let at: number;
-    if (index === 0) {
-      at = path.startsWith(part) ? 0 : -1;
-    } else {
-      at = path.indexOf(part, cursor);
-    }
-    if (at === -1) {
-      return false;
-    }
-    cursor = at + part.length;
-  }
-  // A wildcard just before `$` (`/docs*$`) absorbs the rest of the path, so
-  // the anchor is already satisfied by any prefix match.
-  return anchored && !pattern.endsWith("*") ? cursor === path.length : true;
-};
+const MATCH_ORIGIN = "https://robots-audit.invalid";
 
 /**
  * robots.txt: is it there, is it well-formed, does it point at the sitemap, and
@@ -82,8 +58,13 @@ export const robotsChecks: CheckModule = {
     }
 
     // A page can't be both blocked from crawling and advertised for indexing.
-    // Checking the disallow rules against the sitemap (rather than against every
-    // built file) keeps this to the pages the site actually wants indexed.
+    // Checking the rules against the sitemap (rather than against every built
+    // file) keeps this to the pages the site actually wants indexed.
+    // robots-parser resolves Allow/Disallow by longest match, so the common
+    // `Disallow: /` + `Allow: /docs/` pattern doesn't flag every page, and
+    // consecutive User-agent lines form one group as the spec requires.
+    const parser = robotsParser(`${MATCH_ORIGIN}/robots.txt`, robots.raw);
+    const lines = robots.raw.split(/\r?\n/u);
     for (const loc of context.sitemap?.urls ?? []) {
       let pathname: string;
       try {
@@ -94,15 +75,15 @@ export const robotsChecks: CheckModule = {
       // Match the pathname as served: robots.txt rules are literal prefixes,
       // so `Disallow: /page/` must see the trailing slash to match.
       const path = normalizePath(pathname);
-      const rule = robots.disallow.find((entry) =>
-        disallowMatches(entry, pathname)
-      );
-      if (rule) {
+      const url = `${MATCH_ORIGIN}${pathname}`;
+      if (parser.isDisallowed(url, "*")) {
+        const line = parser.getMatchingLineNumber(url, "*");
+        const rule = line > 0 ? lines[line - 1]?.trim() : undefined;
         found.push(
           finding(
             "BLUME_AUDIT_ROBOTS_DISALLOWS_INDEXABLE",
             { file: robots.file, url: path },
-            `robots.txt "Disallow: ${rule}" blocks ${path}, which sitemap.xml advertises.`
+            `robots.txt "${rule ?? "Disallow"}" blocks ${path}, which sitemap.xml advertises.`
           )
         );
       }

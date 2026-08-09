@@ -66,7 +66,7 @@ describe("crawlStaticDir", () => {
     expect(result.files.get("/img/logo.png")).toBe(6);
     expect(result.sitemap?.urls).toEqual(["https://x.dev/"]);
     expect(result.sitemap?.bytes).toBeGreaterThan(0);
-    expect(result.robots?.disallow).toEqual(["/private"]);
+    expect(result.robots?.raw).toContain("Disallow: /private");
   });
 
   it("reads llms.txt alongside the sitemap and robots.txt", async () => {

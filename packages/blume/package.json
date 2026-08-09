@@ -108,6 +108,7 @@
     "picomatch": "^4.0.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "robots-parser": "^3.0.1",
     "satteri": "^0.9.5",
     "sharp": "^0.35.3",
     "shiki": "^4.2.0",

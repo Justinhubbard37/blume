@@ -153,12 +153,14 @@ export const parseLlms = (file: string, text: string): LlmsDoc => {
 
 const ROBOTS_DIRECTIVE = /^(?<field>[a-z-]+)\s*:\s*(?<value>.*)$/iu;
 
-/** Parse `robots.txt` into the directives the audit cares about. */
+/**
+ * Parse `robots.txt` into the pieces the audit cares about. Sitemap
+ * declarations and a not-a-directive lint come from a line scan; rule
+ * *matching* is robots-parser's job at check time (see `checks/robots.ts`),
+ * so the raw text rides along instead of a pre-extracted rule list.
+ */
 export const parseRobots = (file: string, text: string): RobotsDoc => {
-  const doc: RobotsDoc = { disallow: [], file, invalid: [], sitemaps: [] };
-  // Only `User-agent: *` rules bind the crawlers we're auditing for; a block
-  // scoped to some other agent isn't a finding about our indexable pages.
-  let appliesToAll = false;
+  const doc: RobotsDoc = { file, invalid: [], raw: text, sitemaps: [] };
   for (const [index, raw] of text.split(/\r?\n/u).entries()) {
     const line = raw.trim();
     if (line === "" || line.startsWith("#")) {
@@ -171,11 +173,7 @@ export const parseRobots = (file: string, text: string): RobotsDoc => {
     }
     const field = (match.groups?.field ?? "").toLowerCase();
     const value = (match.groups?.value ?? "").trim();
-    if (field === "user-agent") {
-      appliesToAll = value === "*";
-    } else if (field === "disallow" && appliesToAll && value) {
-      doc.disallow.push(value);
-    } else if (field === "sitemap" && value) {
+    if (field === "sitemap" && value) {
       doc.sitemaps.push(value);
     }
   }
