@@ -97,6 +97,7 @@
     "github-slugger": "^2.0.0",
     "gray-matter": "^4.0.3",
     "html-escaper": "^3.0.3",
+    "image-size": "^2.0.2",
     "jiti": "^2.4.0",
     "js-yaml": "^4.1.0",
     "katex": "^0.18.1",

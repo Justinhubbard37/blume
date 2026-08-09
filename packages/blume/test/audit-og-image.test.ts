@@ -56,11 +56,28 @@ const gif = (width: number, height: number): Buffer => {
   return bytes;
 };
 
+/** A minimal extended-format WebP: RIFF container + VP8X chunk with dims. */
+const webp = (width: number, height: number): Buffer => {
+  const bytes = Buffer.alloc(30);
+  bytes.write("RIFF", 0, "latin1");
+  bytes.writeUInt32LE(22, 4);
+  bytes.write("WEBP", 8, "latin1");
+  bytes.write("VP8X", 12, "latin1");
+  bytes.writeUInt32LE(10, 16);
+  bytes.writeUIntLE(width - 1, 24, 3);
+  bytes.writeUIntLE(height - 1, 27, 3);
+  return bytes;
+};
+
 describe("imageSize", () => {
   it("reads PNG, JPEG, and GIF headers", () => {
     expect(imageSize(png(1200, 630))).toEqual({ height: 630, width: 1200 });
     expect(imageSize(jpeg(800, 400))).toEqual({ height: 400, width: 800 });
     expect(imageSize(gif(120, 60))).toEqual({ height: 60, width: 120 });
+  });
+
+  it("reads WebP — the format the previous hand parser went silent on", () => {
+    expect(imageSize(webp(1200, 630))).toEqual({ height: 630, width: 1200 });
   });
 
   it("returns null for unknown formats and truncated files", () => {
