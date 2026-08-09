@@ -6,10 +6,8 @@ import {
   readFile,
   readlink,
   realpath,
-  rename,
   rm,
   symlink,
-  writeFile,
 } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -33,6 +31,7 @@ import type {
   BlumeLogo,
 } from "../core/data.ts";
 import { BlumeError } from "../core/diagnostics.ts";
+import { writeTextAtomic } from "../core/fs-atomic.ts";
 import { EN_UI, resolveUIStrings } from "../core/i18n-ui.ts";
 import { resolveFallbackLocale } from "../core/i18n.ts";
 import {
@@ -762,17 +761,9 @@ const writeIfChanged = async (
   if (existing === content) {
     return false;
   }
-  await mkdir(dirname(path), { recursive: true });
-  // Write to a temp file then atomically rename into place, so a watching dev
-  // server never observes a missing or half-written file mid-regeneration.
-  const tmp = `${path}.${process.pid}.tmp`;
-  await writeFile(tmp, content, "utf-8");
-  try {
-    await rename(tmp, path);
-  } catch (error) {
-    await rm(tmp, { force: true });
-    throw error;
-  }
+  // Atomic temp-write + rename, so a watching dev server never observes a
+  // missing or half-written file mid-regeneration.
+  await writeTextAtomic(path, content);
   return true;
 };
 

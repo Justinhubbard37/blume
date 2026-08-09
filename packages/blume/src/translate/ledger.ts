@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 
-import { dirname, join } from "pathe";
+import { join } from "pathe";
 import { z } from "zod";
+
+import { writeTextAtomic } from "../core/fs-atomic.ts";
 
 /**
  * The committed translation ledger: which source files have been translated
@@ -98,15 +100,7 @@ export const writeLedger = async (
   if (existing === content) {
     return false;
   }
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.tmp`;
-  await writeFile(tmp, content, "utf-8");
-  try {
-    await rename(tmp, path);
-  } catch (error) {
-    await rm(tmp, { force: true });
-    throw error;
-  }
+  await writeTextAtomic(path, content);
   return true;
 };
 

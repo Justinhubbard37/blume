@@ -1,18 +1,12 @@
 import { existsSync } from "node:fs";
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
-import { dirname, join } from "pathe";
+import { join } from "pathe";
 
 import { AGENTS, WINDOWS_COMMAND_NOT_FOUND } from "../audit/agent.ts";
 import type { AgentKind } from "../audit/agent.ts";
+import { writeTextAtomic } from "../core/fs-atomic.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
 import type { LocaleConfig } from "../core/schema.ts";
 import type { Diagnostic } from "../core/types.ts";
@@ -94,19 +88,6 @@ interface RunContext {
 /** The root directory's key in a meta-titles prompt (an empty key is opaque). */
 const metaDirKey = (dir: string): string => (dir === "" ? "." : dir);
 
-/** Write atomically (temp + rename) so a watcher never sees a partial file. */
-const writeFileAtomic = async (path: string, text: string): Promise<void> => {
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.tmp`;
-  await writeFile(tmp, text, "utf-8");
-  try {
-    await rename(tmp, path);
-  } catch (error) {
-    await rm(tmp, { force: true });
-    throw error;
-  }
-};
-
 /**
  * One headless agent call. A Windows shell launch reports a missing executable
  * through exit code 9009 instead of a spawn error, so that is normalized to
@@ -172,7 +153,7 @@ const runPageItem = async (
   if (!validated.ok) {
     return done("failed", validated.reason, output.costUsd);
   }
-  await writeFileAtomic(item.targetPath, validated.text);
+  await writeTextAtomic(item.targetPath, validated.text);
   stampLedger(ledger, item.sourceRel, item.locale, hashSource(sourceText));
   return done("translated", undefined, output.costUsd);
 };
@@ -218,7 +199,7 @@ const runMetaItem = async (
     // Each entry writes and stamps independently, so a partially usable reply
     // still lands the titles it did translate.
     // oxlint-disable-next-line no-await-in-loop
-    await writeFileAtomic(
+    await writeTextAtomic(
       entry.targetPath,
       generateMetaModule(entry.meta.data, translated)
     );
