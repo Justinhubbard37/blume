@@ -1,3 +1,6 @@
+import { colors } from "consola/utils";
+import type { ColorFunction } from "consola/utils";
+
 import { AGENTS } from "../audit/agent.ts";
 import type { AgentKind } from "../audit/agent.ts";
 import { countBySeverity } from "../core/diagnostics.ts";
@@ -15,23 +18,15 @@ import type {
 } from "./work-list.ts";
 
 /**
- * The live progress UI, hand-rolled ANSI (no new dependencies), matching the
- * eval report's palette. Render functions are pure; the renderer takes an
- * injectable `write`/`now` so tests never touch a real TTY or clock. The
- * command sends everything here to stderr via the raw `write` — never
- * `logger.info`, which consola drops in test and CI environments.
+ * The live progress UI, colored via consola's `colors` (which honors
+ * NO_COLOR/FORCE_COLOR and TTY detection), matching the eval report's palette.
+ * Render functions are pure; the renderer takes an injectable `write`/`now` so
+ * tests never touch a real TTY or clock. The command sends everything here to
+ * stderr via the raw `write` — never `logger.info`, which consola drops in
+ * test and CI environments.
  */
 
 const ESC = String.fromCodePoint(27);
-const COLORS = {
-  bold: `${ESC}[1m`,
-  cyan: `${ESC}[36m`,
-  dim: `${ESC}[2m`,
-  green: `${ESC}[32m`,
-  red: `${ESC}[31m`,
-  reset: `${ESC}[0m`,
-  yellow: `${ESC}[33m`,
-};
 
 const GLYPH: Record<TranslateItemStatus, string> = {
   failed: "✖",
@@ -39,10 +34,10 @@ const GLYPH: Record<TranslateItemStatus, string> = {
   translated: "✔",
 };
 
-const STATUS_COLOR: Record<TranslateItemStatus, string> = {
-  failed: COLORS.red,
-  partial: COLORS.yellow,
-  translated: COLORS.green,
+const STATUS_COLOR: Record<TranslateItemStatus, ColorFunction> = {
+  failed: colors.red,
+  partial: colors.yellow,
+  translated: colors.green,
 };
 
 export const SPINNER_FRAMES = [
@@ -96,23 +91,23 @@ export const spinnerLine = (
 ): string => {
   const first = active[0] as WorkItem;
   const more = active.length > 1 ? ` (+${active.length - 1} more)` : "";
-  return `  ${COLORS.cyan}${SPINNER_FRAMES[frame % SPINNER_FRAMES.length]}${COLORS.reset} ${itemLabel(first)}${more} ${COLORS.dim}${done}/${total}${COLORS.reset}`;
+  return `  ${colors.cyan(SPINNER_FRAMES[frame % SPINNER_FRAMES.length] as string)} ${itemLabel(first)}${more} ${colors.dim(`${done}/${total}`)}`;
 };
 
 /** The permanent line printed when an item finishes. */
 export const itemEndLine = (result: TranslateItemResult): string => {
   const color = STATUS_COLOR[result.status];
-  const glyph = `${color}${GLYPH[result.status]}${COLORS.reset}`;
+  const glyph = color(GLYPH[result.status]);
   const label = itemLabel(result.item);
   if (result.status === "translated") {
     const cells = [seconds(result.durationMs), money(result.costUsd)]
       .filter((cell) => cell !== "")
       .join(" ");
-    return `  ${glyph} ${label} ${COLORS.dim}${cells}${COLORS.reset}`;
+    return `  ${glyph} ${label} ${colors.dim(cells)}`;
   }
   const word = result.status === "partial" ? "partial" : "failed";
-  return `  ${glyph} ${label} ${color}${word}${COLORS.reset}${
-    result.detail ? `${COLORS.dim}: ${result.detail}${COLORS.reset}` : ""
+  return `  ${glyph} ${label} ${color(word)}${
+    result.detail ? colors.dim(`: ${result.detail}`) : ""
   }`;
 };
 
@@ -122,7 +117,7 @@ export const translateHeaderLine = (
   localeCount: number,
   agent: AgentKind
 ): string =>
-  `${COLORS.bold}blume translate${COLORS.reset}  ${itemCount} item(s) · ${localeCount} locale(s) · ${AGENTS[agent].name}`;
+  `${colors.bold("blume translate")}  ${itemCount} item(s) · ${localeCount} locale(s) · ${AGENTS[agent].name}`;
 
 /**
  * `Translated 11 files into 2 locales · 1 failed · 2 adopted · 8 already up to
@@ -148,8 +143,7 @@ export const translateSummaryLine = (
 /** Dim warnings for work-list diagnostics (e.g. a factory-form meta file). */
 export const diagnosticLines = (diagnostics: Diagnostic[]): string[] =>
   diagnostics.map(
-    (diagnostic) =>
-      `  ${COLORS.yellow}⚠${COLORS.reset} ${COLORS.dim}${diagnostic.message}${COLORS.reset}`
+    (diagnostic) => `  ${colors.yellow("⚠")} ${colors.dim(diagnostic.message)}`
   );
 
 /** Every (source, locale, status) drift row in a work list, pages then meta. */
@@ -176,11 +170,11 @@ const driftRows = (
 export const checkLines = (workList: TranslateWorkList): string[] => [
   ...driftRows(workList).map(
     (row) =>
-      `  ${COLORS.red}✖${COLORS.reset} ${row.sourceRel} → ${row.locale} ${COLORS.dim}${row.status}${COLORS.reset}`
+      `  ${colors.red("✖")} ${row.sourceRel} → ${row.locale} ${colors.dim(row.status)}`
   ),
   ...workList.untracked.map(
     (entry) =>
-      `  ${COLORS.dim}⊘ ${entry.sourceRel} → ${entry.locale} untracked (adopted by the next translate run)${COLORS.reset}`
+      `  ${colors.dim(`⊘ ${entry.sourceRel} → ${entry.locale} untracked (adopted by the next translate run)`)}`
   ),
 ];
 

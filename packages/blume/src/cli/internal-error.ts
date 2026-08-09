@@ -1,10 +1,6 @@
-import { getBlumeVersion } from "../core/version.ts";
+import { colors } from "consola/utils";
 
-const ESC = String.fromCodePoint(27);
-const DIM = `${ESC}[2m`;
-const RED = `${ESC}[31m`;
-const BOLD = `${ESC}[1m`;
-const RESET = `${ESC}[0m`;
+import { getBlumeVersion } from "../core/version.ts";
 
 const ISSUES_URL = "https://github.com/haydenbleasel/blume/issues";
 
@@ -40,7 +36,7 @@ export const remapBlumeStack = (stack: string): string =>
 export const reportInternalError = (error: unknown): void => {
   const err = error instanceof Error ? error : new Error(String(error));
   const lines = [
-    `${RED}${BOLD}BLUME_INTERNAL${RESET} An unexpected error occurred.`,
+    `${colors.red(colors.bold("BLUME_INTERNAL"))} An unexpected error occurred.`,
     `  ${err.message}`,
   ];
 
@@ -52,15 +48,19 @@ export const reportInternalError = (error: unknown): void => {
     .map((line) => line.trim())
     .filter(Boolean);
   if (stack.length > 0) {
-    lines.push("", `${DIM}${stack.join("\n")}${RESET}`);
+    lines.push("", colors.dim(stack.join("\n")));
   }
 
   lines.push(
     "",
     "This is likely a bug in Blume. Please report it with the details below:",
-    `  ${DIM}Blume:    ${getBlumeVersion()}`,
-    `  Node:     ${process.version}`,
-    `  Platform: ${process.platform} ${process.arch}${RESET}`,
+    colors.dim(
+      [
+        `  Blume:    ${getBlumeVersion()}`,
+        `  Node:     ${process.version}`,
+        `  Platform: ${process.platform} ${process.arch}`,
+      ].join("\n")
+    ),
     `  ${ISSUES_URL}`
   );
 

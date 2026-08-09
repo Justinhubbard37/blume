@@ -1,22 +1,13 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
+import { colors } from "consola/utils";
+import type { ColorFunction } from "consola/utils";
 import { join, relative } from "pathe";
 
 import { AGENTS } from "../audit/agent.ts";
 import { countBySeverity } from "../core/diagnostics.ts";
 import type { EvalResult, QuestionResult, QuestionStatus } from "./run.ts";
-
-const ESC = String.fromCodePoint(27);
-const COLORS = {
-  bold: `${ESC}[1m`,
-  cyan: `${ESC}[36m`,
-  dim: `${ESC}[2m`,
-  green: `${ESC}[32m`,
-  red: `${ESC}[31m`,
-  reset: `${ESC}[0m`,
-  yellow: `${ESC}[33m`,
-};
 
 const GLYPH: Record<QuestionStatus, string> = {
   error: "!",
@@ -25,11 +16,11 @@ const GLYPH: Record<QuestionStatus, string> = {
   skip: "⊘",
 };
 
-const STATUS_COLOR: Record<QuestionStatus, string> = {
-  error: COLORS.yellow,
-  fail: COLORS.red,
-  pass: COLORS.green,
-  skip: COLORS.dim,
+const STATUS_COLOR: Record<QuestionStatus, ColorFunction> = {
+  error: colors.yellow,
+  fail: colors.red,
+  pass: colors.green,
+  skip: colors.dim,
 };
 
 /** Longest id gets the room; everything shorter aligns to it. */
@@ -52,17 +43,18 @@ const duration = (ms: number): string => {
 /** One question's progress/report line: glyph, id, status, score, time, cost. */
 export const questionLine = (result: QuestionResult): string => {
   const color = STATUS_COLOR[result.status];
-  const glyph = `${color}${GLYPH[result.status]}${COLORS.reset}`;
+  const glyph = color(GLYPH[result.status]);
   const id = result.id.padEnd(ID_PAD);
   if (result.status === "skip") {
-    return `  ${glyph} ${id} ${COLORS.dim}skipped${COLORS.reset}`;
+    return `  ${glyph} ${id} ${colors.dim("skipped")}`;
   }
   const score = result.score === undefined ? "" : result.score.toFixed(2);
+  const cost = money(result.costUsd);
   const cells = [
-    `${color}${result.status}${COLORS.reset}`,
+    color(result.status),
     score,
-    `${COLORS.dim}${seconds(result.durationMs)}${COLORS.reset}`,
-    `${COLORS.dim}${money(result.costUsd)}${COLORS.reset}`,
+    colors.dim(seconds(result.durationMs)),
+    cost === "" ? "" : colors.dim(cost),
   ]
     .filter((cell) => cell !== "")
     .join("  ");
@@ -77,17 +69,17 @@ export const questionDetails = (
   const lines: string[] = [];
   if (result.status === "fail") {
     for (const fact of result.missing) {
-      lines.push(`      ${COLORS.dim}missing: ${fact}${COLORS.reset}`);
+      lines.push(`      ${colors.dim(`missing: ${fact}`)}`);
     }
   }
   if (result.status === "error" && result.detail) {
-    lines.push(`      ${COLORS.dim}${result.detail}${COLORS.reset}`);
+    lines.push(`      ${colors.dim(result.detail)}`);
   }
   if (verbose && result.answer && result.status !== "pass") {
     lines.push(
       ...result.answer
         .split("\n")
-        .map((line) => `      ${COLORS.dim}> ${line}${COLORS.reset}`)
+        .map((line) => `      ${colors.dim(`> ${line}`)}`)
     );
   }
   return lines;
@@ -109,11 +101,11 @@ export const summaryLine = (result: EvalResult): string => {
 
 /** The header line the command prints before the first question runs. */
 export const headerLine = (total: number, agent: EvalResult["agent"]): string =>
-  `${COLORS.bold}blume eval${COLORS.reset}  ${total} question(s) · ${AGENTS[agent].name}`;
+  `${colors.bold("blume eval")}  ${total} question(s) · ${AGENTS[agent].name}`;
 
 /** The dim announce line while a question's agents run. */
 export const startLine = (id: string, index: number, total: number): string =>
-  `  ${COLORS.dim}▸ ${id} (${index + 1}/${total})${COLORS.reset}`;
+  `  ${colors.dim(`▸ ${id} (${index + 1}/${total})`)}`;
 
 /** `fix:` pointers for failed questions, naming the file that resolves each. */
 export const fixLines = (result: EvalResult, root: string): string[] =>
@@ -123,7 +115,7 @@ export const fixLines = (result: EvalResult, root: string): string[] =>
       const site = finding.file
         ? `${relative(root, finding.file)}${finding.line ? `:${finding.line}` : ""}`
         : "";
-      return `  ${COLORS.cyan}fix:${COLORS.reset} ${site} ${COLORS.dim}${finding.message}${COLORS.reset}`;
+      return `  ${colors.cyan("fix:")} ${site} ${colors.dim(finding.message)}`;
     });
 
 /** Dim warnings for route hints that no longer match a page. */
@@ -134,7 +126,7 @@ export const warningLines = (result: EvalResult, root: string): string[] =>
       const site = finding.file
         ? ` ${relative(root, finding.file)}${finding.line ? `:${finding.line}` : ""}`
         : "";
-      return `  ${COLORS.yellow}⚠${COLORS.reset}${site} ${COLORS.dim}${finding.message}${COLORS.reset}`;
+      return `  ${colors.yellow("⚠")}${site} ${colors.dim(finding.message)}`;
     });
 
 /** The human report, written to stderr by the command. */

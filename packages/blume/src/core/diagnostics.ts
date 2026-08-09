@@ -1,3 +1,4 @@
+import { colors } from "consola/utils";
 import { relative } from "pathe";
 import type { ZodError } from "zod";
 
@@ -196,25 +197,14 @@ export const diagnosticsFromZod = (
     options
   );
 
-const ESC = String.fromCodePoint(27);
-const COLORS = {
-  blue: `${ESC}[34m`,
-  bold: `${ESC}[1m`,
-  cyan: `${ESC}[36m`,
-  dim: `${ESC}[2m`,
-  red: `${ESC}[31m`,
-  reset: `${ESC}[0m`,
-  yellow: `${ESC}[33m`,
-};
-
-const severityColor = (severity: Diagnostic["severity"]): string => {
+const severityColor = (severity: Diagnostic["severity"]) => {
   if (severity === "error") {
-    return COLORS.red;
+    return colors.red;
   }
   if (severity === "warning") {
-    return COLORS.yellow;
+    return colors.yellow;
   }
-  return COLORS.blue;
+  return colors.blue;
 };
 
 /** Format a single diagnostic for terminal output. */
@@ -224,14 +214,14 @@ export const formatDiagnostic = (
 ): string => {
   const color = severityColor(diagnostic.severity);
   const lines: string[] = [
-    `${color}${COLORS.bold}${diagnostic.code}${COLORS.reset} ${diagnostic.message}`,
+    `${color(colors.bold(diagnostic.code))} ${diagnostic.message}`,
   ];
 
   // An audit finding is about a built URL, and names the source file that fixes
   // it as a second line ("at /docs/api" / "in docs/api.mdx:3:2"). Everything
   // else is about a file alone, and keeps the original single `at file` line.
   if (diagnostic.url) {
-    lines.push(`  ${COLORS.dim}at ${diagnostic.url}${COLORS.reset}`);
+    lines.push(`  ${colors.dim(`at ${diagnostic.url}`)}`);
   }
   if (diagnostic.file) {
     const location = root ? relative(root, diagnostic.file) : diagnostic.file;
@@ -240,15 +230,15 @@ export const formatDiagnostic = (
     const position =
       diagnostic.line === undefined ? "" : `:${diagnostic.line}${column}`;
     const label = diagnostic.url ? "in" : "at";
-    lines.push(`  ${COLORS.dim}${label} ${location}${position}${COLORS.reset}`);
+    lines.push(`  ${colors.dim(`${label} ${location}${position}`)}`);
   }
 
   if (diagnostic.suggestion) {
-    lines.push(`  ${COLORS.cyan}fix: ${diagnostic.suggestion}${COLORS.reset}`);
+    lines.push(`  ${colors.cyan(`fix: ${diagnostic.suggestion}`)}`);
   }
 
   if (diagnostic.docsUrl) {
-    lines.push(`  ${COLORS.dim}docs: ${diagnostic.docsUrl}${COLORS.reset}`);
+    lines.push(`  ${colors.dim(`docs: ${diagnostic.docsUrl}`)}`);
   }
 
   return lines.join("\n");

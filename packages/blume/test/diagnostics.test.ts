@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { colors } from "consola/utils";
 import { z } from "zod";
 
 import {
@@ -13,8 +14,6 @@ import {
   resolveDocsUrl,
 } from "../src/core/diagnostics.ts";
 import type { Diagnostic } from "../src/core/types.ts";
-
-const ESC = String.fromCodePoint(27);
 
 const diag = (over: Partial<Diagnostic> = {}): Diagnostic => ({
   code: "BLUME_TEST",
@@ -140,15 +139,18 @@ describe("formatDiagnostic", () => {
     expect(out).not.toContain("/abs/a.md:");
   });
 
+  // Color output depends on the environment (NO_COLOR/FORCE_COLOR/TTY), so
+  // the expectation is built with the same color functions the formatter uses:
+  // both sides carry escapes when colors are on and neither does when off.
   it("colors by severity", () => {
     expect(formatDiagnostic(diag({ severity: "error" }))).toContain(
-      `${ESC}[31m`
+      colors.red(colors.bold("BLUME_TEST"))
     );
     expect(formatDiagnostic(diag({ severity: "warning" }))).toContain(
-      `${ESC}[33m`
+      colors.yellow(colors.bold("BLUME_TEST"))
     );
     expect(formatDiagnostic(diag({ severity: "info" }))).toContain(
-      `${ESC}[34m`
+      colors.blue(colors.bold("BLUME_TEST"))
     );
   });
 });

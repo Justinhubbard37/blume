@@ -1,3 +1,5 @@
+import { colors } from "consola/utils";
+import type { ColorFunction } from "consola/utils";
 import { relative } from "pathe";
 
 import { countBySeverity } from "../core/diagnostics.ts";
@@ -7,21 +9,10 @@ import type { CheckId } from "./catalog.ts";
 import type { AuditResult } from "./run.ts";
 import type { AuditCategory, AuditTier } from "./types.ts";
 
-const ESC = String.fromCodePoint(27);
-const COLORS = {
-  bold: `${ESC}[1m`,
-  cyan: `${ESC}[36m`,
-  dim: `${ESC}[2m`,
-  green: `${ESC}[32m`,
-  red: `${ESC}[31m`,
-  reset: `${ESC}[0m`,
-  yellow: `${ESC}[33m`,
-};
-
-const SEVERITY_COLOR: Record<DiagnosticSeverity, string> = {
-  error: COLORS.red,
-  info: `${ESC}[34m`,
-  warning: COLORS.yellow,
+const SEVERITY_COLOR: Record<DiagnosticSeverity, ColorFunction> = {
+  error: colors.red,
+  info: colors.blue,
+  warning: colors.yellow,
 };
 
 const GLYPH: Record<DiagnosticSeverity, string> = {
@@ -108,7 +99,7 @@ const skippedTiers = (tiers: Record<AuditTier, boolean>): string[] =>
     .filter((tier) => !tiers[tier])
     .map((tier) => {
       const label = CHECKS.filter((check) => check.tier === tier).length;
-      return `  ${COLORS.dim}⊘ ${tier.padEnd(12)} skipped — pass ${TIER_FLAG[tier]} (${label} checks)${COLORS.reset}`;
+      return `  ${colors.dim(`⊘ ${tier.padEnd(12)} skipped — pass ${TIER_FLAG[tier]} (${label} checks)`)}`;
     });
 
 /** How many checks actually ran, i.e. those whose tier was enabled. */
@@ -138,9 +129,11 @@ const summaryLine = (
 const findingLine = (diagnostic: Diagnostic, root: string): string => {
   const url = diagnostic.url ?? "";
   const source = diagnostic.file
-    ? `${COLORS.dim}${relative(root, diagnostic.file)}${
-        diagnostic.line === undefined ? "" : `:${diagnostic.line}`
-      }${COLORS.reset}`
+    ? colors.dim(
+        `${relative(root, diagnostic.file)}${
+          diagnostic.line === undefined ? "" : `:${diagnostic.line}`
+        }`
+      )
     : "";
   // padEnd alone yields no gap once the URL reaches the column width.
   return `      ${url.padEnd(34)} ${source}`.trimEnd();
@@ -164,13 +157,13 @@ export const formatReport = (
     : `${relative(root, result.staticDir) || "dist"} · offline`;
   lines.push(
     "",
-    `  ${COLORS.bold}blume audit${COLORS.reset}  ${COLORS.dim}${result.pages} pages · ${where}${COLORS.reset}`,
+    `  ${colors.bold("blume audit")}  ${colors.dim(`${result.pages} pages · ${where}`)}`,
     `  ${summaryLine(counts, auditCount(result))}`,
     ""
   );
 
   if (groups.length === 0) {
-    lines.push(`  ${COLORS.green}✔ No issues found.${COLORS.reset}`, "");
+    lines.push(`  ${colors.green("✔ No issues found.")}`, "");
   }
 
   let category: AuditCategory | null = null;
@@ -178,13 +171,13 @@ export const formatReport = (
     const { category: next } = group;
     if (next !== category) {
       category = next;
-      lines.push(`  ${COLORS.bold}${category}${COLORS.reset}`, "");
+      lines.push(`  ${colors.bold(category)}`, "");
     }
 
     const color = SEVERITY_COLOR[group.severity];
     const pages = `${group.count} page${group.count === 1 ? "" : "s"}`;
     lines.push(
-      `  ${color}${GLYPH[group.severity]} ${group.title}${COLORS.reset}  ${COLORS.dim}${pages}${COLORS.reset}`
+      `  ${color(`${GLYPH[group.severity]} ${group.title}`)}  ${colors.dim(pages)}`
     );
 
     const shown = options.verbose
@@ -195,14 +188,12 @@ export const formatReport = (
       // The message names the specifics the rolled-up line can't — which target
       // is broken, what the duplicate is — so --verbose prints it per finding.
       if (options.verbose) {
-        lines.push(`        ${COLORS.dim}${diagnostic.message}${COLORS.reset}`);
+        lines.push(`        ${colors.dim(diagnostic.message)}`);
       }
     }
     const hidden = group.count - shown.length;
     if (hidden > 0) {
-      lines.push(
-        `      ${COLORS.dim}… and ${hidden} more (--verbose)${COLORS.reset}`
-      );
+      lines.push(`      ${colors.dim(`… and ${hidden} more (--verbose)`)}`);
     }
 
     // Every finding in a group shares the catalog's fix unless it overrode it,
@@ -210,7 +201,7 @@ export const formatReport = (
     const [first] = group.findings;
     const fix = first?.suggestion;
     if (fix) {
-      lines.push(`      ${COLORS.cyan}fix: ${fix}${COLORS.reset}`);
+      lines.push(`      ${colors.cyan(`fix: ${fix}`)}`);
     }
     lines.push("");
   }
@@ -268,14 +259,12 @@ export const formatCatalog = (): string => {
     const { category: next } = check;
     if (next !== category) {
       category = next;
-      lines.push(`  ${COLORS.bold}${category}${COLORS.reset}`);
+      lines.push(`  ${colors.bold(category)}`);
     }
     const tier =
-      check.tier === "static"
-        ? ""
-        : ` ${COLORS.dim}[${check.tier}]${COLORS.reset}`;
+      check.tier === "static" ? "" : ` ${colors.dim(`[${check.tier}]`)}`;
     lines.push(
-      `    ${SEVERITY_COLOR[check.severity]}${GLYPH[check.severity]}${COLORS.reset} ${check.id.replace("BLUME_AUDIT_", "").toLowerCase().padEnd(34)} ${COLORS.dim}${check.title}${COLORS.reset}${tier}`
+      `    ${SEVERITY_COLOR[check.severity](GLYPH[check.severity])} ${check.id.replace("BLUME_AUDIT_", "").toLowerCase().padEnd(34)} ${colors.dim(check.title)}${tier}`
     );
   }
   lines.push("", `  ${CHECKS.length} checks.`, "");
