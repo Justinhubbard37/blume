@@ -1,3 +1,5 @@
+import picomatch from "picomatch";
+
 import { BlumeError } from "../diagnostics.ts";
 import matter from "../frontmatter.ts";
 import type { Diagnostic } from "../types.ts";
@@ -31,61 +33,14 @@ export interface MdxRemoteSourceOptions {
   fetchImpl?: typeof fetch;
 }
 
-const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/u;
-
-/** Escape a literal character for embedding in a RegExp. */
-const escapeChar = (char: string): string =>
-  REGEX_SPECIAL.test(char) ? `\\${char}` : char;
-
-/** Translate one glob token at `i` into RegExp source + the next index. */
-const globToken = (
-  pattern: string,
-  i: number
-): { source: string; next: number } => {
-  const char = pattern[i] ?? "";
-  if (char === "*") {
-    if (pattern[i + 1] === "*") {
-      // `**/` spans zero or more whole segments — `docs/**/guide.md` must
-      // match `docs/guide.md` and `docs/a/guide.md` but not `docs/subguide.md`.
-      if (pattern[i + 2] === "/") {
-        return { next: i + 3, source: "(?:.*/)?" };
-      }
-      return { next: i + 2, source: ".*" };
-    }
-    return { next: i + 1, source: "[^/]*" };
-  }
-  if (char === "?") {
-    return { next: i + 1, source: "[^/]" };
-  }
-  if (char === "{") {
-    const end = pattern.indexOf("}", i);
-    if (end !== -1) {
-      const options = pattern
-        .slice(i + 1, end)
-        .split(",")
-        .map((part) => [...part].map(escapeChar).join(""))
-        .join("|");
-      return { next: end + 1, source: `(?:${options})` };
-    }
-  }
-  return { next: i + 1, source: escapeChar(char) };
-};
-
-/** Compile a glob (`**`, `*`, `?`, `{a,b}`) into an anchored RegExp. */
-const globToRegExp = (pattern: string): RegExp => {
-  let source = "";
-  let i = 0;
-  while (i < pattern.length) {
-    const token = globToken(pattern, i);
-    source += token.source;
-    i = token.next;
-  }
-  return new RegExp(`^${source}$`, "u");
-};
-
-/** Whether a ref matches any of the include globs. */
-const matchesInclude = (ref: string, patterns: string[]): boolean =>
-  patterns.some((pattern) => globToRegExp(pattern).test(ref));
+/**
+ * Compile the include globs once into a single matcher. picomatch is what the
+ * filesystem source's tinyglobby uses under the hood, so the same `include`
+ * array means the same thing on every source type — negation, character
+ * classes, nested braces, and extglobs included.
+ */
+const includeMatcher = (patterns: string[]): ((ref: string) => boolean) =>
+  picomatch(patterns);
 
 /** A file to fetch: its source-local ref plus where to read it from. */
 interface RemoteRef {
@@ -136,12 +91,13 @@ const enumerateGithub = async (
     truncated?: boolean;
   };
   const prefix = base ? `${base}/` : "";
+  const included = includeMatcher(include);
   const refs = (body.tree ?? []).flatMap((node) => {
     if (!(node.type === "blob" && node.path.startsWith(prefix))) {
       return [];
     }
     const rel = node.path.slice(prefix.length);
-    if (!matchesInclude(rel, include)) {
+    if (!included(rel)) {
       return [];
     }
     return [
@@ -193,8 +149,9 @@ export const mdxRemoteSource = (
       return await enumerateGithub(options.github, options.include, doFetch);
     }
     const base = (options.url ?? "").replace(/\/$/u, "");
+    const included = includeMatcher(options.include);
     const refs = (options.files ?? []).flatMap((ref) =>
-      matchesInclude(ref, options.include)
+      included(ref)
         ? [{ editUrl: `${base}/${ref}`, fetchUrl: `${base}/${ref}`, ref }]
         : []
     );
