@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { defineCommand } from "citty";
 import { join } from "pathe";
+import { satisfies } from "semver";
 
 import { BlumeError } from "../../core/diagnostics.ts";
 import { packageRoot } from "../../core/package-root.ts";
@@ -16,33 +17,19 @@ import {
   reportDiagnosticsJson,
 } from "../log.ts";
 
-const FALLBACK_MIN_NODE = "22.12.0";
-const LEADING_RANGE = /^[^\d]*/u;
+const FALLBACK_NODE_RANGE = ">=22.12.0";
 
-/** The minimum Node version, read from the package's own `engines` field so
+/** The supported Node range, read from the package's own `engines` field so
  * doctor can never drift from what the package actually declares. */
-const minSupportedNode = (): string => {
+const supportedNodeRange = (): string => {
   try {
     const pkg = JSON.parse(
       readFileSync(join(packageRoot(), "package.json"), "utf-8")
     ) as { engines?: { node?: string } };
-    const range = pkg.engines?.node ?? "";
-    return range.replace(LEADING_RANGE, "") || FALLBACK_MIN_NODE;
+    return pkg.engines?.node || FALLBACK_NODE_RANGE;
   } catch {
-    return FALLBACK_MIN_NODE;
+    return FALLBACK_NODE_RANGE;
   }
-};
-
-const versionBelow = (current: string, minimum: string): boolean => {
-  const a = current.split(".").map((part) => Math.trunc(Number(part)));
-  const b = minimum.split(".").map((part) => Math.trunc(Number(part)));
-  for (let i = 0; i < 3; i += 1) {
-    const delta = (a[i] ?? 0) - (b[i] ?? 0);
-    if (delta !== 0) {
-      return delta < 0;
-    }
-  }
-  return false;
 };
 
 export const doctorCommand = defineCommand({
@@ -60,11 +47,11 @@ export const doctorCommand = defineCommand({
     const root = process.cwd();
     const diagnostics: Diagnostic[] = [];
 
-    const minNode = minSupportedNode();
-    if (versionBelow(process.versions.node, minNode)) {
+    const nodeRange = supportedNodeRange();
+    if (!satisfies(process.versions.node, nodeRange)) {
       diagnostics.push({
         code: "BLUME_NODE_VERSION",
-        message: `Node ${process.versions.node} is below the supported minimum (${minNode}).`,
+        message: `Node ${process.versions.node} is outside the supported range (${nodeRange}).`,
         severity: "warning",
       });
     }
