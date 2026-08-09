@@ -847,122 +847,50 @@ const bannerKey = banner?.dismissible ? banner.key : null;
         pre.appendChild(button);
       }
 
-      // Click-to-zoom for content images (gated by `markdown.imageZoom`).
-      // Enhances every `.prose img` so plain Markdown images open in a lightbox.
+      // Click-to-zoom for content images (gated by `markdown.imageZoom`),
+      // via medium-zoom: ESC/scroll/click dismissal, natural-size capping,
+      // and the open/close transition races are its problem, not ours.
       // Opt out per-image with `data-no-zoom`.
-      const zoomImages: Iterable<HTMLImageElement> =
-        document.body.hasAttribute("data-blume-image-zoom")
-          ? document.querySelectorAll<HTMLImageElement>(
-              ".prose img:not([data-no-zoom])"
-            )
-          : [];
-      const zoomTargets = Array.from(zoomImages);
-      if (zoomTargets.length > 0) {
-        const reduceMotion = window.matchMedia(
-          "(prefers-reduced-motion: reduce)"
-        ).matches;
-        let active: {
-          clone: HTMLImageElement;
-          original: HTMLImageElement;
-          overlay: HTMLElement;
-        } | null = null;
-
-        const closeZoom = () => {
-          if (!active) {
-            return;
-          }
-          const { clone, original, overlay } = active;
-          active = null;
-          overlay.style.opacity = "0";
-          clone.style.transform = "translate(0px, 0px) scale(1)";
-          const cleanup = () => {
-            overlay.remove();
-            original.style.visibility = "";
-            document.removeEventListener("keydown", onKey);
-            window.removeEventListener("scroll", closeZoom);
-          };
-          if (reduceMotion) {
-            cleanup();
-          } else {
-            clone.addEventListener("transitionend", cleanup, { once: true });
-          }
-        };
-
-        const onKey = (event: KeyboardEvent) => {
-          if (event.key === "Escape") {
-            closeZoom();
-          }
-        };
-
-        const openZoom = (image: HTMLImageElement) => {
-          if (active) {
-            return;
-          }
-          const start = image.getBoundingClientRect();
-          if (start.width === 0 || start.height === 0) {
-            return;
-          }
-
-          const overlay = document.createElement("div");
-          overlay.className =
-            "fixed inset-0 z-[100] flex cursor-zoom-out items-center justify-center bg-background/80 opacity-0 backdrop-blur-sm transition-opacity duration-300";
-
-          const clone = image.cloneNode(true) as HTMLImageElement;
-          clone.className = "absolute m-0 max-w-none rounded-blume shadow-2xl";
-          clone.style.top = `${start.top}px`;
-          clone.style.left = `${start.left}px`;
-          clone.style.width = `${start.width}px`;
-          clone.style.height = `${start.height}px`;
-          clone.style.transformOrigin = "top left";
-          if (!reduceMotion) {
-            clone.style.transition =
-              "transform 300ms cubic-bezier(0.22, 1, 0.36, 1)";
-          }
-
-          overlay.appendChild(clone);
-          document.body.appendChild(overlay);
-          image.style.visibility = "hidden";
-          active = { clone, original: image, overlay };
-
-          const margin = 0.92;
-          const ratio = start.width / start.height;
-          let targetWidth = window.innerWidth * margin;
-          let targetHeight = targetWidth / ratio;
-          if (targetHeight > window.innerHeight * margin) {
-            targetHeight = window.innerHeight * margin;
-            targetWidth = targetHeight * ratio;
-          }
-          const naturalWidth = image.naturalWidth || targetWidth;
-          if (targetWidth > naturalWidth) {
-            targetWidth = naturalWidth;
-            targetHeight = targetWidth / ratio;
-          }
-          const scale = targetWidth / start.width;
-          const dx = (window.innerWidth - targetWidth) / 2 - start.left;
-          const dy = (window.innerHeight - targetHeight) / 2 - start.top;
-
-          requestAnimationFrame(() => {
-            overlay.style.opacity = "1";
-            clone.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
-          });
-
-          overlay.addEventListener("click", closeZoom);
-          document.addEventListener("keydown", onKey);
-          window.addEventListener("scroll", closeZoom, { passive: true });
-        };
-
-        for (const image of zoomTargets) {
+      if (document.body.hasAttribute("data-blume-image-zoom")) {
+        const zoomTargets = Array.from(
+          document.querySelectorAll<HTMLImageElement>(
+            ".prose img:not([data-no-zoom])"
+          )
           // An image that is itself a link navigates on click — binding zoom
           // to it would flash a zoom overlay in the instant before navigation
           // and advertise (via the cursor) a zoom that never happens.
-          if (image.closest("a")) {
-            continue;
-          }
-          image.classList.add("cursor-zoom-in");
-          image.addEventListener("click", () => openZoom(image));
+        ).filter((image) => !image.closest("a"));
+        if (zoomTargets.length > 0) {
+          // Lazy: pages without a zoomable image never load the library,
+          // matching how mermaid is only fetched on pages with a diagram.
+          const { default: mediumZoom } = await import("medium-zoom");
+          mediumZoom(zoomTargets, {
+            background:
+              "color-mix(in oklab, var(--color-background) 80%, transparent)",
+            margin: 24,
+          });
         }
       }
     </script>
+    <style is:global>
+      /* medium-zoom ships no z-index; lift the lightbox above the chrome
+         (header/sidebar) the way the previous z-[100] overlay sat. */
+      .medium-zoom-overlay {
+        backdrop-filter: blur(4px);
+        z-index: 100;
+      }
+      .medium-zoom-image--opened {
+        z-index: 101;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        /* html prefix outranks the library's injected rules regardless of
+           insertion order; its transition declarations carry !important. */
+        html .medium-zoom-image,
+        html .medium-zoom-overlay {
+          transition: none !important;
+        }
+      }
+    </style>
     <WebMcp />
   </body>
 </html>
