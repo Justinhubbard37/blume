@@ -89,6 +89,7 @@
         "dompurify": "^3.4.11",
         "dotenv": "^17.4.2",
         "epub-gen-memory": "^1.1.2",
+        "fast-xml-parser": "^5.10.1",
         "get-tsconfig": "^4.14.1",
         "github-slugger": "^2.0.0",
         "gray-matter": "^4.0.3",

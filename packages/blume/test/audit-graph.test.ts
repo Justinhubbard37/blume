@@ -305,6 +305,26 @@ describe("parseSitemap", () => {
     expect(doc.urls).toEqual(["https://x.dev/a?b=1&c=2"]);
   });
 
+  it("reads CDATA locs, numeric entities, and namespaced elements", () => {
+    // All three are legal sitemap XML that other generators emit and that a
+    // regex scan never saw: the audit also runs against non-Blume sitemaps.
+    const doc = parseSitemap(
+      "/f",
+      '<sm:urlset xmlns:sm="http://www.sitemaps.org/schemas/sitemap/0.9">' +
+        "<sm:url><sm:loc><![CDATA[https://x.dev/cdata]]></sm:loc>" +
+        "<sm:lastmod>2026-01-05</sm:lastmod></sm:url>" +
+        "<sm:url><sm:loc>https://x.dev/a?b=1&#38;c=2</sm:loc></sm:url>" +
+        "</sm:urlset>",
+      10
+    );
+    expect(doc.urls).toEqual([
+      "https://x.dev/cdata",
+      "https://x.dev/a?b=1&c=2",
+    ]);
+    expect(doc.lastmod?.get("https://x.dev/cdata")).toBe("2026-01-05");
+    expect(doc.error).toBeUndefined();
+  });
+
   it("rejects a document that is not a urlset", () => {
     expect(parseSitemap("/f", "<html></html>", 10).error).toBe(
       "no <urlset> element"

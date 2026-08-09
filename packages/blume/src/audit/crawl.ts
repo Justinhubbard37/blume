@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 
+import { XMLParser } from "fast-xml-parser";
 import { join, relative } from "pathe";
 import { glob } from "tinyglobby";
 
@@ -74,27 +75,25 @@ const routeIndex = (
   return index;
 };
 
-const SITEMAP_URL = /<url>(?<block>[\s\S]*?)<\/url>/gu;
-const SITEMAP_LOC = /<loc>(?<loc>[\s\S]*?)<\/loc>/gu;
-const SITEMAP_LASTMOD = /<lastmod>(?<date>[\s\S]*?)<\/lastmod>/u;
-const XML_ENTITIES: Record<string, string> = {
-  "&amp;": "&",
-  "&apos;": "'",
-  "&gt;": ">",
-  "&lt;": "<",
-  "&quot;": '"',
-};
-
-const unescapeXml = (value: string): string =>
-  value.replaceAll(
-    /&(?:amp|apos|gt|lt|quot);/gu,
-    (entity) => XML_ENTITIES[entity] ?? entity
-  );
+/**
+ * Sitemaps arrive from arbitrary generators (the audit also fetches remote
+ * ones), so parsing is fast-xml-parser's job: CDATA sections, numeric
+ * entities, and namespace-prefixed elements are all legal there and all
+ * invisible to a regex scan. Values stay strings (`parseTagValue: false`) so
+ * a numeric-looking `<lastmod>` isn't coerced.
+ */
+const sitemapParser = new XMLParser({
+  // htmlEntities adds numeric character references (&#38;) on top of the
+  // default XML five; a sitemap loc legitimately carries either form.
+  htmlEntities: true,
+  ignoreAttributes: true,
+  parseTagValue: false,
+  removeNSPrefix: true,
+});
 
 /**
- * Parse `sitemap.xml`. Deliberately shallow: we only need the `<loc>` list and
- * whether the document is a well-formed urlset, and pulling in an XML parser to
- * learn that would be a dependency for one regex.
+ * Parse `sitemap.xml`. Deliberately shallow: the checks only need the `<loc>`
+ * list, each loc's `<lastmod>`, and whether the document is a urlset at all.
  */
 export const parseSitemap = (
   file: string,
@@ -102,31 +101,34 @@ export const parseSitemap = (
   bytes: number
 ): SitemapDoc => {
   const doc: SitemapDoc = { bytes, file, lastmod: new Map(), urls: [] };
-  if (!xml.includes("<urlset")) {
-    doc.error = xml.includes("<sitemapindex")
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = sitemapParser.parse(xml) as Record<string, unknown>;
+  } catch {
+    doc.error = "no <urlset> element";
+    return doc;
+  }
+  if (!Object.hasOwn(parsed, "urlset")) {
+    doc.error = Object.hasOwn(parsed, "sitemapindex")
       ? "sitemap is an index, not a urlset"
       : "no <urlset> element";
     return doc;
   }
-  for (const match of xml.matchAll(SITEMAP_LOC)) {
-    const loc = unescapeXml((match.groups?.loc ?? "").trim());
-    if (loc) {
-      doc.urls.push(loc);
+  const urlset = parsed.urlset as { url?: unknown } | string | null;
+  const entries =
+    typeof urlset === "object" && urlset !== null ? [urlset.url].flat() : [];
+  for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null) {
+      continue;
     }
-  }
-  // `<lastmod>` is scoped per `<url>` block so it stays attached to its `<loc>`
-  // — the flat loc scan above deliberately isn't, so a sitemap with stray text
-  // between blocks still yields its URL list.
-  for (const match of xml.matchAll(SITEMAP_URL)) {
-    const block = match.groups?.block ?? "";
-    const loc = unescapeXml(
-      (
-        new RegExp(SITEMAP_LOC.source, "u").exec(block)?.groups?.loc ?? ""
-      ).trim()
-    );
-    const lastmod = SITEMAP_LASTMOD.exec(block)?.groups?.date?.trim();
-    if (loc && lastmod) {
-      doc.lastmod?.set(loc, lastmod);
+    const { loc, lastmod } = entry as { loc?: unknown; lastmod?: unknown };
+    const locText = typeof loc === "string" ? loc.trim() : "";
+    if (!locText) {
+      continue;
+    }
+    doc.urls.push(locText);
+    if (typeof lastmod === "string" && lastmod.trim() !== "") {
+      doc.lastmod?.set(locText, lastmod.trim());
     }
   }
   return doc;
