@@ -122,9 +122,9 @@ describe("TypeTable", () => {
       ].join("\n")
     );
     expect(out).toContain("| Prop | Type | Default | Description |");
-    expect(out).toContain("| --- | --- | --- | --- |");
+    expect(out).toContain("| - | - | - | - |");
     expect(out).toContain("| `name` | `string` | - | The name. |");
-    expect(out).toContain("| `size?` | `number` | `4` |  |");
+    expect(out).toContain("| `size?` | `number` | `4` | |");
   });
 
   it("links the type when typeDescriptionLink is set and joins descriptions", () => {
@@ -146,7 +146,7 @@ describe("TypeTable", () => {
 
   it("skips the inline-code wrap when a value contains backticks", () => {
     const out = table('    raw: { type: "`a`" },');
-    expect(out).toContain("| `raw?` | `a` | - |  |");
+    expect(out).toContain("| `raw?` | `a` | - | |");
     expect(out).not.toContain("``a``");
   });
 
@@ -158,7 +158,7 @@ describe("TypeTable", () => {
       "",
     ].join("\n");
     const out = downlevelComponents(source);
-    expect(out).toMatch(/\| `a\?` \| `string` \| - \| {2}\|\n\nExtra notes\./u);
+    expect(out).toMatch(/\| `a\?` \| `string` \| - \| \|\n\nExtra notes\./u);
   });
 
   it("renders only the children when the type map is empty", () => {

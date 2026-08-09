@@ -4,6 +4,10 @@
   "workspaces": {
     "": {
       "name": "blume-monorepo",
+      "dependencies": {
+        "markdown-table": "^3.0.4",
+        "mdast-util-to-string": "^4.0.0",
+      },
       "devDependencies": {
         "@ai-sdk/openai-compatible": "^3.0.0",
         "@astrojs/markdown-satteri": "^0.3.2",

@@ -1,3 +1,5 @@
+import { toString as mdastToString } from "mdast-util-to-string";
+
 import { jsxAttribute, jsxFlowElement } from "./mdast.ts";
 import type { MdastNode, MdastVisitorContext } from "./mdast.ts";
 
@@ -35,22 +37,14 @@ export const calloutTypeFor = (name: string): string | null => {
   return ALIASES[lower] ?? null;
 };
 
-interface TextNode extends MdastNode {
-  value?: string;
-}
-
 /**
  * Concatenate the plain text of a node, recursing through phrasing children so
  * formatted labels keep every word — `:::note[Read **this**]` yields
- * `Read this`, not `Read ` (the bolded run dropped).
+ * `Read this`, not `Read ` (the bolded run dropped). Image alt text is
+ * excluded to preserve the historical child-values-only behavior.
  */
-const textOf = (node: MdastNode): string => {
-  const { children } = node as { children?: MdastNode[] };
-  if (children && children.length > 0) {
-    return children.map(textOf).join("");
-  }
-  return (node as TextNode).value ?? "";
-};
+const textOf = (node: MdastNode): string =>
+  mdastToString(node, { includeImageAlt: false });
 
 /**
  * Satteri MDAST plugin mapping container directives (`:::note`, `:::warning`,

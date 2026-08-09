@@ -1,3 +1,4 @@
+import { markdownTable } from "markdown-table";
 import { mdxToMdast } from "satteri";
 
 import { parseYouTubeId } from "../components/content/youtube.ts";
@@ -238,15 +239,15 @@ const typeTable: ComponentMarkdown = ({ children, props }) => {
         .filter((part) => typeof part === "string" && part !== "")
         .join(" ")
     );
-    return `| ${prop} | ${typeCell} | ${defaultCell} | ${description} |`;
+    return [prop, typeCell, defaultCell, description];
   });
   const table =
     rows.length > 0
-      ? [
-          "| Prop | Type | Default | Description |",
-          "| --- | --- | --- | --- |",
-          ...rows,
-        ].join("\n")
+      ? markdownTable([["Prop", "Type", "Default", "Description"], ...rows], {
+          // Unpadded columns: cells hold prose and the output is for model
+          // consumption, so aligned delimiter rows are wasted tokens.
+          alignDelimiters: false,
+        })
       : "";
   // The component renders its slot after the table.
   return [table, children].filter(Boolean).join("\n\n");
