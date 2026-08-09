@@ -1,8 +1,6 @@
-import { watch } from "node:fs";
-
 import { dev } from "astro";
+import { watch } from "chokidar";
 import { defineCommand } from "citty";
-import { basename, dirname } from "pathe";
 
 import { generateRuntime } from "../../astro/generate.ts";
 import { showBlumeErrorOverlay } from "../../astro/integration.ts";
@@ -212,26 +210,16 @@ export const devCommand = defineCommand({
       project.context.componentsFile,
     ].filter((target) => target !== null);
 
+    // chokidar handles what raw fs.watch made us hand-roll: recursive
+    // directory watching on every platform, and single files surviving a
+    // rename-replace save (vim and most "atomic save" editors), which orphans
+    // an inode-tracking fs.watch watcher after the first write.
+    const projectWatcher = watch([...dirTargets, ...fileTargets], {
+      ignoreInitial: true,
+    }).on("all", regenerate);
     const disposers = [
       ...project.sources.map((source) => source.watch?.(regenerate)),
-      ...dirTargets.map((target) => {
-        const watcher = watch(target, { recursive: true }, regenerate);
-        return () => watcher.close();
-      }),
-      // Single files are watched via their parent directory: fs.watch on the
-      // file itself tracks the inode, so a rename-replace save (vim and most
-      // "atomic save" editors) orphans the watcher after the first write and
-      // every later edit is silently ignored.
-      ...fileTargets.map((target) => {
-        const name = basename(target);
-        const watcher = watch(dirname(target), (_event, filename) => {
-          // A null filename (some platforms) can't be filtered — regenerate.
-          if (!filename || filename === name) {
-            regenerate();
-          }
-        });
-        return () => watcher.close();
-      }),
+      () => void projectWatcher.close(),
     ].filter((dispose) => dispose !== undefined);
 
     const shutdown = async () => {
