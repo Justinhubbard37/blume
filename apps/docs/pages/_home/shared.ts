@@ -20,6 +20,7 @@ export const icons = {
   changelog: glyph("history"),
   chat: glyph("message-square"),
   check: glyph("check"),
+  chevronDown: glyph("chevron-down"),
   cloud: glyph("cloud-check"),
   components: glyph("box"),
   config: glyph("settings-2"),
