@@ -1,3 +1,8 @@
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { gfmFromMarkdown } from "mdast-util-gfm";
+import { toString as mdastToString } from "mdast-util-to-string";
+import { gfm } from "micromark-extension-gfm";
+
 import matter from "../frontmatter.ts";
 import {
   hashText,
@@ -62,39 +67,37 @@ const EDGE_DASHES = /^-+|-+$/gu;
 const DESCRIPTION_MAX = 160;
 const DESCRIPTION_MIN = 110;
 
-const CODE_FENCE = /```[\s\S]*?```/gu;
-const HEADING_LINE = /^#{1,6}\s.*$/gmu;
-const LIST_MARK = /^\s*(?:[-*+]|\d+[.)])\s+/u;
 // Changesets-generated release bullets open with the changeset's short commit
-// hash (`- cf8fa22: Fix …`) — noise in a search snippet.
-const CHANGESET_HASH = /^[0-9a-f]{7,40}:\s+/u;
-const IMAGE = /!\[[^\]]*\]\([^)]*\)/gu;
-const LINK = /\[(?<text>[^\]]*)\]\([^)]*\)/gu;
-const INLINE_CODE = /`(?<code>[^`]+)`/gu;
-// Tag-shaped only: a bare `<` in prose must not swallow text up to a later `>`.
-const HTML_OR_JSX = /<\/?[a-zA-Z][^\n<>]*>|<\/?>/gu;
-const MARKDOWN_PUNCT = /[*_~>]+/gu;
+// hash (`- cf8fa22: Fix …`) — noise in a search snippet. Stripped from the
+// raw lines (where the bullet anchor still exists) before parsing.
+const CHANGESET_HASH = /^(?<mark>\s*(?:[-*+]|\d+[.)])\s+)[0-9a-f]{7,40}:\s+/gmu;
 const WHITESPACE = /\s+/gu;
 const TRAILING_FRAGMENT = /[\s,;:.—–-]+$/u;
 
+/** Block nodes with no place in a search snippet. */
+const NON_PROSE = new Set(["code", "heading", "html", "thematicBreak"]);
+
 /**
- * Derive a meta description from release notes: markdown reduced to plain
- * text — section headings ("### Patch Changes") and changesets' commit-hash
- * bullet prefixes dropped — then cut at a word boundary to fit the search
- * snippet cap. Undefined when the notes have no prose at all.
+ * Derive a meta description from release notes: GitHub-flavored markdown
+ * parsed to mdast and reduced to the plain text of its prose blocks —
+ * section headings ("### Patch Changes"), code fences, and changesets'
+ * commit-hash bullet prefixes dropped; link/emphasis text and inline code
+ * content kept — then cut at a word boundary to fit the search snippet cap.
+ * Undefined when the notes have no prose at all.
  */
 const releaseDescription = (body: string): string | undefined => {
-  const text = body
-    .replaceAll(CODE_FENCE, " ")
-    .replaceAll(HEADING_LINE, "")
-    .split("\n")
-    .map((line) => line.replace(LIST_MARK, "").replace(CHANGESET_HASH, ""))
-    .join("\n")
-    .replaceAll(IMAGE, " ")
-    .replaceAll(LINK, "$<text>")
-    .replaceAll(INLINE_CODE, "$<code>")
-    .replaceAll(HTML_OR_JSX, " ")
-    .replaceAll(MARKDOWN_PUNCT, " ")
+  const tree = fromMarkdown(body.replaceAll(CHANGESET_HASH, "$<mark>"), {
+    extensions: [gfm()],
+    mdastExtensions: [gfmFromMarkdown()],
+  });
+  const text = tree.children
+    .filter((node) => !NON_PROSE.has(node.type))
+    // Images vanish (their alt is not prose) and raw HTML/JSX tags drop,
+    // matching what a reader of the rendered notes would see as text.
+    .map((node) =>
+      mdastToString(node, { includeHtml: false, includeImageAlt: false })
+    )
+    .join(" ")
     .replaceAll(WHITESPACE, " ")
     .trim();
   if (!text) {
