@@ -690,6 +690,17 @@ describe("mdxRemoteSource (files mode)", () => {
       // An unparsable base URL can't be host-checked, so no token is sent.
       await load("not-a-url", join(root, ".c3"));
       expect(sent.get("not-a-url/intro.mdx")?.authorization).toBeUndefined();
+
+      // Without a token in the environment, even GitHub hosts get no header.
+      delete process.env.GITHUB_TOKEN;
+      await load(
+        "https://raw.githubusercontent.com/o/r/main/other",
+        join(root, ".c4")
+      );
+      expect(
+        sent.get("https://raw.githubusercontent.com/o/r/main/other/intro.mdx")
+          ?.authorization
+      ).toBeUndefined();
     } finally {
       if (original === undefined) {
         delete process.env.GITHUB_TOKEN;
