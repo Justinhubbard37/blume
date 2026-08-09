@@ -339,7 +339,21 @@ Link: </agent-readability.json>; rel="describedby"; type="application/json",
   </index.md>; rel="alternate"; type="text/markdown"
 ```
 
-各エントリーは、その機能が有効な場合にのみ現れます。`alternate` リンクはホームページの Markdown ミラーを指します。ホームのルートがコンテンツページであればそのページ自身の[生の Markdown](#raw-markdown)、ランディングページであれば合成された `llms.txt` フォールバックです。API を公開しているサイトには、[生成された API カタログ](#api-catalog)を指す `rel="api-catalog"` エントリーも追加されます。このヘッダーは、Blume が制御するすべての面に付与されます。開発サーバー（`curl -I localhost:4321` で確認できます）、出力される `_headers` ファイル経由の静的ビルド（Netlify と Cloudflare）、そしてデプロイのルーティングルール経由の Vercel サーバービルドです。静的出力で `_headers` を無視するホスト（GitHub Pages、S3）はカスタムのレスポンスヘッダーをまったく送信できませんが、そこでもエージェントはサイトルートの `llms.txt` と `agent-readability.json` からすべてを見つけられます。
+各エントリーは、その機能が有効な場合にのみ現れます。`alternate` リンクはホームページの Markdown ミラーを指します。ホームのルートがコンテンツページであればそのページ自身の[生の Markdown](#raw-markdown)、ランディングページであれば合成された `llms.txt` フォールバックです。API を公開しているサイトには、[生成された API カタログ](#api-catalog)を指す `rel="api-catalog"` エントリーも追加されます。このヘッダーは、Blume が制御するすべての面に付与されます。開発サーバー（`curl -I localhost:4321` で確認できます）、出力される `_headers` ファイル経由の静的ビルド（Netlify と Cloudflare）、そしてデプロイのルーティングルール経由の Vercel サーバービルドです。
+
+とはいえ、すべてのエージェントがルートから入ってくるわけではありません。検索結果や共有リンクをたどってきたエージェントは深い階層のページに着地し、ホームページのヘッダーを目にすることはありません。そこで、レンダリングされるすべてのページも、同じ IANA 登録済みのリレーションを用いて、HTML の `<head>` に同じディスカバリーリンクを備えています。
+
+```html
+<link
+  rel="describedby"
+  href="/agent-readability.json"
+  type="application/json"
+/>
+<link rel="describedby" href="/llms.txt" type="text/plain" />
+<link rel="alternate" href="/docs/example.md" type="text/markdown" />
+```
+
+ここでの `alternate` リンクは*そのページ自身*の[生の Markdown ミラー](#raw-markdown)を指すため、エージェントは着地した HTML からトークン効率の良い版へ直接移動できます。head のリンクはプリレンダリングされた HTML とともに配信されるため、`_headers` を無視しカスタムのレスポンスヘッダーをまったく送信できないホスト（GitHub Pages、S3）でも機能します。エージェントがどのページから入ってきても同じです。
 
 ### API カタログ
 

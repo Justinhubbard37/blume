@@ -339,7 +339,21 @@ Link: </agent-readability.json>; rel="describedby"; type="application/json",
   </index.md>; rel="alternate"; type="text/markdown"
 ```
 
-Jeder Eintrag erscheint nur, wenn die zugehörige Funktion aktiv ist. Der `alternate`-Link verweist auf den Markdown-Spiegel der Startseite — das [rohe Markdown](#raw-markdown) der Seite selbst, wenn die Startroute eine Inhaltsseite ist, oder den synthetisierten `llms.txt`-Fallback, wenn sie eine Landing Page ist. Websites, die APIs veröffentlichen, erhalten zusätzlich einen `rel="api-catalog"`-Eintrag, der auf den [generierten API-Katalog](#api-catalog) verweist. Der Header wird auf jeder von Blume kontrollierten Oberfläche mitgeliefert: dem Entwicklungsserver (prüfe ihn mit `curl -I localhost:4321`), statischen Builds über die erzeugte `_headers`-Datei (Netlify und Cloudflare) und Vercel-Server-Builds über die Routing-Regeln des Deployments. Hoster, die `_headers` bei statischer Ausgabe ignorieren (GitHub Pages, S3), können überhaupt keine eigenen Antwort-Header senden — dort finden Agents alles weiterhin über `llms.txt` und `agent-readability.json` im Stamm der Website.
+Jeder Eintrag erscheint nur, wenn die zugehörige Funktion aktiv ist. Der `alternate`-Link verweist auf den Markdown-Spiegel der Startseite — das [rohe Markdown](#raw-markdown) der Seite selbst, wenn die Startroute eine Inhaltsseite ist, oder den synthetisierten `llms.txt`-Fallback, wenn sie eine Landing Page ist. Websites, die APIs veröffentlichen, erhalten zusätzlich einen `rel="api-catalog"`-Eintrag, der auf den [generierten API-Katalog](#api-catalog) verweist. Der Header wird auf jeder von Blume kontrollierten Oberfläche mitgeliefert: dem Entwicklungsserver (prüfe ihn mit `curl -I localhost:4321`), statischen Builds über die erzeugte `_headers`-Datei (Netlify und Cloudflare) und Vercel-Server-Builds über die Routing-Regeln des Deployments.
+
+Nicht jeder Agent tritt jedoch über den Stamm ein — wer einem Suchergebnis oder einem geteilten Link folgt, landet auf einer tief liegenden Seite und sieht den Header der Startseite nie. Deshalb trägt jede gerenderte Seite dieselben Discovery-Links auch in ihrem HTML-`<head>`, unter Verwendung derselben IANA-registrierten Beziehungen:
+
+```html
+<link
+  rel="describedby"
+  href="/agent-readability.json"
+  type="application/json"
+/>
+<link rel="describedby" href="/llms.txt" type="text/plain" />
+<link rel="alternate" href="/docs/example.md" type="text/markdown" />
+```
+
+Hier verweist der `alternate`-Link auf den [Roh-Markdown-Spiegel](#raw-markdown) _der jeweiligen Seite_, sodass ein Agent direkt von dem HTML, auf dem er gelandet ist, zur token-effizienten Version springen kann. Da die Head-Links mit dem vorgerenderten HTML mitreisen, funktionieren sie auch bei Hostern, die `_headers` ignorieren und überhaupt keine eigenen Antwort-Header senden können (GitHub Pages, S3) — ganz gleich, über welche Seite der Agent eintritt.
 
 ### API-Katalog
 

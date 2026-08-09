@@ -339,7 +339,21 @@ Link: </agent-readability.json>; rel="describedby"; type="application/json",
   </index.md>; rel="alternate"; type="text/markdown"
 ```
 
-Cada entrada aparece só quando o respectivo recurso está ativo. O link `alternate` aponta para o espelho Markdown da página inicial — o [Markdown bruto](#raw-markdown) da própria página quando a rota inicial é uma página de conteúdo, ou o fallback do `llms.txt` sintetizado quando é uma landing page. Sites que também publicam APIs ganham uma entrada `rel="api-catalog"` apontando para o [catálogo de API gerado](#api-catalog). O cabeçalho vai em todas as superfícies que o Blume controla: o servidor de desenvolvimento (confira com `curl -I localhost:4321`), os builds estáticos via arquivo `_headers` emitido (Netlify e Cloudflare) e os builds de servidor na Vercel via regras de roteamento do deploy. Hosts que ignoram `_headers` na saída estática (GitHub Pages, S3) não conseguem enviar cabeçalhos de resposta personalizados de jeito nenhum — nesses casos, os agentes ainda encontram tudo pelo `llms.txt` e pelo `agent-readability.json` na raiz do site.
+Cada entrada aparece só quando o respectivo recurso está ativo. O link `alternate` aponta para o espelho Markdown da página inicial — o [Markdown bruto](#raw-markdown) da própria página quando a rota inicial é uma página de conteúdo, ou o fallback do `llms.txt` sintetizado quando é uma landing page. Sites que também publicam APIs ganham uma entrada `rel="api-catalog"` apontando para o [catálogo de API gerado](#api-catalog). O cabeçalho vai em todas as superfícies que o Blume controla: o servidor de desenvolvimento (confira com `curl -I localhost:4321`), os builds estáticos via arquivo `_headers` emitido (Netlify e Cloudflare) e os builds de servidor na Vercel via regras de roteamento do deploy.
+
+Mas nem todo agente entra pela raiz — um que segue um resultado de busca ou um link compartilhado cai em uma página profunda e nunca vê o cabeçalho da página inicial. Por isso toda página renderizada também carrega os mesmos links de descoberta no `<head>` do seu HTML, usando as mesmas relações registradas na IANA:
+
+```html
+<link
+  rel="describedby"
+  href="/agent-readability.json"
+  type="application/json"
+/>
+<link rel="describedby" href="/llms.txt" type="text/plain" />
+<link rel="alternate" href="/docs/example.md" type="text/markdown" />
+```
+
+Aqui o link `alternate` aponta para o [espelho Markdown bruto](#raw-markdown) _daquela própria página_, então um agente consegue pular direto do HTML em que caiu para a versão eficiente em tokens. Como os links no head viajam junto com o HTML pré-renderizado, eles também funcionam em hosts que ignoram `_headers` e não conseguem enviar cabeçalhos de resposta personalizados de jeito nenhum (GitHub Pages, S3) — não importa por qual página o agente entre.
 
 ### Catálogo de API
 
