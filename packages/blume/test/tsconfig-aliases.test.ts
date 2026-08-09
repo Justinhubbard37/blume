@@ -87,6 +87,31 @@ describe("resolveTsconfigAliases", () => {
     });
   });
 
+  it("leaves a string value that looks like a trailing comma intact", async () => {
+    // The previous regex-based trailing-comma strip ran over string contents
+    // too, so a value like this corrupted the whole document.
+    await writeConfig(`{
+      "compilerOptions": { "paths": { "@/*": ["./src/*"] } },
+      "note": "tricky, }",
+    }`);
+
+    expect(resolveTsconfigAliases(root)).toEqual({ "@": join(root, "src") });
+  });
+
+  it("substitutes the configDir template in path targets", async () => {
+    // oxlint-disable-next-line no-template-curly-in-string -- tsconfig syntax
+    const target = "${configDir}/src/*";
+    await writeConfig(
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@/*": [target] },
+        },
+      })
+    );
+
+    expect(resolveTsconfigAliases(root)).toEqual({ "@": join(root, "src") });
+  });
+
   it("handles escaped characters inside strings (JSONC scan)", async () => {
     await writeConfig(
       JSON.stringify({
@@ -98,19 +123,19 @@ describe("resolveTsconfigAliases", () => {
     expect(resolveTsconfigAliases(root)).toEqual({ "@": join(root, "src") });
   });
 
-  it("follows a relative `extends` to a directory's tsconfig.json", async () => {
+  it("rejects a relative `extends` naming a directory, like tsc", async () => {
     await mkdir(join(root, "config"), { recursive: true });
     await writeFile(
       join(root, "config", "tsconfig.json"),
       JSON.stringify({ compilerOptions: { paths: { "@/*": ["./src/*"] } } }),
       "utf-8"
     );
-    // `./config` probes `./config.json` (missing) then `./config/tsconfig.json`.
+    // tsc resolves a relative extends as `./config` then `./config.json` —
+    // never `./config/tsconfig.json` (verified: TS6053 "File './config' not
+    // found"). Directory probing applies to bare package specifiers only.
     await writeConfig(JSON.stringify({ extends: "./config" }));
 
-    expect(resolveTsconfigAliases(root)).toEqual({
-      "@": join(root, "config", "src"),
-    });
+    expect(resolveTsconfigAliases(root)).toEqual({});
   });
 
   it("returns {} when a relative `extends` resolves to nothing", async () => {
@@ -161,7 +186,7 @@ describe("resolveTsconfigAliases", () => {
     ).toBe(true);
   });
 
-  it("resolves a bare `extends` via package main when tsconfig.json is absent", async () => {
+  it("rejects a bare `extends` whose package only has a main, like tsc", async () => {
     await mkdir(join(root, "node_modules", "tscfg"), { recursive: true });
     await writeFile(
       join(root, "node_modules", "tscfg", "package.json"),
@@ -173,15 +198,12 @@ describe("resolveTsconfigAliases", () => {
       JSON.stringify({ compilerOptions: { paths: { "~/*": ["./lib/*"] } } }),
       "utf-8"
     );
-    // `tscfg/tsconfig.json` is absent, so resolution falls back to the bare
-    // specifier, which resolves through the package `main`.
+    // With no `tscfg/tsconfig.json` and no `tsconfig` field, tsc reports
+    // TS6053 "File 'tscfg' not found" (verified) — it does not fall back to
+    // resolving a JSON config through the package `main`.
     await writeConfig(JSON.stringify({ extends: "tscfg" }));
 
-    const aliases = resolveTsconfigAliases(root);
-    expect(Object.keys(aliases)).toEqual(["~"]);
-    expect(aliases["~"]?.endsWith(join("node_modules", "tscfg", "lib"))).toBe(
-      true
-    );
+    expect(resolveTsconfigAliases(root)).toEqual({});
   });
 
   it("returns {} when a bare `extends` can't be resolved", async () => {

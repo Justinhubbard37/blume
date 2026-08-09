@@ -1,8 +1,7 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
+import { existsSync } from "node:fs";
 
-import { dirname, isAbsolute, join, resolve } from "pathe";
+import { parseTsconfig } from "get-tsconfig";
+import { dirname, join, resolve } from "pathe";
 
 /**
  * Read the project's TypeScript path aliases (`compilerOptions.paths`) and turn
@@ -15,177 +14,28 @@ import { dirname, isAbsolute, join, resolve } from "pathe";
  * import would have to be rewritten to a relative path. Reading the aliases here
  * lets those components port over unchanged.
  *
- * Best-effort and non-fatal: tsconfig is parsed leniently (it is JSONC —
- * comments and trailing commas), a single `extends` chain is followed to the
- * file that actually declares `paths`, and anything unparseable yields no
- * aliases (the prior behavior).
+ * Parsing is get-tsconfig's job — JSONC, the full `extends` chain (relative
+ * paths, directories, package specifiers, TS 5.0 arrays), and the rebasing of
+ * inherited relative paths all follow tsc's own semantics. Best-effort and
+ * non-fatal: anything unparseable yields no aliases.
  */
 
-interface ScanStep {
-  append: string;
-  inString: boolean;
-  next: number;
-}
+/** TS 5.5's config-relative template prefix, literal by design in tsconfig. */
+// oxlint-disable-next-line no-template-curly-in-string -- tsconfig's own syntax
+const CONFIG_DIR_TEMPLATE = "${configDir}";
 
-/** Scan one character (or comment/escape run) starting at `index`. */
-const scanJsonChar = (
-  text: string,
-  index: number,
-  inString: boolean
-): ScanStep => {
-  const char = text[index];
-  if (inString) {
-    if (char === "\\") {
-      return {
-        append: char + (text[index + 1] ?? ""),
-        inString: true,
-        next: index + 2,
-      };
-    }
-    return { append: char ?? "", inString: char !== '"', next: index + 1 };
-  }
-  if (char === '"') {
-    return { append: char, inString: true, next: index + 1 };
-  }
-  if (char === "/" && text[index + 1] === "/") {
-    const newline = text.indexOf("\n", index + 2);
-    return {
-      append: "",
-      inString: false,
-      next: newline === -1 ? text.length : newline,
-    };
-  }
-  if (char === "/" && text[index + 1] === "*") {
-    const end = text.indexOf("*/", index + 2);
-    return {
-      append: "",
-      inString: false,
-      next: end === -1 ? text.length : end + 2,
-    };
-  }
-  return { append: char ?? "", inString: false, next: index + 1 };
-};
-
-/** Strip `//` line and `/* *\/` block comments that sit outside strings. */
-const stripJsonComments = (text: string): string => {
-  let out = "";
-  let inString = false;
-  let index = 0;
-  while (index < text.length) {
-    const {
-      append,
-      inString: nextInString,
-      next,
-    } = scanJsonChar(text, index, inString);
-    out += append;
-    inString = nextInString;
-    index = next;
-  }
-  return out;
-};
-
-const TRAILING_COMMA = /,(?<rest>\s*[}\]])/gu;
-
-/** Parse JSONC (tsconfig) into a plain object, or null if it can't be read. */
-const parseJsonc = (text: string): Record<string, unknown> | null => {
-  try {
-    const cleaned = stripJsonComments(text).replaceAll(
-      TRAILING_COMMA,
-      "$<rest>"
-    );
-    const value: unknown = JSON.parse(cleaned);
-    return value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-};
-
-const isFile = (path: string): boolean => {
-  try {
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
-};
-
-/** Resolve a tsconfig `extends` target (relative path, directory, or package). */
-const resolveExtends = (spec: string, fromDir: string): string | null => {
-  if (spec.startsWith(".") || isAbsolute(spec)) {
-    const candidates = spec.endsWith(".json")
-      ? [resolve(fromDir, spec)]
-      : [
-          resolve(fromDir, `${spec}.json`),
-          resolve(fromDir, spec, "tsconfig.json"),
-          resolve(fromDir, spec),
-        ];
-    return candidates.find(isFile) ?? null;
-  }
-  // A bare specifier points at a package's shared config (e.g. `@tsconfig/*`).
-  try {
-    const requireFromDir = createRequire(
-      pathToFileURL(join(fromDir, "_.js")).href
-    );
-    for (const sub of [`${spec}/tsconfig.json`, spec]) {
-      try {
-        return requireFromDir.resolve(sub);
-      } catch {
-        // try the next candidate
-      }
-    }
-  } catch {
-    // createRequire failed; fall through
-  }
-  return null;
-};
-
-interface LoadedPaths {
-  /** Directory `paths` entries resolve against (`dirname(file)` + `baseUrl`). */
-  baseDir: string;
-  paths: Record<string, unknown>;
-}
-
-/** Find the nearest tsconfig in an `extends` chain that declares `paths`. */
-const loadPaths = (file: string, seen: Set<string>): LoadedPaths | null => {
-  if (seen.has(file) || !existsSync(file)) {
-    return null;
-  }
-  seen.add(file);
-  const json = parseJsonc(readFileSync(file, "utf-8"));
-  if (!json) {
-    return null;
-  }
-  const options = (json.compilerOptions ?? {}) as Record<string, unknown>;
-  if (options.paths && typeof options.paths === "object") {
-    const baseUrl = typeof options.baseUrl === "string" ? options.baseUrl : ".";
-    return {
-      baseDir: resolve(dirname(file), baseUrl),
-      paths: options.paths as Record<string, unknown>,
-    };
-  }
-  // `extends` is a string or, since TS 5.0, an array searched first-to-last.
-  const bases = Array.isArray(json.extends)
-    ? json.extends
-    : [json.extends].filter(Boolean);
-  for (const base of bases) {
-    if (typeof base !== "string") {
-      continue;
-    }
-    const resolved = resolveExtends(base, dirname(file));
-    const found = resolved ? loadPaths(resolved, seen) : null;
-    if (found) {
-      return found;
-    }
-  }
-  return null;
-};
+/** Substitute a leading `${configDir}` template with the config's directory. */
+const substituteConfigDir = (value: string, configDir: string): string =>
+  value.startsWith(CONFIG_DIR_TEMPLATE)
+    ? join(configDir, value.slice(CONFIG_DIR_TEMPLATE.length))
+    : value;
 
 /** Convert one tsconfig `paths` mapping to a Vite alias, or null to skip. */
 const toAlias = (
   key: string,
   value: unknown,
-  baseDir: string
+  baseDir: string,
+  configDir: string
 ): { find: string; replacement: string } | null => {
   // tsconfig allows a fallback array; Vite aliases are 1:1, so take the first.
   const first = Array.isArray(value) ? value[0] : value;
@@ -198,7 +48,10 @@ const toAlias = (
   if (find === "" || find === "*") {
     return null;
   }
-  return { find, replacement: resolve(baseDir, target) };
+  return {
+    find,
+    replacement: resolve(baseDir, substituteConfigDir(target, configDir)),
+  };
 };
 
 /**
@@ -215,13 +68,27 @@ export const resolveTsconfigAliases = (
   if (!entry) {
     return {};
   }
-  const loaded = loadPaths(entry, new Set());
-  if (!loaded) {
+  let options: ReturnType<typeof parseTsconfig>["compilerOptions"];
+  try {
+    options = parseTsconfig(entry).compilerOptions;
+  } catch {
+    // Unparseable config or unresolvable extends: no aliases, as before.
     return {};
   }
+  const paths = options?.paths;
+  if (!paths) {
+    return {};
+  }
+  const configDir = dirname(entry);
+  // get-tsconfig rebases inherited relative values onto the entry config, so
+  // `baseUrl` (and bare `paths` entries) anchor here after substitution.
+  const baseDir = resolve(
+    configDir,
+    substituteConfigDir(options?.baseUrl ?? ".", configDir)
+  );
   const aliases: Record<string, string> = {};
-  for (const [key, value] of Object.entries(loaded.paths)) {
-    const alias = toAlias(key, value, loaded.baseDir);
+  for (const [key, value] of Object.entries(paths)) {
+    const alias = toAlias(key, value, baseDir, configDir);
     if (alias) {
       aliases[alias.find] = alias.replacement;
     }
