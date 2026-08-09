@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 
+import { parse } from "dotenv";
 import { dirname, join, resolve } from "pathe";
 
 // Blume's remote sources (GitHub Releases, mdx-remote, Sanity, Notion…) read
@@ -8,56 +9,15 @@ import { dirname, join, resolve } from "pathe";
 // that gap: it cascades `.env`/`.env.local` from the working dir up to the repo
 // root, so a monorepo can keep one `.env` at the root and every app picks it up.
 
-const ENV_LINE =
-  /^\s*(?:export\s+)?(?<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<value>.*?)\s*$/u;
-const DOUBLE_QUOTED = /^"(?<body>[\s\S]*)"$/u;
-const SINGLE_QUOTED = /^'(?<body>[\s\S]*)'$/u;
-
-const ESCAPE = /\\(?<char>[\\nt"])/gu;
-const UNESCAPED: Record<string, string> = {
-  '"': '"',
-  "\\": "\\",
-  n: "\n",
-  t: "\t",
-};
-
-/** Unquote a value, expanding `\n`/`\t`/escapes inside double quotes only. */
-const unquote = (raw: string): string => {
-  const double = raw.match(DOUBLE_QUOTED)?.groups?.body;
-  if (double !== undefined) {
-    // A single pass so each backslash is consumed exactly once — sequential
-    // replaceAll calls would expand the `n` in `\\n` (an escaped backslash
-    // followed by a literal `n`) into a newline.
-    return double.replaceAll(
-      ESCAPE,
-      (match, char: string) => UNESCAPED[char] ?? match
-    );
-  }
-  const single = raw.match(SINGLE_QUOTED)?.groups?.body;
-  if (single !== undefined) {
-    return single;
-  }
-  // dotenv/Vite treat an unquoted `#` as the start of an inline comment (a
-  // value containing `#` must be quoted) — keeping the comment would hand
-  // consumers a silently corrupted value.
-  const hash = raw.indexOf("#");
-  return (hash === -1 ? raw : raw.slice(0, hash)).trim();
-};
-
-/** Parse `.env` text into key/value pairs, skipping blanks and `#` comments. */
-export const parseEnv = (content: string): Record<string, string> => {
-  const env: Record<string, string> = {};
-  for (const line of content.split(/\r?\n/u)) {
-    if (line.trim() === "" || line.trimStart().startsWith("#")) {
-      continue;
-    }
-    const groups = line.match(ENV_LINE)?.groups;
-    if (groups?.key !== undefined && groups.value !== undefined) {
-      env[groups.key] = unquote(groups.value);
-    }
-  }
-  return env;
-};
+/**
+ * Parse `.env` text into key/value pairs with dotenv — the same parser Vite
+ * runs over these files at build time, so a value means the same thing to the
+ * pre-boot content scan and to the built site. Notably this handles
+ * multi-line double-quoted values (PEM keys), which a line-based parser
+ * silently truncates.
+ */
+export const parseEnv = (content: string): Record<string, string> =>
+  parse(content);
 
 /** Apply parsed vars without clobbering anything already in `process.env`. */
 const applyEnv = (parsed: Record<string, string>): void => {

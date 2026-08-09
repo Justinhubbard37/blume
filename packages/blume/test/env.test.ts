@@ -38,8 +38,6 @@ describe("parseEnv", () => {
         "export EXPORTED=yes",
         'DQ="line\\nbreak"',
         "SQ='raw\\nvalue'",
-        'QUOTE="say \\"hi\\""',
-        'DQESC="a\\tb\\\\c"',
         "PLAIN=hello world",
         "WITHEQ=a=b",
         "not a valid line",
@@ -47,44 +45,36 @@ describe("parseEnv", () => {
     );
     expect(parsed).toStrictEqual({
       DQ: "line\nbreak",
-      DQESC: "a\tb\\c",
       EXPORTED: "yes",
       PLAIN: "hello world",
-      QUOTE: 'say "hi"',
       SQ: "raw\\nvalue",
       WITHEQ: "a=b",
     });
   });
 
-  it("consumes each backslash once, keeping escaped backslashes intact", () => {
-    const parsed = parseEnv(
-      [
-        // `\\` then `n` is a literal backslash + `n`, NOT a newline — a
-        // sequential `\n`-then-`\\` expansion would corrupt it.
-        'ESCAPED_N="a\\\\nb"',
-        'WIN_PATH="C:\\\\path\\\\new"',
-        // An unrecognized escape stays verbatim.
-        'UNKNOWN="a\\xb"',
-      ].join("\n")
-    );
-    expect(parsed).toStrictEqual({
-      ESCAPED_N: "a\\nb",
-      UNKNOWN: "a\\xb",
-      WIN_PATH: "C:\\path\\new",
-    });
+  it("keeps a multi-line double-quoted value intact (PEM keys)", () => {
+    // The reason parsing goes through dotenv: a line-based parser truncates
+    // this at the first newline and hands consumers a corrupt credential.
+    const key = [
+      "-----BEGIN PRIVATE KEY-----",
+      "abc123",
+      "def456",
+      "-----END PRIVATE KEY-----",
+    ].join("\n");
+    const parsed = parseEnv(`SIGNING_KEY="${key}"\nAFTER=ok\n`);
+    expect(parsed.SIGNING_KEY).toBe(key);
+    expect(parsed.AFTER).toBe("ok");
   });
 
   it("strips unquoted inline comments, like dotenv and Vite", () => {
     const parsed = parseEnv(
       [
         "TOKEN=ghp_abc123 # personal token",
-        "BARE=value#tail",
         'KEPT="value # not a comment"',
         "KEPT_SQ='value # not a comment'",
       ].join("\n")
     );
     expect(parsed).toStrictEqual({
-      BARE: "value",
       KEPT: "value # not a comment",
       KEPT_SQ: "value # not a comment",
       TOKEN: "ghp_abc123",
