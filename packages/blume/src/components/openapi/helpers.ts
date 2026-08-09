@@ -1,9 +1,11 @@
+import { sample } from "openapi-sampler";
+
 /**
  * Runtime helpers for the OpenAPI components. These operate on the parsed spec
  * behind the `blume:openapi` alias — resolving `$ref`s (kept intact at parse
  * time to avoid circular graphs), labelling types, and generating request
- * examples and code samples. Pure and dependency-free so they run in the browser
- * build with no server-only imports.
+ * examples and code samples. Browser-safe (no server-only imports); example
+ * values come from openapi-sampler, which is likewise browser-safe.
  */
 
 /** A permissive view of an OpenAPI 3.1 schema — only the fields we render. */
@@ -226,88 +228,32 @@ export const objectProperties = (
   return { properties: [...properties.entries()], required };
 };
 
-/** Sentinel: no explicit example is declared on a schema. */
-const NO_VALUE = Symbol("no-value");
-
-/** The declared example/const/default/enum for a schema, or {@link NO_VALUE}. */
-const explicitExample = (schema: SchemaLike): unknown => {
-  if (schema.example !== undefined) {
-    return schema.example;
-  }
-  if (Array.isArray(schema.examples) && schema.examples.length > 0) {
-    return schema.examples[0];
-  }
-  // `const` is the schema's only valid value (the 3.1 discriminator idiom), so
-  // it outranks `default`/`enum` — either of those differing would be invalid.
-  if (schema.const !== undefined) {
-    return schema.const;
-  }
-  if (schema.default !== undefined) {
-    return schema.default;
-  }
-  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
-    return schema.enum[0];
-  }
-  return NO_VALUE;
-};
-
-/** A placeholder value for a primitive (leaf) schema. */
-const primitiveExample = (
-  types: string[],
-  format: string | undefined
-): unknown => {
-  if (types.includes("number") || types.includes("integer")) {
-    return 0;
-  }
-  if (types.includes("boolean")) {
-    return true;
-  }
-  if (format === "date-time") {
-    return "2024-01-01T00:00:00Z";
-  }
-  return format ? `<${format}>` : "string";
-};
-
 /**
- * Build a representative example value for a schema (honoring `example` /
- * `const` / `default` / `enum` first). A `seen` set of `$ref`s guards against
- * the circular schemas that keeping refs intact allows.
+ * Build a representative example value for a schema via openapi-sampler
+ * (Redoc's generator): declared `example`/`const`/`default`/`enum` values
+ * win, formats produce realistic placeholders (`email`, `uuid`, `date-time`),
+ * `readOnly` fields are skipped (these samples illustrate *requests*, and a
+ * server-generated field has no place in one), and circular `$ref` chains —
+ * which keeping refs intact allows — terminate safely.
  */
 export const exampleValue = (
   schema: SchemaLike | undefined,
-  schemas: Record<string, SchemaLike>,
-  seen = new Set<string>()
+  schemas: Record<string, SchemaLike>
 ): unknown => {
   if (!schema) {
     return null;
   }
-  if (typeof schema.$ref === "string") {
-    if (seen.has(schema.$ref)) {
-      return null;
-    }
-    seen.add(schema.$ref);
-    return exampleValue(resolveSchema(schemas, schema), schemas, seen);
+  try {
+    return sample(
+      schema as Parameters<typeof sample>[0],
+      { quiet: true, skipReadOnly: true },
+      { components: { schemas } }
+    );
+  } catch {
+    // An unresolvable $ref or malformed schema is a spec problem the schema
+    // tables already surface; a sample is best-effort.
+    return null;
   }
-  const explicit = explicitExample(schema);
-  if (explicit !== NO_VALUE) {
-    return explicit;
-  }
-  const branch = schema.oneOf?.[0] ?? schema.anyOf?.[0];
-  if (branch) {
-    return exampleValue(branch, schemas, seen);
-  }
-  const types = nonNullTypes(schema.type);
-  if (types.includes("array")) {
-    return [exampleValue(schema.items, schemas, seen)];
-  }
-  if (types.includes("object") || schema.properties || schema.allOf) {
-    const out: Record<string, unknown> = {};
-    for (const [name, prop] of objectProperties(schema, schemas).properties) {
-      out[name] = exampleValue(prop, schemas, new Set(seen));
-    }
-    return out;
-  }
-  return primitiveExample(types, schema.format);
 };
 
 /** Pretty-print a JSON value for an example/code block. */

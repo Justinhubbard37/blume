@@ -1418,7 +1418,7 @@ describe("helpers", () => {
     expect(tag).toHaveProperty("name");
     expect(exampleValue({ type: "boolean" }, schemas)).toBe(true);
     expect(exampleValue({ format: "date-time", type: "string" }, schemas)).toBe(
-      "2024-01-01T00:00:00Z"
+      "2019-08-24T14:15:22Z"
     );
     expect(exampleValue({ examples: [42] }, schemas)).toBe(42);
     expect(exampleValue({ default: "d" }, schemas)).toBe("d");
