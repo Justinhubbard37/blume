@@ -5,13 +5,8 @@ import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
 import type { UIStrings } from "../../core/i18n-ui.ts";
-import { joinBase, prefixBase, stripBase } from "./base-path.ts";
-
-interface ChatMessage {
-  content: string;
-  id: number;
-  role: "assistant" | "user";
-}
+import { joinBase, prefixBase } from "./base-path.ts";
+import { useAskAI } from "./hooks.ts";
 
 /** A resolved empty-state prompt; `icon` is ready-to-inline SVG (or null). */
 interface Suggestion {
@@ -57,19 +52,9 @@ const DEFAULT_ASK: UIStrings["ask"] = {
   you: "You",
 };
 
-let idCounter = 0;
-const nextId = (): number => {
-  idCounter += 1;
-  return idCounter;
-};
-
-// The endpoint and page path both honor the deployment `base` so grounding works
-// under a non-root base path (the server matches base-less document routes).
+// The endpoint honors the deployment `base` so grounding works under a
+// non-root base path (the server matches base-less document routes).
 const DEFAULT_ASK_ENDPOINT = joinBase(import.meta.env.BASE_URL, "api/ask");
-
-/** The current route with the deployment base stripped, for page-context lookup. */
-const currentPath = (): string =>
-  stripBase(import.meta.env.BASE_URL, window.location.pathname);
 
 // GitHub-flavored markdown with soft line breaks, matching how the docs read.
 marked.setOptions({ breaks: true, gfm: true });
@@ -149,20 +134,20 @@ const AskAI = ({
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [busy, setBusy] = useState(false);
+  // The streaming client — request shaping, optimistic assistant bubble,
+  // stale-stream/abort guards, error-body handling — is the public useAskAI
+  // hook, so the built-in panel and custom UIs share one implementation.
+  const {
+    ask,
+    loading: busy,
+    messages,
+    reset,
+  } = useAskAI({ endpoint, errorMessage: t.error });
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   // Where focus came from when the panel opened, restored on close.
   const returnFocusRef = useRef<HTMLElement | null>(null);
-  // The stream writes into the conversation via functional updates, so "Clear
-  // conversation" mid-answer must revoke the in-flight stream's right to write
-  // — otherwise its next chunk re-appends the assistant bubble onto the
-  // emptied list as an orphaned answer. Clearing bumps the generation (stale
-  // streams stop writing) and aborts the request (the stream stops arriving).
-  const abortRef = useRef<AbortController | null>(null);
-  const generationRef = useRef(0);
 
   // Portal target (document.body) only exists after mount; guards SSR. The
   // one-time false→true flip is deliberate, so the initial `false` is required.
@@ -245,86 +230,22 @@ const AskAI = ({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
 
-  const runQuestion = async (raw: string) => {
+  const runQuestion = (raw: string) => {
     const question = raw.trim();
     if (!question || busy) {
       return;
     }
-
-    const userMessage: ChatMessage = {
-      content: question,
-      id: nextId(),
-      role: "user",
-    };
-    const history = [...messages, userMessage];
-    const assistant: ChatMessage = {
-      content: "",
-      id: nextId(),
-      role: "assistant",
-    };
-    setMessages([...history, assistant]);
+    void ask(question);
     setInput("");
-    setBusy(true);
-    const generation = generationRef.current;
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const response = await fetch(endpoint, {
-        body: JSON.stringify({
-          messages: history.map((m) => ({ content: m.content, role: m.role })),
-          page: { path: currentPath() },
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-        signal: controller.signal,
-      });
-      // A 4xx/5xx still has a body; without this guard its error text would be
-      // decoded and shown as the assistant's answer instead of the error notice.
-      if (!(response.ok && response.body)) {
-        throw new Error(`Ask AI request failed (${response.status}).`);
-      }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      while (!done) {
-        // oxlint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- sequential stream consumption; iterations are not independent
-        const chunk = await reader.read();
-        ({ done } = chunk);
-        if (chunk.value) {
-          // Streaming mode: a multi-byte UTF-8 sequence split across chunks
-          // must not flush as U+FFFD garbage.
-          // oxlint-disable-next-line react/react-compiler -- local streaming accumulator, spread into state below
-          assistant.content += decoder.decode(chunk.value, { stream: true });
-          if (generationRef.current === generation) {
-            setMessages((current) => [
-              ...current.slice(0, -1),
-              { ...assistant },
-            ]);
-          }
-        }
-      }
-    } catch {
-      // A cleared (aborted) stream must not resurrect its bubble as an error.
-      if (generationRef.current === generation) {
-        // oxlint-disable-next-line react/react-compiler -- local streaming accumulator, spread into state below
-        assistant.content = t.error;
-        setMessages((current) => [...current.slice(0, -1), { ...assistant }]);
-      }
-    } finally {
-      setBusy(false);
-    }
   };
 
   const clearConversation = () => {
-    generationRef.current += 1;
-    abortRef.current?.abort();
-    setMessages([]);
+    reset();
   };
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
-    void runQuestion(input);
+    runQuestion(input);
   };
 
   const onInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -336,7 +257,7 @@ const AskAI = ({
       !event.nativeEvent.isComposing
     ) {
       event.preventDefault();
-      void runQuestion(input);
+      runQuestion(input);
     }
   };
 
@@ -398,16 +319,20 @@ const AskAI = ({
       >
         {hasMessages ? (
           <div className="flex flex-col gap-4 p-4">
-            {messages.map((message) =>
+            {/* Index keys are safe here: the list only appends, mutates its
+                last entry while streaming, or clears wholesale on reset. */}
+            {messages.map((message, index) =>
               message.role === "user" ? (
                 <div
                   className="max-w-[85%] self-end whitespace-pre-wrap rounded-blume bg-muted px-3 py-2 text-foreground text-sm"
-                  key={message.id}
+                  // oxlint-disable-next-line react/no-array-index-key -- append-only list, see above
+                  key={index}
                 >
                   {message.content}
                 </div>
               ) : (
-                <div className={ANSWER_CLASS} key={message.id}>
+                // oxlint-disable-next-line react/no-array-index-key -- append-only list, see above
+                <div className={ANSWER_CLASS} key={index}>
                   {message.content ? (
                     // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized above
                     <div

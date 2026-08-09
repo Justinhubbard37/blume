@@ -144,6 +144,12 @@ const DEFAULT_ASK_ENDPOINT = joinBase(import.meta.env.BASE_URL, "api/ask");
 export interface UseAskAIOptions {
   /** Existing Ask AI endpoint; defaults to Blume's generated `/api/ask`. */
   endpoint?: string;
+  /**
+   * Shown as the assistant's answer when the request fails or throws.
+   * Defaults to an English notice; the built-in island passes its localized
+   * dictionary string.
+   */
+  errorMessage?: string;
 }
 
 /** Shown as the assistant's answer when the request fails or throws. */
@@ -159,6 +165,7 @@ const currentPath = (): string =>
  */
 export const useAskAI = (options: UseAskAIOptions = {}): UseAskAI => {
   const endpoint = options.endpoint ?? DEFAULT_ASK_ENDPOINT;
+  const errorMessage = options.errorMessage ?? ASK_ERROR;
   const [messages, setMessages] = useState<AskMessage[]>([]);
   const [loading, setLoading] = useState(false);
   // The stream writes into the conversation via state updates, so `reset()`
@@ -205,7 +212,7 @@ export const useAskAI = (options: UseAskAIOptions = {}): UseAskAI => {
           // An error body (JSON, HTML error page) must not stream in as the
           // assistant's answer.
           if (live()) {
-            assistant.content = ASK_ERROR;
+            assistant.content = errorMessage;
             setMessages([...history, { ...assistant }]);
           }
           return;
@@ -236,7 +243,7 @@ export const useAskAI = (options: UseAskAIOptions = {}): UseAskAI => {
         // pre-appended empty assistant message as a stuck placeholder. A
         // reset's abort lands here too — the guard keeps it silent.
         if (live()) {
-          assistant.content = ASK_ERROR;
+          assistant.content = errorMessage;
           setMessages([...history, { ...assistant }]);
         }
       } finally {
@@ -245,7 +252,7 @@ export const useAskAI = (options: UseAskAIOptions = {}): UseAskAI => {
         }
       }
     },
-    [endpoint, loading, messages]
+    [endpoint, errorMessage, loading, messages]
   );
 
   // Retained for the compiler-off opt-out path (`react: { compiler: false }`):
