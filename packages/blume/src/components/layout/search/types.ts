@@ -1,3 +1,5 @@
+import { escape } from "html-escaper";
+
 /** A single result rendered in the search dialog. */
 export interface SearchHit {
   url: string;
@@ -51,20 +53,11 @@ export const SEARCH_LIMIT = 12;
  */
 export const RESULT_POOL = 48;
 
-const HTML_ESCAPES: Record<string, string> = {
-  '"': "&quot;",
-  "&": "&amp;",
-  "'": "&#39;",
-  "<": "&lt;",
-  ">": "&gt;",
-};
-const HTML_CHARS = /["&'<>]/gu;
 const REGEXP_SPECIAL = /[$()*+.?[\\\]^{|}]/gu;
 const WORD_BREAK = /\s+/u;
 
 /** Escape HTML so untrusted text renders literally inside the dialog. */
-export const escapeHtml = (text: string): string =>
-  text.replaceAll(HTML_CHARS, (char) => HTML_ESCAPES[char] ?? char);
+export const escapeHtml = (text: string): string => escape(text);
 
 /** Split a query into escaped, non-empty search tokens. */
 const queryTokens = (query: string): string[] =>

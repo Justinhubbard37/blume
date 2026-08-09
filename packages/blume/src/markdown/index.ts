@@ -6,6 +6,7 @@ import {
   transformerNotationHighlight,
   transformerNotationWordHighlight,
 } from "@shikijs/transformers";
+import { escape as escapeHtml } from "html-escaper";
 import { codeToHtml } from "shiki";
 
 import { baseLinksPlugin } from "./base-links.ts";
@@ -106,12 +107,6 @@ export const blumeShikiTransformers = (
   transformers.push(codeTitleTransformer() as unknown as ShikiTransformer);
   return transformers;
 };
-
-const escapeHtml = (value: string): string =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
 
 /**
  * Tag the highlighted `<pre>` with `astro-code` (plus any extra classes) so the

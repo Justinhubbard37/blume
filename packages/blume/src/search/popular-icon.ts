@@ -1,3 +1,5 @@
+import { escape } from "html-escaper";
+
 import { prefixBase } from "../components/islands/base-path.ts";
 import { isImageIcon, isInlineSvg } from "../theme/icon-kind.ts";
 import { resolveIcon } from "../theme/icons.ts";
@@ -21,9 +23,7 @@ export const resolvePopularIconMarkup = (
     return `<span aria-hidden="true" style="display:inline-flex;width:16px;height:16px">${icon.trim()}</span>`;
   }
   if (isImageIcon(icon)) {
-    const src = prefixBase(base, icon.trim())
-      .replaceAll("&", "&amp;")
-      .replaceAll('"', "&quot;");
+    const src = escape(prefixBase(base, icon.trim()));
     return `<img src="${src}" width="16" height="16" alt="" aria-hidden="true" class="size-4" />`;
   }
   const resolved = resolveIcon(icon);
