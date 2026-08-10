@@ -416,6 +416,67 @@ describe("negotiation worker — configured redirects", () => {
     );
   });
 
+  it("forwards the request query string, like the static layer", async () => {
+    // `_redirects` preserves the incoming query string, so a site adopting
+    // the baked-in table must not strip attribution parameters (#175).
+    const worker = await loadWorker(workerText({ redirects: REDIRECTS }));
+    const response = await worker.fetch(
+      new Request("https://site.test/docs/api?utm_source=x&ref=y"),
+      makeEnv().env,
+      {}
+    );
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "/docs/api-reference?utm_source=x&ref=y"
+    );
+  });
+
+  it("lets a destination's own query string win over the request's", async () => {
+    const worker = await loadWorker(
+      workerText({
+        redirects: [
+          { from: "/docs/old-search", status: 302, to: "/docs/search?tab=all" },
+        ],
+      })
+    );
+    const response = await worker.fetch(
+      new Request("https://site.test/docs/old-search?utm_source=x"),
+      makeEnv().env,
+      {}
+    );
+    expect(response.headers.get("location")).toBe("/docs/search?tab=all");
+  });
+
+  it("inserts the query string before a destination fragment", async () => {
+    // A fragment must stay last in the URL; appending the query after it
+    // would bury the parameters inside the fragment.
+    const worker = await loadWorker(
+      workerText({
+        redirects: [
+          {
+            from: "/docs/install",
+            status: 302,
+            to: "/docs/quickstart#install",
+          },
+        ],
+      })
+    );
+    const withQuery = await worker.fetch(
+      new Request("https://site.test/docs/install?ref=a"),
+      makeEnv().env,
+      {}
+    );
+    expect(withQuery.headers.get("location")).toBe(
+      "/docs/quickstart?ref=a#install"
+    );
+    const bare = await worker.fetch(
+      new Request("https://site.test/docs/install"),
+      makeEnv().env,
+      {}
+    );
+    expect(bare.headers.get("location")).toBe("/docs/quickstart#install");
+  });
+
   it("applies redirects to every method, like the static layer", async () => {
     const worker = await loadWorker(workerText({ redirects: REDIRECTS }));
     const { calls, env } = makeEnv();

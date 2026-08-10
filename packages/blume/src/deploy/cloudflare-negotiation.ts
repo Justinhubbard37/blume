@@ -276,6 +276,20 @@ const redirectFor = (pathname) => {
   return Object.hasOwn(REDIRECTS, path) ? REDIRECTS[path] : null;
 };
 
+// \`_redirects\` semantics, which the static layer applies to these same
+// paths: the request's query string is forwarded unless the destination
+// carries its own, and a destination fragment stays after the query.
+const redirectLocation = (destination, search) => {
+  const hashIndex = destination.indexOf("#");
+  const bare = hashIndex === -1 ? destination : destination.slice(0, hashIndex);
+  if (!search || bare.includes("?")) {
+    return destination;
+  }
+  return hashIndex === -1
+    ? bare + search
+    : bare + search + destination.slice(hashIndex);
+};
+
 const parseAccept = (accept) =>
   accept.split(",").map((part) => {
     const segments = part.trim().split(";");
@@ -355,7 +369,7 @@ export default {
     const redirect = redirectFor(url.pathname);
     if (redirect !== null) {
       return new Response(null, {
-        headers: { location: redirect[0] },
+        headers: { location: redirectLocation(redirect[0], url.search) },
         status: redirect[1],
       });
     }
