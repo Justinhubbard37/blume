@@ -242,6 +242,20 @@ describe("normalizeEntry", () => {
     expect(page?.title).toBe("Intro");
   });
 
+  it("strips characters that break URL construction from route segments", () => {
+    // A `:` ahead of the first `/` turns the route into a URL scheme
+    // (`Guide: Architecture.md` → `guide:`) and crashes Astro's prerender
+    // write; control characters are silently dropped by the URL parser,
+    // desyncing the route from its output path. Both are legal filenames.
+    expect(entryRouteOf({ ref: "Guide: Architecture.md" })?.route).toBe(
+      "/Guide Architecture"
+    );
+    expect(entryRouteOf({ ref: "Guide\nArch.md" })?.route).toBe("/GuideArch");
+    // A segment that was nothing but stripped characters cannot survive as an
+    // empty route piece; the remaining segments still form the route.
+    expect(entryRouteOf({ ref: ":/setup.md" })?.route).toBe("/setup");
+  });
+
   it("normalizes slashed slugs and prefixes into clean routes", () => {
     const page = routeOf;
     // A leading-slash slug (Mintlify/CMS habit) must not produce `//route`.

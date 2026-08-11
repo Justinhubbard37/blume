@@ -55,6 +55,18 @@ const titleCase = (value: string): string =>
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 
+/**
+ * Strip characters that cannot survive the route → URL → output-file round
+ * trip. A `:` ahead of the first `/` makes `new URL()` read the segment as a
+ * scheme (`Guide: Architecture.md` → `guide:`), which crashes Astro's
+ * prerender write with "The URL must be of scheme file"; control characters
+ * (an embedded newline in a filename) are silently dropped by the URL parser,
+ * desyncing the route from its output path. Both are legal in macOS/Linux
+ * filenames, so they are removed here rather than rejected.
+ */
+const sanitizeSegment = (segment: string): string =>
+  segment.replaceAll(/[:\p{Cc}]/gu, "");
+
 /** Fold one raw path part into the accumulating route segments/groups. */
 const addRouteSegment = (
   part: string,
@@ -75,7 +87,12 @@ const addRouteSegment = (
   if (clean === "index") {
     return;
   }
-  segments.push(clean);
+  const safe = sanitizeSegment(clean);
+  // A part that was nothing but stripped characters cannot name a segment.
+  if (safe === "") {
+    return;
+  }
+  segments.push(safe);
 };
 
 /** Convert a content-root-relative path into URL + nav metadata. */
