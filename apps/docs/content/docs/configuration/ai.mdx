@@ -136,6 +136,22 @@ ai: {
 
 `label` is the question that gets asked; `icon` is optional. Leave `suggestions` unset (or empty) and the panel opens to a plain input.
 
+### Custom instructions
+
+Add your own system-prompt text with `instructions` — identity, language, tone, or anything else the assistant should keep in mind:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  ask: {
+    enabled: true,
+    instructions:
+      "You are Bloomy, the Acme docs assistant. Answer in the language the question was asked in, and keep answers under three paragraphs.",
+  },
+}
+```
+
+Your text is **appended to** the built-in instructions rather than replacing them: the built-in part carries the [grounding](#grounding) contract — answer only from the retrieved pages, cite them as Markdown links — that the chat panel's citations depend on, so it stays intact whatever you add.
+
 ### Grounding
 
 Ask AI is **grounded in your docs**. For each question it retrieves the most relevant pages — using the same lexical [Orama](/docs/configuration/search) index that powers on-page search — and injects them into the model's system prompt, so answers come from your content instead of the model's own knowledge. The assistant is told to answer only from the retrieved pages, to say when something isn't covered, and to cite the pages it drew from.
@@ -185,15 +201,17 @@ A static build with Ask AI enabled and no external `endpoint` fails fast with a 
 
 By default Ask AI routes through the **Vercel AI Gateway**: `model` is a `provider/model` string, so you switch models by changing it (`openai/gpt-5.5`, `anthropic/claude-sonnet-4-5`, and so on) with no provider SDK to install. The gateway reads `AI_GATEWAY_API_KEY` from your environment and is wired up automatically when you deploy on Vercel.
 
-Set `provider` to point Ask AI somewhere else. Each backend reads its API key from an environment variable, and the matching provider SDK is added to your project's runtime automatically when you build — only the one you use:
+Set `provider` to point Ask AI somewhere else. Each backend reads its API key from an environment variable and streams through a provider SDK you install in your project — only the one you use:
 
-| `provider` | `model` | API key env var |
-| --- | --- | --- |
-| `gateway` (default) | a `provider/model` string via the AI Gateway | `AI_GATEWAY_API_KEY` |
-| `openrouter` | any [OpenRouter](https://openrouter.ai) model | `OPENROUTER_API_KEY` |
-| `llmgateway` | any [LLMGateway](https://llmgateway.io) model | `LLMGATEWAY_API_KEY` |
-| `inkeep` | an [Inkeep](https://inkeep.com) QA model | `INKEEP_API_KEY` |
-| `openai-compatible` | whatever your endpoint serves | set with `apiKeyEnv` |
+| `provider` | `model` | API key env var | SDK to install |
+| --- | --- | --- | --- |
+| `gateway` (default) | a `provider/model` string via the AI Gateway | `AI_GATEWAY_API_KEY` | none — ships with Blume |
+| `openrouter` | any [OpenRouter](https://openrouter.ai) model | `OPENROUTER_API_KEY` | `@openrouter/ai-sdk-provider` |
+| `llmgateway` | any [LLMGateway](https://llmgateway.io) model | `LLMGATEWAY_API_KEY` | `@ai-sdk/openai-compatible` |
+| `inkeep` | an [Inkeep](https://inkeep.com) QA model | `INKEEP_API_KEY` | `@ai-sdk/openai-compatible` |
+| `openai-compatible` | whatever your endpoint serves | set with `apiKeyEnv` | `@ai-sdk/openai-compatible` |
+
+The SDKs are optional peer dependencies, so add the one your backend needs to your project (e.g. `npm install @openrouter/ai-sdk-provider`). If it's missing, the build warns with the exact package name before Vite would fail to resolve the import.
 
 For example, to use OpenRouter:
 

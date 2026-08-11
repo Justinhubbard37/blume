@@ -199,9 +199,15 @@ export const relevantExcerpt = (
  * grounded system prompt — the retrieved excerpts plus the page the user is
  * viewing — or `undefined` when there is nothing to ground on, so the endpoint
  * can fall back to its plain prompt.
+ *
+ * `options.instructions` (the `ai.ask.instructions` config) is appended after
+ * the base instruction rather than replacing it: the base carries the
+ * functional contract (answer only from the excerpts, cite pages as Markdown
+ * links) that the panel's citation rendering depends on.
  */
 export const createAskContext = (
-  data: AskData
+  data: AskData,
+  options?: { instructions?: string }
 ): ((
   messages: AskMessage[],
   page?: AskPage
@@ -213,6 +219,9 @@ export const createAskContext = (
     return dbPromise;
   };
   const byRoute = new Map(data.documents.map((doc) => [doc.route, doc]));
+  const instruction = options?.instructions
+    ? `${BASE_INSTRUCTION}\n\n${options.instructions}`
+    : BASE_INSTRUCTION;
 
   return async (messages, page) => {
     const list = Array.isArray(messages) ? messages : [];
@@ -257,6 +266,6 @@ export const createAskContext = (
     if (sections.length === 0) {
       return;
     }
-    return `${BASE_INSTRUCTION}\n\n<docs>\n${sections.join("\n\n")}\n</docs>`;
+    return `${instruction}\n\n<docs>\n${sections.join("\n\n")}\n</docs>`;
   };
 };

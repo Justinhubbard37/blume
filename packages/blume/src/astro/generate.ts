@@ -16,7 +16,7 @@ import { basename, dirname, join, normalize, relative, resolve } from "pathe";
 import { glob } from "tinyglobby";
 
 import { buildAskData } from "../ai/ask-data.ts";
-import { resolveAskBackend } from "../ai/ask.ts";
+import { askBackendRuntimeDep, resolveAskBackend } from "../ai/ask.ts";
 import { buildRawMarkdown, markdownRoutePaths } from "../ai/markdown.ts";
 import { buildMcpData } from "../ai/mcp/data.ts";
 import { buildMcpDiscovery, buildMcpServerCard } from "../ai/mcp/discovery.ts";
@@ -636,6 +636,33 @@ export const searchProviderWarnings = (
     }
   }
   return warnings;
+};
+
+/**
+ * Warn when the Ask AI backend's provider SDK is missing. Like search provider
+ * SDKs, these are optional peers the project must install (only `gateway`
+ * needs nothing beyond the core `ai` package Blume ships) — warn early with
+ * the package name rather than let Vite fail to resolve the import opaquely.
+ * Same resolution rule as {@link searchProviderWarnings}: available if the
+ * project installed it or Blume can resolve it. `pkgDir` is injectable for
+ * testing.
+ */
+export const askProviderWarnings = (
+  ask: ResolvedConfig["ai"]["ask"],
+  root: string,
+  pkgDir: string = packageRoot()
+): string[] => {
+  // An external `endpoint` means no generated route, so no SDK is imported.
+  if (!ask?.enabled || ask.endpoint) {
+    return [];
+  }
+  const dep = askBackendRuntimeDep(ask);
+  if (!dep || canResolveFrom(root, dep) || canResolveFrom(pkgDir, dep)) {
+    return [];
+  }
+  return [
+    `Ask AI provider "${ask.provider}" needs "${dep}", which isn't installed. Run \`npm install ${dep}\` (or your package manager's equivalent).`,
+  ];
 };
 
 /** Absolute path to the configured `examples.css`, or null when unset. */
@@ -1370,7 +1397,7 @@ const writeAskFiles = async (
   }
   await write(
     join(srcDir, "pages", "api", "ask.ts"),
-    askEndpointTemplate(resolveAskBackend(ask), grounded)
+    askEndpointTemplate(resolveAskBackend(ask), grounded, ask.instructions)
   );
 };
 
@@ -1878,10 +1905,11 @@ export const generateRuntime = async (
     ...islandDiscovery.islands.map((island) => island.name),
     ...overrideTags,
   ]);
-  // Missing-dependency preflights: the search provider's SDK, the deployment
-  // adapter's package, and — since React ships with Blume while Vue/Svelte
-  // don't — any island framework's Astro integration. Warn early rather than
-  // let Vite fail to resolve them opaquely.
+  // Missing-dependency preflights: the search provider's SDK, the Ask AI
+  // backend's provider SDK, the deployment adapter's package, and — since
+  // React ships with Blume while Vue/Svelte don't — any island framework's
+  // Astro integration. Warn early rather than let Vite fail to resolve them
+  // opaquely.
   warnings.push(
     ...validateUsedComponents(
       project.graph.pages,
@@ -1889,6 +1917,7 @@ export const generateRuntime = async (
       new Set(registry.map((item) => item.name))
     ).map(diagnosticWarning),
     ...searchProviderWarnings(config.search.provider, context.root),
+    ...askProviderWarnings(config.ai.ask, context.root),
     ...deploymentAdapterWarnings(config.deployment, context.root),
     ...islandFrameworkWarnings(frameworks, context.root)
   );

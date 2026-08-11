@@ -655,6 +655,12 @@ export interface AskConfig {
    * limiting, and streaming. Accepts an absolute URL or root-relative path.
    */
   endpoint?: string;
+  /**
+   * Extra system-prompt text appended to the built-in instructions — use it
+   * for identity, language, or tone. The built-in grounding behavior (answer
+   * from the retrieved excerpts, cite pages as Markdown links) is preserved.
+   */
+  instructions?: string;
   /** Model id to use. Defaults to `openai/gpt-5.5`. */
   model?: string;
   /** Which backend routes the request. Defaults to `gateway`. */

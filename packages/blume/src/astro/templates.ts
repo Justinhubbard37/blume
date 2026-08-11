@@ -868,11 +868,24 @@ export const collections = { docs${options.staged ? ", staged" : ""} };
 };
 
 /** Generate `.blume/src/pages/[...slug].astro`, the docs catch-all route. */
-/** Generate the Ask AI server endpoint (`.blume/src/pages/api/ask.ts`). */
+/** The plain prompt used when there is no grounding context to inject. */
+const ASK_FALLBACK_PROMPT =
+  "You are a helpful documentation assistant. Answer using the project's documentation.";
+
+/**
+ * Generate the Ask AI server endpoint (`.blume/src/pages/api/ask.ts`).
+ * `instructions` (the `ai.ask.instructions` config) is appended to the
+ * built-in prompt on every path: the grounded prompt via `createAskContext`,
+ * and the plain fallback here.
+ */
 export const askEndpointTemplate = (
   backend: AskBackend,
-  grounded: boolean
+  grounded: boolean,
+  instructions?: string
 ): string => {
+  const fallbackPrompt = instructions
+    ? `${ASK_FALLBACK_PROMPT}\n\n${instructions}`
+    : ASK_FALLBACK_PROMPT;
   const imports = [
     'import type { APIRoute } from "astro";',
     'import { streamText } from "ai";',
@@ -905,7 +918,10 @@ export const askEndpointTemplate = (
       'import { createAskContext } from "blume/ai/ask-context.ts";',
       'import askData from "../../generated/ask-data.json";'
     );
-    setup += "\nconst ground = createAskContext(askData);\n";
+    const groundOptions = instructions
+      ? `, { instructions: ${JSON.stringify(instructions)} }`
+      : "";
+    setup += `\nconst ground = createAskContext(askData${groundOptions});\n`;
   }
   // Validate the client-supplied body and cap its size. The endpoint is
   // unauthenticated, so bounding message count/length limits how much a caller
@@ -966,7 +982,7 @@ export const askEndpointTemplate = (
   const stream = grounded
     ? `    const instructions =
       (await ground(messages, body.page)) ??
-      "You are a helpful documentation assistant. Answer using the project's documentation.";
+      ${JSON.stringify(fallbackPrompt)};
     const result = streamText({
       model: ${modelExpr},
       instructions,
@@ -976,7 +992,7 @@ ${onError}
     : `    const result = streamText({
       model: ${modelExpr},
       instructions:
-        "You are a helpful documentation assistant. Answer using the project's documentation.",
+        ${JSON.stringify(fallbackPrompt)},
       messages,
 ${onError}
     });`;

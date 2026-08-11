@@ -1360,6 +1360,38 @@ describe("askEndpointTemplate", () => {
     expect(out).toContain('baseURL: "https://api.example.com/v1"');
     expect(out).toContain('provider("m")');
   });
+
+  it("threads custom instructions into the grounded route and its fallback", () => {
+    const out = askEndpointTemplate(
+      resolveAskBackend(),
+      true,
+      "Answer in French."
+    );
+    expect(out).toContain(
+      'createAskContext(askData, { instructions: "Answer in French." })'
+    );
+    expect(out).toContain(
+      "Answer using the project's documentation.\\n\\nAnswer in French."
+    );
+  });
+
+  it("appends custom instructions to the ungrounded prompt", () => {
+    const out = askEndpointTemplate(
+      resolveAskBackend(),
+      false,
+      "Answer in French."
+    );
+    expect(out).not.toContain("createAskContext");
+    expect(out).toContain(
+      "Answer using the project's documentation.\\n\\nAnswer in French."
+    );
+  });
+
+  it("keeps the plain prompt when no instructions are configured", () => {
+    const out = askEndpointTemplate(resolveAskBackend(), true);
+    expect(out).toContain("createAskContext(askData);");
+    expect(out).toContain("Answer using the project's documentation.\"");
+  });
 });
 
 describe("searchClientTemplate", () => {

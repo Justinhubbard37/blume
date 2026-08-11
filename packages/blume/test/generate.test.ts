@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, normalize } from "pathe";
 
 import {
+  askProviderWarnings,
   buildRuntimeData,
   collectStaged,
   detectNeedsReact,
@@ -28,6 +29,7 @@ import {
   searchProviderWarnings,
 } from "../src/astro/generate.ts";
 import { scanProject } from "../src/core/project-graph.ts";
+import { blumeConfigSchema } from "../src/core/schema.ts";
 import type { ResolvedConfig } from "../src/core/schema.ts";
 import type { Diagnostic } from "../src/core/types.ts";
 
@@ -1392,6 +1394,11 @@ describe("diagnosticWarning", () => {
   });
 });
 
+// A parsed (schema-defaulted) `ai.ask` block, the shape askProviderWarnings
+// receives from the resolved config.
+const parsedAsk = (ask: Record<string, unknown>) =>
+  blumeConfigSchema.parse({ ai: { ask } }).ai.ask;
+
 describe("generateRuntime preflight and write failures", () => {
   it("warns when the search provider's SDK isn't installed anywhere", () => {
     // An empty temp dir stands in for both the project root and the Blume
@@ -1404,6 +1411,46 @@ describe("generateRuntime preflight and write failures", () => {
 
   it("stays quiet when the provider's SDK ships with Blume", () => {
     expect(searchProviderWarnings("orama", srcDir)).toEqual([]);
+  });
+
+  it("warns when the Ask AI backend's provider SDK isn't installed anywhere", () => {
+    const ask = parsedAsk({ enabled: true, provider: "openrouter" });
+    const warnings = askProviderWarnings(ask, srcDir, srcDir);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('Ask AI provider "openrouter"');
+    expect(warnings[0]).toContain(
+      "Run `npm install @openrouter/ai-sdk-provider`"
+    );
+  });
+
+  it("stays quiet for the gateway backend, an external endpoint, and disabled Ask AI", () => {
+    // Gateway needs only the core `ai` package, which ships with Blume.
+    expect(
+      askProviderWarnings(parsedAsk({ enabled: true }), srcDir, srcDir)
+    ).toEqual([]);
+    // An external endpoint means the provider route is never generated.
+    expect(
+      askProviderWarnings(
+        parsedAsk({
+          enabled: true,
+          endpoint: "https://api.example.com/ask",
+          provider: "openrouter",
+        }),
+        srcDir,
+        srcDir
+      )
+    ).toEqual([]);
+    expect(askProviderWarnings(undefined, srcDir, srcDir)).toEqual([]);
+  });
+
+  it("stays quiet when the Ask AI provider SDK is resolvable", () => {
+    const ask = parsedAsk({
+      baseUrl: "https://api.example.com/v1",
+      enabled: true,
+      provider: "openai-compatible",
+    });
+    // The monorepo root resolves the workspace-installed SDK.
+    expect(askProviderWarnings(ask, srcDir)).toEqual([]);
   });
 
   it("cleans up the temp file and rethrows when the atomic rename fails", async () => {

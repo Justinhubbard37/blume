@@ -782,6 +782,10 @@ const aiConfigSchema = z.strictObject({
       // and host Ask AI in an existing backend. Absolute URLs and root-relative
       // paths are both valid; the built-in request/stream contract is unchanged.
       endpoint: askEndpointSchema.optional(),
+      // Extra system-prompt text (identity, language, tone) appended to the
+      // built-in instructions, so the grounding contract — answer from the
+      // retrieved excerpts, cite pages as Markdown links — stays intact.
+      instructions: z.string().trim().min(1).optional(),
       model: z.string().default("openai/gpt-5.5"),
       provider: z.enum(askAiProviders).default("gateway"),
       // Empty-state prompts shown before the first question. Each renders as a

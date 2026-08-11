@@ -853,6 +853,25 @@ describe("createAskContext", () => {
     expect(system).toContain("[Page Title](/route)");
   });
 
+  it("appends custom instructions after the base grounding contract", async () => {
+    const ground = createAskContext(askData, {
+      instructions: "Always answer in French, as Blume's mascot Bloomy.",
+    });
+    const system = await ground([
+      { content: "how do I install the dev server", role: "user" },
+    ]);
+    expect(system).toContain("Always answer in French, as Blume's mascot");
+    // The custom text sits between the base instruction and the excerpts, so
+    // the citation contract survives.
+    expect(system).toContain("[Page Title](/route)");
+    const base = (system ?? "").indexOf("[Page Title](/route)");
+    const custom = (system ?? "").indexOf("Always answer in French");
+    const docs = (system ?? "").indexOf("<docs>");
+    expect(base).toBeGreaterThanOrEqual(0);
+    expect(custom).toBeGreaterThan(base);
+    expect(docs).toBeGreaterThan(custom);
+  });
+
   it("returns undefined when there is no user message to ground on", async () => {
     const ground = createAskContext(askData);
     expect(await ground([])).toBeUndefined();
