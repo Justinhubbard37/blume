@@ -1,5 +1,5 @@
 import DOMPurify from "dompurify";
-import { marked } from "marked";
+import { Marked } from "marked";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
@@ -57,12 +57,15 @@ const DEFAULT_ASK: UIStrings["ask"] = {
 const DEFAULT_ASK_ENDPOINT = joinBase(import.meta.env.BASE_URL, "api/ask");
 
 // GitHub-flavored markdown with soft line breaks, matching how the docs read.
-marked.setOptions({ breaks: true, gfm: true });
-
-// The model cites pages as base-less logical routes (`[Title](/route)`); rewrite
-// link targets to served URLs so citations resolve under `deployment.base`.
-// `prefixBase` leaves external URLs and fragments untouched and is idempotent.
-marked.use({
+// A dedicated instance, not the shared `marked` singleton: `setOptions`/`use`
+// on the singleton would leak `breaks` and the link rewriter into any other
+// consumer of `marked` on the page (user components included).
+const markdown = new Marked({
+  breaks: true,
+  gfm: true,
+  // The model cites pages as base-less logical routes (`[Title](/route)`); rewrite
+  // link targets to served URLs so citations resolve under `deployment.base`.
+  // `prefixBase` leaves external URLs and fragments untouched and is idempotent.
   walkTokens: (token) => {
     if (token.type === "link") {
       token.href = prefixBase(import.meta.env.BASE_URL, token.href);
@@ -71,7 +74,7 @@ marked.use({
 });
 
 const renderMarkdown = (content: string): string =>
-  DOMPurify.sanitize(marked.parse(content, { async: false }));
+  DOMPurify.sanitize(markdown.parse(content, { async: false }));
 
 const Glyph = ({ path, size = 16 }: { path: string; size?: number }) => (
   <svg
