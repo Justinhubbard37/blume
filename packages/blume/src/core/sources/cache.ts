@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 import { join } from "pathe";
@@ -6,14 +7,15 @@ import { BlumeError } from "../diagnostics.ts";
 import type { Diagnostic } from "../types.ts";
 import type { SourceEntry, SourceLoadResult } from "./types.ts";
 
-/** Small, stable content hash for cache/HMR bookkeeping (non-bitwise). */
-export const hashText = (text: string): string => {
-  let hash = 5381;
-  for (let i = 0; i < text.length; i += 1) {
-    hash = (hash * 33 + (text.codePointAt(i) ?? 0)) % 2_147_483_647;
-  }
-  return hash.toString(36);
-};
+/**
+ * Small, stable content hash for cache/HMR bookkeeping — and for staged asset
+ * *filenames* (see sources/assets.ts and content-assets.ts), where a collision
+ * silently serves the wrong file. 64 bits of SHA-256 keeps those names
+ * collision-safe at any realistic asset count; the old 31-bit DJB2 hash had a
+ * ~46k-item birthday bound.
+ */
+export const hashText = (text: string): string =>
+  createHash("sha256").update(text).digest("hex").slice(0, 16);
 
 /** A stable digest of a source's entries, for change detection while polling. */
 export const entriesDigest = (entries: SourceEntry[]): string =>
