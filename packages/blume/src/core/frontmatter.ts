@@ -28,13 +28,57 @@ const withYamlEngine = <O>(options: O): O =>
     },
   }) as O;
 
+/**
+ * True when a document's leading `---` line is a CommonMark thematic break,
+ * not a front matter fence. Two shapes qualify (mirroring
+ * `linesWithoutFrontMatter` in `sources/normalize.ts`):
+ *   - the next line is blank (or absent) — YAML metadata starts on the very
+ *     next line, so a gap means the body *opens* with a divider (e.g. a
+ *     Notion page whose first block is one);
+ *   - no closing `---` line follows — gray-matter would swallow the whole
+ *     document as one unclosed YAML block and hand it to js-yaml, which
+ *     crashes on ordinary Markdown (`> quote` → "a line break is expected").
+ */
+const opensWithThematicBreak = (input: string): boolean => {
+  const [first = "", second] = input.split(/\r?\n/u, 2);
+  if (!/^-{3}\s*$/u.test(first)) {
+    return false;
+  }
+  if (second === undefined || second.trim() === "") {
+    return true;
+  }
+  // gray-matter closes the block at the next line-leading `---`; matching its
+  // search exactly keeps this guard from firing on any document it parses.
+  return !input.includes("\n---", 1);
+};
+
+/**
+ * The parse result for a document with no front matter: the input passes
+ * through as content, untouched. Shaped like gray-matter's own no-matter
+ * result (every Blume call site reads only `content` and `data`).
+ */
+const passthrough = (input: string): ReturnType<typeof baseMatter> =>
+  ({
+    content: input,
+    data: {},
+    excerpt: "",
+    isEmpty: false,
+    language: "",
+    matter: "",
+    orig: input,
+    // Recomposing a file with no matter and empty data is the content itself.
+    stringify: (): string => input,
+  }) as unknown as ReturnType<typeof baseMatter>;
+
 // Every helper that parses or emits YAML (`read`, `stringify`) must be
 // re-wrapped here — Object.assign copies gray-matter's own helpers, which use
 // its default `safeLoad` engine and would reintroduce the crash. `test` only
 // checks for a delimiter, so the copied original is safe.
 const matter = Object.assign(
   (input: MatterInput, options?: MatterOptions) =>
-    baseMatter(input, withYamlEngine(options)),
+    typeof input === "string" && opensWithThematicBreak(input)
+      ? passthrough(input)
+      : baseMatter(input, withYamlEngine(options)),
   baseMatter,
   {
     read: (filepath: ReadArgs[0], options?: ReadArgs[1]) =>

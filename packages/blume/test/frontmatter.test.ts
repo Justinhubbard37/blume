@@ -44,6 +44,36 @@ describe("frontmatter wrapper", () => {
     expect(matter("---\n---\nbody").data).toEqual({});
   });
 
+  it("keeps a thematic break at the top of the body after real front matter", () => {
+    const parsed = matter("---\ntitle: Test\n---\n---\n\n## Section\n");
+    expect(parsed.data).toEqual({ title: "Test" });
+    expect(parsed.content).toBe("---\n\n## Section\n");
+  });
+
+  it("treats a leading --- followed by a blank line as content, not a fence", () => {
+    // A Notion page whose first block is a divider exports exactly this shape;
+    // gray-matter read it as one unclosed YAML block and js-yaml crashed on
+    // the blockquote with "a line break is expected".
+    const divider = "---\n\n## Section\n\n> ℹ️ Note\n";
+    const parsed = matter(divider);
+    expect(parsed.data).toEqual({});
+    expect(parsed.content).toBe(divider);
+    // Recomposing a no-matter file is the content itself.
+    expect(parsed.stringify("")).toBe(divider);
+  });
+
+  it("treats an unclosed leading --- block as content, not YAML", () => {
+    const unclosed = "---\n## Section\n\n> ℹ️ Note\n";
+    const parsed = matter(unclosed);
+    expect(parsed.data).toEqual({});
+    expect(parsed.content).toBe(unclosed);
+  });
+
+  it("treats a document that is only a thematic break as content", () => {
+    expect(matter("---").content).toBe("---");
+    expect(matter("---\n").content).toBe("---\n");
+  });
+
   it("avoids the js-yaml 4 `safeLoad` removal that crashes gray-matter's default engine", () => {
     // gray-matter@4's default YAML engine is `yaml.safeLoad`, which was removed
     // in js-yaml 4 and now throws. Wiring that engine in explicitly reproduces
