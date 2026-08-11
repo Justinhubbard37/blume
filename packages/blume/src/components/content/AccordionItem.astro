@@ -1,5 +1,6 @@
 ---
 import Icon from "../Icon.astro";
+import { componentSlug } from "../slug.ts";
 
 interface Props {
   title: string;
@@ -10,15 +11,7 @@ interface Props {
 }
 
 const { defaultOpen = false, description, icon, id, title } = Astro.props;
-const slugify = (value: string): string =>
-  value
-    .toLowerCase()
-    .trim()
-    .replaceAll(/[^\w\s-]/gu, "")
-    .replaceAll(/[\s_]+/gu, "-")
-    .replaceAll(/-+/gu, "-")
-    .replaceAll(/^-|-$/gu, "");
-const accordionId = id ?? slugify(title);
+const accordionId = id ?? componentSlug(title);
 ---
 
 <details
