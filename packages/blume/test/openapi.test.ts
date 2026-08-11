@@ -629,6 +629,34 @@ describe("parse.parseSpec remote hardening", () => {
     }
   });
 
+  it("honors a sane Retry-After on a rate-limited response", async () => {
+    const original = globalThis.fetch;
+    const stub = queued([
+      new Response("slow down", {
+        headers: { "retry-after": "1" },
+        status: 429,
+      }),
+      Response.json(remoteSpec),
+    ]);
+    globalThis.fetch = stub.fetch;
+    const started = performance.now();
+    try {
+      const { document } = await parseSpec(
+        "https://api.test/openapi.json",
+        "/"
+      );
+      expect(document.info?.title).toBe("Remote");
+      expect(stub.calls).toBe(2);
+      // The server's 1s wait replaces the 500ms base backoff (it does not
+      // stack on top of it, which would be ~1.5s).
+      const waited = performance.now() - started;
+      expect(waited).toBeGreaterThanOrEqual(950);
+      expect(waited).toBeLessThan(1450);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it("gives up after repeated failures and throws", async () => {
     const original = globalThis.fetch;
     const stub = queued([new Response("down", { status: 502 })]);

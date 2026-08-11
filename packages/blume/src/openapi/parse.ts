@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { normalize, upgrade } from "@scalar/openapi-parser";
+import pRetry, { AbortError } from "p-retry";
 import { isAbsolute, join } from "pathe";
 
 import { hashText } from "../core/sources/cache.ts";
@@ -137,33 +138,63 @@ const attemptFetch = async (spec: string): Promise<Attempt> => {
   }
 };
 
+/**
+ * A retryable failure, wrapped in a plain Error p-retry never special-cases:
+ * it refuses to retry a non-network `TypeError`, and the underlying error's
+ * type is the server's choice, not ours. The message is the underlying
+ * error's, so the exhaustion throw still reads `spec -> 503 Service
+ * Unavailable`.
+ */
+type RetryableFetchError = Error & { retryAfter?: number };
+
+const retryableFetchError = (
+  error: Error,
+  retryAfter?: number
+): RetryableFetchError => {
+  const wrapper: RetryableFetchError = new Error(error.message, {
+    cause: error,
+  });
+  wrapper.name = "RetryableFetchError";
+  wrapper.retryAfter = retryAfter;
+  return wrapper;
+};
+
 /** Fetch a remote spec's text, retrying transient failures with backoff. */
 const fetchSpecText = async (spec: string): Promise<string> => {
   await ensureProxyDispatcher();
-  let last: Attempt = {
-    error: new Error(`Could not fetch ${spec}`),
-    retryable: false,
-  };
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- sequential retry attempts
-    last = await attemptFetch(spec);
-    if ("text" in last) {
-      return last.text;
+  return await pRetry(
+    async () => {
+      const attempt = await attemptFetch(spec);
+      if ("text" in attempt) {
+        return attempt.text;
+      }
+      if (!attempt.retryable) {
+        // AbortError stops retrying and rethrows the original untouched.
+        throw new AbortError(attempt.error);
+      }
+      throw retryableFetchError(attempt.error, attempt.retryAfter);
+    },
+    {
+      factor: 2,
+      maxTimeout: MAX_RETRY_WAIT_MS,
+      minTimeout: BASE_BACKOFF_MS,
+      // A sane `Retry-After` replaces the exponential backoff rather than
+      // stacking on it: p-retry's own (capped) delay still runs after this
+      // hook, so only the difference is slept here.
+      onFailedAttempt: async (context) => {
+        const { retryAfter } = context.error as RetryableFetchError;
+        if (retryAfter !== undefined && context.retriesLeft > 0) {
+          await sleep(
+            Math.max(
+              0,
+              Math.min(retryAfter, MAX_RETRY_WAIT_MS) - context.retryDelay
+            )
+          );
+        }
+      },
+      retries: MAX_ATTEMPTS - 1,
     }
-    if (!last.retryable) {
-      break;
-    }
-    if (attempt < MAX_ATTEMPTS - 1) {
-      // oxlint-disable-next-line no-await-in-loop -- back off before retrying
-      await sleep(
-        Math.min(
-          last.retryAfter ?? BASE_BACKOFF_MS * 2 ** attempt,
-          MAX_RETRY_WAIT_MS
-        )
-      );
-    }
-  }
-  throw last.error;
+  );
 };
 
 const cacheFileFor = (cacheDir: string, spec: string): string =>

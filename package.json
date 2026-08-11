@@ -22,7 +22,8 @@
     "bump-deps": "npx npm-check-updates -u --deep && bun i"
   },
   "dependencies": {
-    "nanotar": "^0.3.0"
+    "nanotar": "^0.3.0",
+    "p-retry": "^8.0.0"
   },
   "devDependencies": {
     "@ai-sdk/openai-compatible": "^3.0.0",
