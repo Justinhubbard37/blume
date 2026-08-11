@@ -4,7 +4,6 @@ import {
   AGENTS,
   fixPrompt,
   launchAgent,
-  WINDOWS_COMMAND_NOT_FOUND,
   writeAgentReport,
 } from "../../audit/agent.ts";
 import type { AgentKind } from "../../audit/agent.ts";
@@ -41,22 +40,26 @@ export const shouldFail = (
 };
 
 /**
- * Launch the agent CLI, translating a missing executable into the Windows
- * not-found sentinel. Only `ENOENT` means "not installed" — any other spawn
- * failure (`EACCES`, `EMFILE`, …) must surface as itself, not be masked by an
- * irrelevant install hint.
+ * Launch the agent CLI, turning a missing executable into the install hint.
+ * Only `ENOENT` means "not installed" — any other spawn failure (`EACCES`,
+ * `EMFILE`, …) must surface as itself, not be masked by an irrelevant
+ * install hint.
  */
 const launchAgentCode = async (
-  bin: string,
+  agent: AgentKind,
   prompt: string
 ): Promise<number> => {
+  const cli = AGENTS[agent];
   try {
-    return await launchAgent(bin, prompt);
+    return await launchAgent(cli.bin, prompt);
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
       throw error;
     }
-    return WINDOWS_COMMAND_NOT_FOUND;
+    logger.error(
+      `${cli.name} (\`${cli.bin}\`) was not found on PATH. Install it with \`${cli.install}\`.`
+    );
+    return process.exit(1);
   }
 };
 
@@ -183,15 +186,7 @@ export const auditCommand = defineCommand({
       process.stderr.write(
         `  Handing ${count} finding${count === 1 ? "" : "s"} to ${cli.name}…\n\n`
       );
-      const code = await launchAgentCode(cli.bin, fixPrompt(report));
-      // A POSIX spawn rejects on a missing executable; the Windows shell
-      // launch reports it through cmd.exe's 9009 instead. Same diagnosis.
-      if (code === WINDOWS_COMMAND_NOT_FOUND) {
-        logger.error(
-          `${cli.name} (\`${cli.bin}\`) was not found on PATH. Install it with \`${cli.install}\`.`
-        );
-        process.exit(1);
-      }
+      const code = await launchAgentCode(agent, fixPrompt(report));
       if (code !== 0) {
         process.exit(code);
       }

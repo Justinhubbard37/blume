@@ -6,7 +6,7 @@ import pLimit from "p-limit";
 import pMap from "p-map";
 import { join } from "pathe";
 
-import { AGENTS, WINDOWS_COMMAND_NOT_FOUND } from "../audit/agent.ts";
+import { AGENTS } from "../audit/agent.ts";
 import type { AgentKind } from "../audit/agent.ts";
 import { writeTextAtomic } from "../core/fs-atomic.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
@@ -91,9 +91,9 @@ interface RunContext {
 const metaDirKey = (dir: string): string => (dir === "" ? "." : dir);
 
 /**
- * One headless agent call. A Windows shell launch reports a missing executable
- * through exit code 9009 instead of a spawn error, so that is normalized to
- * the ENOENT rejection the command layer already turns into an install hint.
+ * One headless agent call. A missing executable rejects with ENOENT on every
+ * platform (the runner spawns without a shell), which the command layer turns
+ * into an install hint.
  */
 const invokeAgent = async (
   context: RunContext,
@@ -106,13 +106,6 @@ const invokeAgent = async (
     translateAgentArgs(context.kind, messagePath),
     { cwd: context.dir, prompt, timeoutMs: context.timeoutMs }
   );
-  if (!result.timedOut && result.code === WINDOWS_COMMAND_NOT_FOUND) {
-    const missing = new Error(
-      `${context.bin} was not found on PATH`
-    ) as NodeJS.ErrnoException;
-    missing.code = "ENOENT";
-    throw missing;
-  }
   return await readAgentOutput(context.kind, result, messagePath);
 };
 

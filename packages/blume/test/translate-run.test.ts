@@ -89,8 +89,16 @@ interface RecordedCall {
 const args0LastMessage = (call: RecordedCall): string =>
   call.args[call.args.indexOf("--output-last-message") + 1] as string;
 
-const notFoundRunner = (): Promise<HeadlessResult> =>
-  Promise.resolve({ code: 9009, stderr: "", stdout: "", timedOut: false });
+/**
+ * A runner whose executable is missing: cross-spawn rejects with ENOENT on
+ * every platform (the old Windows shell launch surfaced exit code 9009
+ * instead, which run.ts had to translate).
+ */
+const notFoundRunner = (): Promise<HeadlessResult> => {
+  const missing = new Error("spawn claude ENOENT") as NodeJS.ErrnoException;
+  missing.code = "ENOENT";
+  return Promise.reject(missing);
+};
 
 /** A fake claude: replies with a canned envelope per call, records argv. */
 const claudeRunner = (
@@ -333,7 +341,7 @@ describe("runTranslate pages", () => {
     expect(result.results[0]?.detail).toBe("agent failed");
   });
 
-  it("rejects with ENOENT when a shell launch reports code 9009", async () => {
+  it("propagates the runner's ENOENT for a missing executable", async () => {
     const root = await scratch();
     const items = [await pageItem(root)];
     await expect(
