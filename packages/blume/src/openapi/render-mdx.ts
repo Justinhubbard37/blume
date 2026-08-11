@@ -1,3 +1,4 @@
+import type { Nodes } from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { toString as mdastToString } from "mdast-util-to-string";
 
@@ -30,31 +31,6 @@ const ENTITIES: Record<string, string> = {
 // SDK…" is common spec prose). Entity-escape the keyword's first letter so the
 // construct can't match; it still renders as the literal word.
 const MDX_ESM_KEYWORD = /^(?<keyword>import|export)\b/gmu;
-// Backtick code — inline spans and fences alike — is already literal in MDX,
-// and entities are NOT decoded inside it, so escaping there would render the
-// entity text verbatim (`/pets/&#123;petId&#125;`). Matching any balanced
-// backtick run covers `code`, ``code``, and ```fences``` in one shot. Both
-// runs are pinned by the backtick lookarounds: CommonMark pairs a span only
-// with an *equal-length* run, so without them a lone backtick would "close" on
-// the first backtick of a longer fence run — leaving `{` in the real prose
-// unescaped (a compile error) and escaping entities into the fence body.
-const BACKTICK_CODE = /(?<!`)(?<bt>`+)(?!`)[\s\S]*?(?<!`)\k<bt>(?!`)/gu;
-// Tilde fences are code in MDX exactly like backtick fences (they just have no
-// inline form). The opening run is line-anchored per CommonMark, the closing
-// run must be at least as long, and an unclosed fence extends to the end of
-// the text — the second alternative after the closing-fence attempt fails.
-// (Indented code needs no branch here: MDX disables indented code blocks, so a
-// 4-space-indented sample is a paragraph whose braces genuinely need escaping.)
-const TILDE_FENCE =
-  /^[ \t]{0,3}(?<tf>~{3,})[^\n]*(?:[\s\S]*?\n[ \t]{0,3}\k<tf>~*[ \t]*(?=$|\n)|[\s\S]*)/gmu;
-// Either code form; leftmost match wins, so a fence inside a span (or the
-// reverse) is consumed by whichever construct opens first, mirroring how the
-// MDX parser scans.
-const MDX_CODE = new RegExp(
-  `${BACKTICK_CODE.source}|${TILDE_FENCE.source}`,
-  "gmu"
-);
-
 const escapeProse = (text: string): string =>
   text
     .replace(MDX_UNSAFE, (char) => ENTITIES[char] ?? char)
@@ -63,15 +39,57 @@ const escapeProse = (text: string): string =>
       (keyword) => `&#${keyword.codePointAt(0)};${keyword.slice(1)}`
     );
 
+/**
+ * The source offset ranges of code constructs — inline spans and fences —
+ * that MDX treats as literal (entities are NOT decoded inside them, so
+ * escaping there would render `/pets/&#123;petId&#125;` verbatim). The ranges
+ * come from a CommonMark parse rather than fence-emulating regexes: the
+ * parser is the authority on equal-length backtick pairing, longer tilde
+ * closers, unclosed fences running to EOF, and fences nested in blockquotes —
+ * each of which the replaced regexes had to re-derive (two with a recorded
+ * bug history in this file).
+ *
+ * One CommonMark construct is deliberately *not* masked: indented code. MDX
+ * disables indented code blocks, so a 4-space-indented sample is a paragraph
+ * whose braces genuinely need escaping; fence-or-backtick is told apart from
+ * indentation by the construct's first character.
+ */
+const codeSpans = (text: string): [number, number][] => {
+  const spans: [number, number][] = [];
+  const collect = (node: Nodes): void => {
+    if (node.type === "inlineCode" || node.type === "code") {
+      // fromMarkdown always stamps positions; -1 is an unreachable guard.
+      const start = node.position?.start.offset ?? -1;
+      const end = node.position?.end.offset ?? -1;
+      const head = text.slice(Math.max(start, 0), Math.max(end, 0)).trimStart();
+      if (
+        start >= 0 &&
+        (node.type === "inlineCode" ||
+          head.startsWith("`") ||
+          head.startsWith("~"))
+      ) {
+        spans.push([start, end]);
+      }
+      return;
+    }
+    if ("children" in node) {
+      for (const child of node.children) {
+        collect(child);
+      }
+    }
+  };
+  collect(fromMarkdown(text));
+  return spans;
+};
+
 /** Escape MDX-special syntax in prose while leaving code verbatim. */
 const mdxSafe = (text: string): string => {
   let out = "";
   let cursor = 0;
-  for (const match of text.matchAll(MDX_CODE)) {
-    const start = match.index ?? 0;
+  for (const [start, end] of codeSpans(text)) {
     out += escapeProse(text.slice(cursor, start));
-    out += match[0];
-    cursor = start + match[0].length;
+    out += text.slice(start, end);
+    cursor = end;
   }
   return out + escapeProse(text.slice(cursor));
 };

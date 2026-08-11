@@ -1051,6 +1051,26 @@ describe("render-mdx", () => {
     expect(page.body).toContain("More &#123;prose&#125; after.");
   });
 
+  it("escapes braces in indented blocks, which MDX has no code form for", () => {
+    const page = operationMdx(specData(), {
+      deprecated: false,
+      // CommonMark would call the indented line a code block, but MDX
+      // disables indented code — it compiles as a paragraph, so its braces
+      // must be escaped like any other prose.
+      description: 'Sample:\n\n    {"indented": true}\n\nAfter {prose}.',
+      key: "op",
+      method: "get" as const,
+      operationId: "op",
+      path: "/x",
+      route: "/api/x/op",
+      summary: "Do a thing",
+      tag: "x",
+      tagSlug: "x",
+    });
+    expect(page.body).toContain('&#123;"indented": true&#125;');
+    expect(page.body).toContain("After &#123;prose&#125;.");
+  });
+
   it("treats an unclosed tilde fence as running to the end of the text", () => {
     const page = operationMdx(specData(), {
       deprecated: false,
