@@ -353,6 +353,42 @@ describe("mdxRemoteSource", () => {
   });
 });
 
+describe("portableTextToMarkdown: plain-text escaping", () => {
+  it("renders literal Markdown syntax in prose spans as itself", () => {
+    // Portable Text spans are plain text: formatting comes from marks, so a
+    // literal asterisk or bracket typed in the CMS must not open emphasis or
+    // a link label — and `<` must not smuggle raw HTML into the page.
+    const md = portableTextToMarkdown([
+      {
+        _type: "block",
+        children: [
+          {
+            _type: "span",
+            marks: [],
+            text: "5 * 3 and snake_case and [not a link] <em>plain</em>",
+          },
+        ],
+        style: "normal",
+      },
+    ]);
+    expect(md).toContain(String.raw`5 \* 3`);
+    expect(md).toContain(String.raw`snake\_case`);
+    expect(md).toContain(String.raw`\[not a link\]`);
+    expect(md).toContain(String.raw`\<em>plain\</em>`);
+  });
+
+  it("keeps code-marked spans verbatim", () => {
+    const md = portableTextToMarkdown([
+      {
+        _type: "block",
+        children: [{ _type: "span", marks: ["code"], text: "a * b" }],
+        style: "normal",
+      },
+    ]);
+    expect(md).toContain("`a * b`");
+  });
+});
+
 describe("portableTextToMarkdown: extra marks", () => {
   it("renders code and strike-through decorators", () => {
     const md = portableTextToMarkdown([
