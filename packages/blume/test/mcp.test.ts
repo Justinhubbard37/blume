@@ -805,6 +805,173 @@ describe("orama index helpers", () => {
     expect(hits.map((doc) => doc.route)).toEqual(["/scold"]);
   });
 
+  it("keeps punctuation out of the terms a word-like segment yields", async () => {
+    // UAX #29 keeps connector punctuation, mid-number punctuation and format
+    // characters inside a word, so these each arrive as one word-like segment.
+    // Indexed verbatim they are reachable only by retyping the punctuation.
+    const db = await buildOramaIndex(
+      [
+        {
+          content: "スネーク_ケースで書きます。残高1,000万円まで。",
+          description: "",
+          locale: "ja",
+          route: "/naming",
+          title: "命名と上限",
+        },
+        {
+          content: "robots.txt も更新します。",
+          description: "",
+          locale: "ja",
+          route: "/crawl",
+          title: "クロール設定",
+        },
+      ],
+      "ja"
+    );
+    const routes = async (term: string) => {
+      const hits = await queryOramaIndex(db, term, 5);
+      return hits.map((doc) => doc.route);
+    };
+    const [tail, latin, whole] = await Promise.all([
+      // ケース bigrams to ケー / ース, neither of which prefix-matches the
+      // segment スネーク_ケース the connector held together.
+      routes("ケース"),
+      routes("txt"),
+      // The joined form still matches, so nothing that worked stops working.
+      routes("スネーク_ケース"),
+    ]);
+    expect(tail).toEqual(["/naming"]);
+    expect(latin).toEqual(["/crawl"]);
+    expect(whole).toEqual(["/naming"]);
+  });
+
+  it("indexes no term for a segment that is only a symbol", async () => {
+    // Some symbols are word-like on their own (U+00B8 here), and a whole
+    // segment failing the script test used to be added as a term as it stood.
+    const db = await buildOramaIndex(
+      [
+        {
+          content: "データ¸サーバの設定。",
+          description: "",
+          locale: "ja",
+          route: "/x",
+          title: "設定",
+        },
+      ],
+      "ja"
+    );
+    expect(await queryOramaIndex(db, "¸", 5)).toEqual([]);
+    const kana = await queryOramaIndex(db, "データ", 5);
+    expect(kana.length).toBe(1);
+  });
+
+  it("keeps Thai combining marks inside the terms", async () => {
+    // Thai writes vowels and tones as combining marks. Treated as punctuation
+    // they leave consonant skeletons, and เสื้อ (shirt) and เสือ (tiger)
+    // collapse to the same fragments — the tiger page answers the shirt query.
+    const db = await buildOramaIndex(
+      [
+        {
+          content: "เสื้อสีแดงราคาถูก",
+          description: "",
+          locale: "th",
+          route: "/shirt",
+          title: "เสื้อ",
+        },
+        {
+          content: "เสือในป่าลึก",
+          description: "",
+          locale: "th",
+          route: "/tiger",
+          title: "เสือ",
+        },
+      ],
+      "th"
+    );
+    const hits = await queryOramaIndex(db, "เสื้อ", 5);
+    expect(hits.map((doc) => doc.route)).toEqual(["/shirt"]);
+  });
+
+  it("indexes decomposed kana with its voicing intact", async () => {
+    // NFD text spells パ as ハ plus a combining voicing mark. Dropping the
+    // mark indexes the bare kana — conflating パス with ハス — and no bigram
+    // spans the mark, so the composed query stops reaching the page.
+    const db = await buildOramaIndex(
+      [
+        {
+          content: "パスワードを設定します。".normalize("NFD"),
+          description: "",
+          locale: "ja",
+          route: "/password",
+          title: "設定",
+        },
+        {
+          content: "ハスの花が咲きました。",
+          description: "",
+          locale: "ja",
+          route: "/lotus",
+          title: "花",
+        },
+      ],
+      "ja"
+    );
+    const hits = await queryOramaIndex(db, "パスワード", 5);
+    expect(hits.map((doc) => doc.route)).toEqual(["/password"]);
+  });
+
+  it("keeps mid-number punctuation inside one term", async () => {
+    // Split on the dots, 1.0.3 becomes the bag {1, 0, 3}, and any page where
+    // those digits co-occur satisfies the strict all-tokens pass.
+    const db = await buildOramaIndex(
+      [
+        {
+          content: "バージョン1.0.3を公開しました。",
+          description: "",
+          locale: "ja",
+          route: "/release",
+          title: "リリースノート",
+        },
+        {
+          content: "第1章、第0節、第3項を参照。",
+          description: "",
+          locale: "ja",
+          route: "/chapters",
+          title: "構成",
+        },
+      ],
+      "ja"
+    );
+    const hits = await queryOramaIndex(db, "1.0.3", 5);
+    expect(hits.map((doc) => doc.route)).toEqual(["/release"]);
+  });
+
+  it("keeps a word-internal apostrophe inside the term", async () => {
+    // Orama's default tokenizer holds don't together, so English text on a
+    // segmented-locale index should tokenize the same way; split, the stray
+    // one-letter t prefix-matches every t-word on the index.
+    const db = await buildOramaIndex(
+      [
+        {
+          content: "Don't restart the server.",
+          description: "",
+          locale: "en",
+          route: "/dont",
+          title: "Restarting",
+        },
+        {
+          content: "The temperature table of contents.",
+          description: "",
+          locale: "en",
+          route: "/temperature",
+          title: "Temperature",
+        },
+      ],
+      "ko"
+    );
+    const hits = await queryOramaIndex(db, "don't", 5);
+    expect(hits.map((doc) => doc.route)).toEqual(["/dont"]);
+  });
+
   it("leaves Han content alone on an index that is not bigrammed", async () => {
     // Korean and Thai indexes keep segmented words throughout, so the query
     // side's loose matching stays consistent with how they were indexed.
