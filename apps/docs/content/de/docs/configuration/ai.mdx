@@ -137,6 +137,22 @@ ai: {
 
 `label` ist die Frage, die gestellt wird; `icon` ist optional. Lässt du `suggestions` ungesetzt (oder leer), öffnet sich das Panel mit einem schlichten Eingabefeld.
 
+### Eigene Anweisungen
+
+Ergänze mit `instructions` deinen eigenen System-Prompt-Text — Identität, Sprache, Tonfall oder alles andere, was der Assistent im Hinterkopf behalten soll:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  ask: {
+    enabled: true,
+    instructions:
+      "You are Bloomy, the Acme docs assistant. Answer in the language the question was asked in, and keep answers under three paragraphs.",
+  },
+}
+```
+
+Dein Text wird den eingebauten Anweisungen **hinzugefügt**, statt sie zu ersetzen: Der eingebaute Teil trägt den [Fundierungs](#grounding)-Vertrag — nur aus den abgerufenen Seiten antworten, sie als Markdown-Links zitieren —, von dem die Zitate im Chat-Panel abhängen, er bleibt also unangetastet, was auch immer du ergänzt.
+
 ### Fundierung
 
 Ask AI ist **in deiner Dokumentation fundiert**. Für jede Frage ruft es die relevantesten Seiten ab — über denselben lexikalischen [Orama](/docs/configuration/search)-Index, der auch die Suche auf der Seite antreibt — und fügt sie in den System-Prompt des Modells ein, sodass Antworten aus deinen Inhalten stammen statt aus dem Eigenwissen des Modells. Dem Assistenten wird aufgetragen, nur aus den abgerufenen Seiten zu antworten, zu sagen, wenn etwas nicht abgedeckt ist, und die Seiten zu zitieren, aus denen er geschöpft hat.
@@ -186,15 +202,17 @@ Ein statischer Build mit aktiviertem Ask AI und ohne externen `endpoint` schläg
 
 Standardmäßig läuft Ask AI über das **Vercel AI Gateway**: `model` ist eine `provider/model`-Zeichenkette, du wechselst Modelle also durch deren Änderung (`openai/gpt-5.5`, `anthropic/claude-sonnet-4-5` und so weiter), ohne ein Anbieter-SDK installieren zu müssen. Das Gateway liest `AI_GATEWAY_API_KEY` aus deiner Umgebung und wird bei einem Deployment auf Vercel automatisch verdrahtet.
 
-Setze `provider`, um Ask AI anderswohin zu leiten. Jedes Backend liest seinen API-Schlüssel aus einer Umgebungsvariablen, und das passende Anbieter-SDK wird beim Build automatisch zur Laufzeitumgebung deines Projekts hinzugefügt — nur dasjenige, das du verwendest:
+Setze `provider`, um Ask AI anderswohin zu leiten. Jedes Backend liest seinen API-Schlüssel aus einer Umgebungsvariablen und streamt über ein Anbieter-SDK, das du in deinem Projekt installierst — nur dasjenige, das du verwendest:
 
-| `provider` | `model` | Umgebungsvariable für den API-Schlüssel |
-| --- | --- | --- |
-| `gateway` (Standard) | eine `provider/model`-Zeichenkette über das AI Gateway | `AI_GATEWAY_API_KEY` |
-| `openrouter` | ein beliebiges [OpenRouter](https://openrouter.ai)-Modell | `OPENROUTER_API_KEY` |
-| `llmgateway` | ein beliebiges [LLMGateway](https://llmgateway.io)-Modell | `LLMGATEWAY_API_KEY` |
-| `inkeep` | ein [Inkeep](https://inkeep.com)-QA-Modell | `INKEEP_API_KEY` |
-| `openai-compatible` | was auch immer dein Endpunkt ausliefert | mit `apiKeyEnv` gesetzt |
+| `provider` | `model` | Umgebungsvariable für den API-Schlüssel | Zu installierendes SDK |
+| --- | --- | --- | --- |
+| `gateway` (Standard) | eine `provider/model`-Zeichenkette über das AI Gateway | `AI_GATEWAY_API_KEY` | keines — wird mit Blume mitgeliefert |
+| `openrouter` | ein beliebiges [OpenRouter](https://openrouter.ai)-Modell | `OPENROUTER_API_KEY` | `@openrouter/ai-sdk-provider` |
+| `llmgateway` | ein beliebiges [LLMGateway](https://llmgateway.io)-Modell | `LLMGATEWAY_API_KEY` | `@ai-sdk/openai-compatible` |
+| `inkeep` | ein [Inkeep](https://inkeep.com)-QA-Modell | `INKEEP_API_KEY` | `@ai-sdk/openai-compatible` |
+| `openai-compatible` | was auch immer dein Endpunkt ausliefert | mit `apiKeyEnv` gesetzt | `@ai-sdk/openai-compatible` |
+
+Die SDKs sind optionale Peer-Abhängigkeiten, füge deinem Projekt also dasjenige hinzu, das dein Backend benötigt (z. B. `npm install @openrouter/ai-sdk-provider`). Fehlt es, warnt der Build mit dem exakten Paketnamen, bevor Vite den Import nicht auflösen könnte.
 
 Um zum Beispiel OpenRouter zu verwenden:
 

@@ -137,6 +137,22 @@ ai: {
 
 `label` は実際に送信される質問で、`icon` は任意です。`suggestions` を未設定（または空）のままにすると、パネルはシンプルな入力欄で開きます。
 
+### カスタム指示
+
+`instructions` で独自のシステムプロンプト文を追加できます。アシスタントに意識してほしいアイデンティティ、言語、トーン、その他何でも指定できます。
+
+```ts blume.config.ts lineNumbers
+ai: {
+  ask: {
+    enabled: true,
+    instructions:
+      "You are Bloomy, the Acme docs assistant. Answer in the language the question was asked in, and keep answers under three paragraphs.",
+  },
+}
+```
+
+指定した文は組み込みの指示を置き換えるのではなく、その**後ろに追加**されます。組み込み部分は[グラウンディング](#grounding)の取り決め（取得したページのみから回答する、Markdown リンクとして引用する）を担っており、チャットパネルの引用表示はこれに依存しているため、何を追加しても損なわれずに残ります。
+
 ### グラウンディング
 
 Ask AI は**ドキュメントにグラウンディングされています**。質問ごとに最も関連性の高いページを取得し（ページ内検索を支えるのと同じ字句ベースの [Orama](/docs/configuration/search) インデックスを使用）、モデルのシステムプロンプトに注入するため、回答はモデル自身の知識ではなくあなたのコンテンツから生成されます。アシスタントは、取得したページのみから回答すること、カバーされていない事柄はそう伝えること、参照したページを引用することを指示されています。
@@ -186,15 +202,17 @@ Ask AI が有効で外部 `endpoint` がない静的ビルドは、`deployment.o
 
 既定では、Ask AI は **Vercel AI Gateway** を経由します。`model` は `provider/model` 形式の文字列なので、それを変更するだけでモデルを切り替えられ（`openai/gpt-5.5`、`anthropic/claude-sonnet-4-5` など）、プロバイダーの SDK をインストールする必要はありません。ゲートウェイは環境から `AI_GATEWAY_API_KEY` を読み取り、Vercel にデプロイすると自動的に設定されます。
 
-Ask AI を別の場所に向けるには `provider` を設定します。各バックエンドは環境変数から API キーを読み取り、対応するプロバイダーの SDK はビルド時にプロジェクトのランタイムへ自動的に追加されます。追加されるのは実際に使うものだけです。
+Ask AI を別の場所に向けるには `provider` を設定します。各バックエンドは環境変数から API キーを読み取り、プロジェクトにインストールしたプロバイダーの SDK を通じてストリーミングします。インストールするのは実際に使うものだけです。
 
-| `provider` | `model` | API キーの環境変数 |
-| --- | --- | --- |
-| `gateway`（既定） | AI Gateway 経由の `provider/model` 形式の文字列 | `AI_GATEWAY_API_KEY` |
-| `openrouter` | 任意の [OpenRouter](https://openrouter.ai) モデル | `OPENROUTER_API_KEY` |
-| `llmgateway` | 任意の [LLMGateway](https://llmgateway.io) モデル | `LLMGATEWAY_API_KEY` |
-| `inkeep` | [Inkeep](https://inkeep.com) の QA モデル | `INKEEP_API_KEY` |
-| `openai-compatible` | エンドポイントが提供するもの | `apiKeyEnv` で設定 |
+| `provider` | `model` | API キーの環境変数 | インストールする SDK |
+| --- | --- | --- | --- |
+| `gateway`（既定） | AI Gateway 経由の `provider/model` 形式の文字列 | `AI_GATEWAY_API_KEY` | 不要 — Blume に同梱 |
+| `openrouter` | 任意の [OpenRouter](https://openrouter.ai) モデル | `OPENROUTER_API_KEY` | `@openrouter/ai-sdk-provider` |
+| `llmgateway` | 任意の [LLMGateway](https://llmgateway.io) モデル | `LLMGATEWAY_API_KEY` | `@ai-sdk/openai-compatible` |
+| `inkeep` | [Inkeep](https://inkeep.com) の QA モデル | `INKEEP_API_KEY` | `@ai-sdk/openai-compatible` |
+| `openai-compatible` | エンドポイントが提供するもの | `apiKeyEnv` で設定 | `@ai-sdk/openai-compatible` |
+
+これらの SDK は任意のピア依存関係なので、バックエンドに必要なものをプロジェクトに追加してください（例: `npm install @openrouter/ai-sdk-provider`）。不足している場合は、Vite が import の解決に失敗する前に、ビルドが正確なパッケージ名を添えて警告します。
 
 たとえば OpenRouter を使うには次のようにします。
 
