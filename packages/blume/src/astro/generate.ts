@@ -12,6 +12,7 @@ import {
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
+import pMap from "p-map";
 import { basename, dirname, join, normalize, relative, resolve } from "pathe";
 import { glob } from "tinyglobby";
 
@@ -735,6 +736,9 @@ export const detectNeedsReact = async (root: string): Promise<boolean> => {
 const containsMath = (content: string): boolean =>
   content.includes("$$") || content.includes("<Math");
 
+/** Ceiling on concurrent content-file reads; unbounded fan-out risks EMFILE. */
+const READ_CONCURRENCY = 16;
+
 /**
  * Detect whether the project can render math: block math (`$$…$$`) or an
  * explicit `<Math>` tag in any local `.md`/`.mdx`, or in staged (non-filesystem)
@@ -753,9 +757,9 @@ export const detectUsesMath = async (
     ignore: ["**/node_modules/**", "**/.blume/**", "**/dist/**"],
     onlyFiles: true,
   });
-  const contents = await Promise.all(
-    files.map((file) => readOptional(join(root, file)))
-  );
+  const contents = await pMap(files, (file) => readOptional(join(root, file)), {
+    concurrency: READ_CONCURRENCY,
+  });
   return [...contents, ...staged].some(containsMath);
 };
 

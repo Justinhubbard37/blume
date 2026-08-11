@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import pMap from "p-map";
 import { join, relative } from "pathe";
 import { glob } from "tinyglobby";
 
@@ -47,6 +48,9 @@ const EXAMPLE_FILE = /\.(?<ext>astro|jsx|svelte|tsx|vue)$/u;
 
 // Renderable example files when `examples` names a plain directory.
 const DEFAULT_EXAMPLE_GLOB = "**/*.{astro,jsx,svelte,tsx,vue}";
+
+/** Ceiling on concurrent example-file reads; unbounded fan-out risks EMFILE. */
+const READ_CONCURRENCY = 16;
 
 // Glob magic that turns `examples` from a plain directory into a pattern. `()`,
 // `@`, and `+` are excluded so literal path segments (npm scopes, parens) keep
@@ -102,9 +106,9 @@ export const discoverExamples = async (
     onlyFiles: true,
   });
   const files = matches.toSorted();
-  const sources = await Promise.all(
-    files.map((file) => readFile(file, "utf-8"))
-  );
+  const sources = await pMap(files, (file) => readFile(file, "utf-8"), {
+    concurrency: READ_CONCURRENCY,
+  });
 
   const examples: ExampleSpec[] = [];
   const warnings: string[] = [];

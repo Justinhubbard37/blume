@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import pMap from "p-map";
 import { basename, join } from "pathe";
 import { glob } from "tinyglobby";
 
@@ -28,6 +29,9 @@ export interface IslandDiscovery {
 
 /** Hydration mode used when an island doesn't declare one. */
 const DEFAULT_CLIENT: IslandClientMode = "visible";
+
+/** Ceiling on concurrent island-file reads; unbounded fan-out risks EMFILE. */
+const READ_CONCURRENCY = 16;
 
 const VALID_MODES = new Set<IslandClientMode>([
   "idle",
@@ -92,9 +96,9 @@ export const discoverIslands = async (
     onlyFiles: true,
   });
   const files = matches.toSorted();
-  const sources = await Promise.all(
-    files.map((file) => readFile(file, "utf-8"))
-  );
+  const sources = await pMap(files, (file) => readFile(file, "utf-8"), {
+    concurrency: READ_CONCURRENCY,
+  });
 
   const islands: IslandSpec[] = [];
   const warnings: string[] = [];

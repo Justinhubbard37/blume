@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 
 import { XMLParser } from "fast-xml-parser";
+import pMap from "p-map";
 import { join, relative } from "pathe";
 import { glob } from "tinyglobby";
 
@@ -17,6 +18,13 @@ import type { LlmsDoc, PageSnapshot, RobotsDoc, SitemapDoc } from "./types.ts";
  * findings nobody can act on.
  */
 const EXAMPLES_PREFIX = `${examplesRouteBase("")}/`;
+
+/**
+ * Ceiling on concurrent file reads/stats while crawling. Unbounded fan-out
+ * over a large `dist` risks EMFILE and holds every page's HTML in memory at
+ * once.
+ */
+const CRAWL_CONCURRENCY = 16;
 
 /** Everything read off disk in one pass over the built site. */
 export interface CrawlResult {
@@ -45,12 +53,14 @@ export const fileToUrl = (staticDir: string, file: string): string => {
  */
 const indexFiles = async (staticDir: string): Promise<Map<string, number>> => {
   const found = await glob("**/*", { cwd: staticDir, dot: true });
-  const sized = await Promise.all(
-    found.map(async (file) => {
+  const sized = await pMap(
+    found,
+    async (file) => {
       const path = `/${file.replaceAll("\\", "/")}`;
       const info = await stat(join(staticDir, file));
       return [path, info.size] as const;
-    })
+    },
+    { concurrency: CRAWL_CONCURRENCY }
   );
   return new Map(sized);
 };
@@ -214,8 +224,9 @@ export const crawlStaticDir = async (options: {
   const routes = routeIndex(manifest, basePath);
 
   const htmlFiles = await glob("**/*.html", { absolute: true, cwd: staticDir });
-  const snapshots = await Promise.all(
-    htmlFiles.toSorted().map(async (file) => {
+  const snapshots = await pMap(
+    htmlFiles.toSorted(),
+    async (file) => {
       const url = fileToUrl(staticDir, file);
       if (stripBasePath(basePath, url).startsWith(EXAMPLES_PREFIX)) {
         return null;
@@ -230,7 +241,8 @@ export const crawlStaticDir = async (options: {
         route: routes.get(url) ?? routes.get(stripBasePath(basePath, url)),
         url,
       });
-    })
+    },
+    { concurrency: CRAWL_CONCURRENCY }
   );
   const pages = snapshots.filter((page) => page !== null);
 

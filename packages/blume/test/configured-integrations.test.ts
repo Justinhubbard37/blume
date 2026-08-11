@@ -354,19 +354,39 @@ const runCli = async (
  * guard the runner kills it at the test timeout (exit 143) — the build-side
  * sibling of the dev startup wedge above. Kill the hung process and rebuild
  * once; a persistent hang still surfaces after the retry.
+ *
+ * A second CI flake lives in Astro's fonts pipeline: the default theme fonts
+ * download from Google at build time, and Google's CSS API occasionally hands
+ * out gstatic URLs that 404 mid-rollout, failing the build with
+ * `CannotFetchFontFile`. Drop the runtime's font cache (a cached stale URL
+ * list would just re-404) and rebuild once; a real outage still surfaces
+ * after the retry.
  */
 const runIsolatedBuild = async (
   root: string,
   attemptsLeft = 2
 ): Promise<{ exitCode: number; output: string }> => {
+  let result: { exitCode: number; output: string };
   try {
-    return await runCli(root, ["build", "--isolated"], 90_000);
+    result = await runCli(root, ["build", "--isolated"], 90_000);
   } catch (error) {
     if (!(error instanceof CliTimeoutError) || attemptsLeft <= 1) {
       throw error;
     }
     return runIsolatedBuild(root, attemptsLeft - 1);
   }
+  if (
+    result.exitCode !== 0 &&
+    result.output.includes("CannotFetchFontFile") &&
+    attemptsLeft > 1
+  ) {
+    await rm(join(root, ".blume-verify/.astro/fonts"), {
+      force: true,
+      recursive: true,
+    });
+    return runIsolatedBuild(root, attemptsLeft - 1);
+  }
+  return result;
 };
 
 afterAll(async () => {

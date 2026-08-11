@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 
+import pMap from "p-map";
+
 import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
 import type { Diagnostic } from "../core/types.ts";
@@ -88,6 +90,9 @@ export class NoBuildError extends Error {
   }
 }
 
+/** Ceiling on concurrent source reads; unbounded fan-out risks EMFILE. */
+const READ_CONCURRENCY = 16;
+
 /** Read every page's source file once, so findings can cite front matter lines. */
 const readSources = async (
   pages: PageSnapshot[]
@@ -95,8 +100,9 @@ const readSources = async (
   const paths = [
     ...new Set(pages.flatMap((page) => (page.source ? [page.source] : []))),
   ];
-  const entries = await Promise.all(
-    paths.map(async (path) => {
+  const entries = await pMap(
+    paths,
+    async (path) => {
       try {
         return [path, await readFile(path, "utf-8")] as const;
       } catch {
@@ -104,7 +110,8 @@ const readSources = async (
         // still names the URL; it just can't cite a line.
         return null;
       }
-    })
+    },
+    { concurrency: READ_CONCURRENCY }
   );
   return new Map(entries.filter((entry) => entry !== null));
 };
