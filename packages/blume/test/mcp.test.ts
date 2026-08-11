@@ -865,6 +865,29 @@ describe("orama index helpers", () => {
     expect(kana.length).toBe(1);
   });
 
+  it("ends a bigram run at a format character kept inside a word", async () => {
+    // U+200D is a Format character, which UAX #29 attaches to the preceding
+    // word, so 資金 arrives as one word-like segment with the joiner still on
+    // its tail. The joiner ends the run the way visible punctuation between
+    // segments would; bridged, the bigram 金決 would claim the characters
+    // were adjacent when the author separated them.
+    const db = await buildOramaIndex(
+      [
+        {
+          content: "資金\u200D決済法の話です。",
+          description: "",
+          locale: "ja",
+          route: "/joined",
+          title: "資金",
+        },
+      ],
+      "ja"
+    );
+    expect(await queryOramaIndex(db, "金決", 5)).toEqual([]);
+    const front = await queryOramaIndex(db, "資金", 5);
+    expect(front.map((doc) => doc.route)).toEqual(["/joined"]);
+  });
+
   it("keeps Thai combining marks inside the terms", async () => {
     // Thai writes vowels and tones as combining marks. Treated as punctuation
     // they leave consonant skeletons, and เสื้อ (shirt) and เสือ (tiger)
