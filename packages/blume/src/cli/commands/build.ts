@@ -54,7 +54,7 @@ import {
   platformRedirects,
 } from "../../deploy/redirects.ts";
 import { buildRobots } from "../../deploy/robots.ts";
-import { buildSitemap } from "../../deploy/sitemap.ts";
+import { buildSitemapFiles } from "../../deploy/sitemap.ts";
 import { injectNegotiationRoutes } from "../../deploy/vercel-negotiation.ts";
 import { buildSearchIndex } from "../../search/build.ts";
 import { syncSearchProvider } from "../../search/sync/index.ts";
@@ -616,10 +616,18 @@ const publishBuildArtifacts = async (
   }
 
   // A user's own public/ file (copied into dist by Astro) always wins.
-  const sitemap = buildSitemap(project);
-  if (sitemap && !existsSync(join(distDir, "sitemap.xml"))) {
-    await writeFile(join(distDir, "sitemap.xml"), sitemap, "utf-8");
-    logger.success("Generated sitemap.xml");
+  const sitemapFiles = buildSitemapFiles(project);
+  if (sitemapFiles && !existsSync(join(distDir, "sitemap.xml"))) {
+    await Promise.all(
+      sitemapFiles.map((file) =>
+        writeFile(join(distDir, file.name), file.xml, "utf-8")
+      )
+    );
+    logger.success(
+      sitemapFiles.length === 1
+        ? "Generated sitemap.xml"
+        : `Generated sitemap.xml (index of ${sitemapFiles.length - 1} sitemap files)`
+    );
   }
 
   const robots = buildRobots(project);
@@ -649,7 +657,7 @@ const publishBuildArtifacts = async (
 
   const { config } = project;
   const features = serverFeatures(config);
-  // `buildSitemap` returns null both when the sitemap is disabled and when no
+  // `buildSitemapFiles` returns null both when the sitemap is disabled and when no
   // `site` is configured — only the latter deserves the remediation hint.
   const sitemapNote = config.seo.sitemap
     ? "no (set deployment.site)"
@@ -661,7 +669,7 @@ const publishBuildArtifacts = async (
       `Site       ${config.deployment.site ?? "not set"}`,
       `Search     ${config.search.provider}`,
       `Redirects  ${config.redirects.length}`,
-      `Sitemap    ${sitemap ? "yes" : sitemapNote}`,
+      `Sitemap    ${sitemapFiles ? "yes" : sitemapNote}`,
       `Robots     ${robots ? "yes" : "no"}`,
       `Agent JSON ${agentReadability ? "yes" : "no"}`,
       `LLM files  ${config.ai.llmsTxt.enabled ? "yes" : "no"}`,

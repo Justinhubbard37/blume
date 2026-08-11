@@ -16,7 +16,7 @@ import { validateLinks } from "../src/core/links.ts";
 import { scanProject } from "../src/core/project-graph.ts";
 import { pageMetaSchema } from "../src/core/schema.ts";
 import type { ContentGraph, PageLink, PageRecord } from "../src/core/types.ts";
-import { buildSitemap } from "../src/deploy/sitemap.ts";
+import { buildSitemapFiles } from "../src/deploy/sitemap.ts";
 import {
   blumeMarkdownProcessor,
   blumeMdxProcessor,
@@ -266,7 +266,7 @@ describe("content pipeline under basePath", () => {
       mode: "build",
     });
 
-    const sitemap = buildSitemap(project);
+    const sitemap = buildSitemapFiles(project)?.[0]?.xml ?? "";
     expect(sitemap).toContain("https://example.com/manual/getting-started");
 
     const { index, full } = await buildLlmsFiles(project);

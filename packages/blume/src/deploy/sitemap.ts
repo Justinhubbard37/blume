@@ -29,14 +29,42 @@ const lastmodTag = (value: string | undefined): string => {
     : `<lastmod>${date.toISOString().slice(0, 10)}</lastmod>`;
 };
 
+/** One emitted sitemap artifact: its dist-root filename and XML body. */
+export interface SitemapFile {
+  name: string;
+  xml: string;
+}
+
 /**
- * Build a sitemap.xml from the route manifest plus the routes the manifest
+ * The sitemaps.org cap on `<url>` entries in a single file. Beyond it,
+ * `sitemap.xml` becomes a sitemap index pointing at numbered chunk files —
+ * search engines reject an oversized urlset outright.
+ */
+const URLS_PER_FILE = 50_000;
+
+const renderUrlset = (
+  urls: string[]
+): string => `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>
+`;
+
+/**
+ * Build the sitemap files from the route manifest plus the routes the manifest
  * can't see: custom `.astro` pages (most importantly a custom landing `/`) and
  * the generated `/changelog` index. Returns null when the sitemap is disabled
  * or no `site` is configured (absolute URLs are required for a valid sitemap).
  * Drafts, hidden, and `noindex` pages are excluded.
+ *
+ * Sites within the per-file URL cap get the single classic `sitemap.xml`;
+ * larger sites get `sitemap.xml` as a sitemap index over numbered
+ * `sitemap-N.xml` chunks, all served from the same directory robots.txt
+ * already points at.
  */
-export const buildSitemap = (project: BlumeProject): string | null => {
+export const buildSitemapFiles = (
+  project: BlumeProject
+): SitemapFile[] | null => {
   const { site } = project.config.deployment;
   if (!(site && project.config.seo.sitemap)) {
     return null;
@@ -87,9 +115,29 @@ export const buildSitemap = (project: BlumeProject): string | null => {
   }
   urls.sort();
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.join("\n")}
-</urlset>
+  if (urls.length <= URLS_PER_FILE) {
+    return [{ name: "sitemap.xml", xml: renderUrlset(urls) }];
+  }
+
+  const chunks: SitemapFile[] = [];
+  const references: string[] = [];
+  for (let start = 0; start < urls.length; start += URLS_PER_FILE) {
+    const name = `sitemap-${chunks.length + 1}.xml`;
+    chunks.push({
+      name,
+      xml: renderUrlset(urls.slice(start, start + URLS_PER_FILE)),
+    });
+    // Chunks sit next to sitemap.xml, so their URLs layer the same deployment
+    // base robots.txt uses for the index.
+    const loc = escapeXml(
+      encodeURI(`${base}${withBasePath(deployBase, `/${name}`)}`)
+    );
+    references.push(`  <sitemap><loc>${loc}</loc></sitemap>`);
+  }
+  const index = `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${references.join("\n")}
+</sitemapindex>
 `;
+  return [{ name: "sitemap.xml", xml: index }, ...chunks];
 };

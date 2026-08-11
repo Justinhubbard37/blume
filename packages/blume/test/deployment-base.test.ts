@@ -8,7 +8,7 @@ import { buildLlmsFiles } from "../src/ai/llms.ts";
 import { prefixBase, withBase } from "../src/components/islands/base-path.ts";
 import { scanProject } from "../src/core/project-graph.ts";
 import { buildRssFeeds, renderRssFeed } from "../src/deploy/rss.ts";
-import { buildSitemap } from "../src/deploy/sitemap.ts";
+import { buildSitemapFiles } from "../src/deploy/sitemap.ts";
 import { buildStructuredData } from "../src/seo/jsonld.ts";
 
 // ---------------------------------------------------------------------------
@@ -107,7 +107,7 @@ describe("SEO files under deployment.base", () => {
       mode: "build",
     });
 
-    const sitemap = buildSitemap(project);
+    const sitemap = buildSitemapFiles(project)?.[0]?.xml ?? "";
     expect(sitemap).toContain("https://example.com/sub/getting-started");
 
     const { index, full } = await buildLlmsFiles(project);

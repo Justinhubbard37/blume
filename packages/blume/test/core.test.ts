@@ -22,7 +22,7 @@ import { blumeConfigSchema, pageMetaSchema } from "../src/core/schema.ts";
 import type { PageRecord, ProjectContext } from "../src/core/types.ts";
 import { buildRobots } from "../src/deploy/robots.ts";
 import { buildRssFeeds, renderRssFeed } from "../src/deploy/rss.ts";
-import { buildSitemap } from "../src/deploy/sitemap.ts";
+import { buildSitemapFiles } from "../src/deploy/sitemap.ts";
 import {
   referenceRoutes,
   resolveReferences,
@@ -30,6 +30,38 @@ import {
 import { buildReferenceFiles } from "../src/openapi/scalar.ts";
 import { buildStructuredData } from "../src/seo/jsonld.ts";
 import { normalizeXHandle } from "../src/seo/x-handle.ts";
+
+/** The classic single-file view most sitemap tests assert against. */
+const buildSitemap = (project: BlumeProject): string | null =>
+  buildSitemapFiles(project)?.[0]?.xml ?? null;
+
+/**
+ * Bulk pages for the sitemap-index split tests. One parsed meta is shared —
+ * 50k zod parses would dominate the suite's runtime for no assertion value.
+ */
+const manyPages = (count: number): PageRecord[] => {
+  const meta = pageMetaSchema.parse({});
+  return Array.from({ length: count }, (_, index) => ({
+    contentType: "doc",
+    format: "mdx" as const,
+    groups: [],
+    headings: [],
+    id: `p${index}`,
+    links: [],
+    locale: "",
+    meta,
+    navPath: `p${index}`,
+    route: `/p/${index}`,
+    segments: [],
+    source: { name: "filesystem", ref: `p${index}` },
+    sourcePath: `/abs/p${index}`,
+    title: `P${index}`,
+    translationKey: `/p/${index}`,
+  }));
+};
+
+/** Count the `<url>` entries in one sitemap chunk. */
+const chunkUrls = (xml: string): number => xml.split("<url>").length - 1;
 
 const makePage = (
   over: Pick<PageRecord, "id" | "route" | "title"> & Partial<PageRecord>
@@ -1098,6 +1130,36 @@ describe("sitemap — custom pages and generated routes", () => {
     const xml = buildSitemap(makeProject(pages)) ?? "";
     const occurrences = xml.split("<loc>https://example.com/changelog</loc>");
     expect(occurrences).toHaveLength(2);
+  });
+
+  it("stays a single file at the 50k-URL cap", () => {
+    const files = buildSitemapFiles(makeProject(manyPages(50_000))) ?? [];
+    expect(files).toHaveLength(1);
+    expect(files[0]?.name).toBe("sitemap.xml");
+    expect(files[0]?.xml).toContain("<urlset");
+  });
+
+  it("splits into a sitemap index above 50k URLs", () => {
+    // 50,001 URLs: search engines reject a urlset beyond 50,000 entries, so
+    // sitemap.xml must become an index over numbered chunks.
+    const files = buildSitemapFiles(makeProject(manyPages(50_001))) ?? [];
+    expect(files.map((file) => file.name)).toStrictEqual([
+      "sitemap.xml",
+      "sitemap-1.xml",
+      "sitemap-2.xml",
+    ]);
+    const index = files[0]?.xml ?? "";
+    expect(index).toContain("<sitemapindex");
+    expect(index).toContain(
+      "<sitemap><loc>https://example.com/sitemap-1.xml</loc></sitemap>"
+    );
+    expect(index).toContain(
+      "<sitemap><loc>https://example.com/sitemap-2.xml</loc></sitemap>"
+    );
+    expect(index).not.toContain("<urlset");
+    // Every URL lands in exactly one chunk.
+    expect(chunkUrls(files[1]?.xml ?? "")).toBe(50_000);
+    expect(chunkUrls(files[2]?.xml ?? "")).toBe(1);
   });
 });
 
