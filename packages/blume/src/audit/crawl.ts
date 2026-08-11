@@ -1,6 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 
 import { XMLParser } from "fast-xml-parser";
+import type { Nodes } from "mdast";
+import { fromMarkdown } from "mdast-util-from-markdown";
 import pMap from "p-map";
 import { join, relative } from "pathe";
 import { glob } from "tinyglobby";
@@ -145,21 +147,32 @@ export const parseSitemap = (
 };
 
 /**
- * Parse the `llms.txt` index into its Markdown link targets. Deliberately
- * shallow, like {@link parseSitemap}: the checks only need "which pages does
- * this file claim exist", not a Markdown AST.
+ * Parse the `llms.txt` index into its Markdown link targets, with the line
+ * each target sits on so findings can point at it. A real parse rather than a
+ * `](url)` regex: angle-bracket destinations, link titles, reference-style
+ * links (the definition line carries the URL), and autolinks all resolve, and
+ * a link-shaped string inside a fenced code block is no longer reported as a
+ * claim. Blume's own llms.txt only emits inline links, but the file is also
+ * hand-edited.
  */
 export const parseLlms = (file: string, text: string): LlmsDoc => {
   const entries: LlmsDoc["entries"] = [];
-  const link = /\]\((?<url>[^)\s]+)\)/gu;
-  for (const [index, line] of text.split(/\r?\n/u).entries()) {
-    for (const match of line.matchAll(link)) {
-      const url = match.groups?.url;
-      if (url) {
-        entries.push({ line: index + 1, url });
+  const collect = (node: Nodes): void => {
+    if (
+      (node.type === "link" ||
+        node.type === "image" ||
+        node.type === "definition") &&
+      node.url
+    ) {
+      entries.push({ line: node.position?.start.line ?? 1, url: node.url });
+    }
+    if ("children" in node) {
+      for (const child of node.children) {
+        collect(child);
       }
     }
-  }
+  };
+  collect(fromMarkdown(text));
   return { entries, file };
 };
 

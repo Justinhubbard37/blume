@@ -185,6 +185,30 @@ describe("parseLlms", () => {
       { line: 6, url: "/b" },
     ]);
   });
+
+  it("resolves titles, reference links, and skips fenced code", () => {
+    const doc = parseLlms(
+      "/dist/llms.txt",
+      [
+        '- [A](/a "With a title")',
+        "- [B][ref]",
+        "",
+        "```",
+        "[not a claim](/code-sample)",
+        "```",
+        "",
+        "[ref]: /b",
+        "",
+      ].join("\n")
+    );
+    // The title stays out of the URL, the reference target is reported on
+    // its definition line, and a link-shaped string inside a code fence is
+    // not a claim the audit should probe.
+    expect(doc.entries).toEqual([
+      { line: 1, url: "/a" },
+      { line: 8, url: "/b" },
+    ]);
+  });
 });
 
 describe("pageSite", () => {
