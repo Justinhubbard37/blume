@@ -85,6 +85,26 @@ const NON_PROSE = new Set(["code", "heading", "html", "thematicBreak"]);
  * content kept — then cut at a word boundary to fit the search snippet cap.
  * Undefined when the notes have no prose at all.
  */
+/**
+ * The longest prefix of `text` that fits `max` UTF-16 units without cutting
+ * inside a grapheme cluster. A bare `String#slice` counts code units, so it
+ * can split a surrogate pair (emitting a lone surrogate — invalid Unicode —
+ * into a meta description) or halve an emoji sequence. Grapheme segmentation
+ * is rule-based (UAX #29), so unlike word segmentation it does not drift
+ * across ICU builds.
+ */
+const graphemePrefix = (text: string, max: number): string => {
+  let end = 0;
+  const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  for (const { index, segment } of graphemes.segment(text)) {
+    if (index + segment.length > max) {
+      break;
+    }
+    end = index + segment.length;
+  }
+  return text.slice(0, end);
+};
+
 const releaseDescription = (body: string): string | undefined => {
   const tree = fromMarkdown(body.replaceAll(CHANGESET_HASH, "$<mark>"), {
     extensions: [gfm()],
@@ -108,7 +128,7 @@ const releaseDescription = (body: string): string | undefined => {
   }
   // Cut before the cap at a word boundary (kept only when it doesn't drop the
   // summary under the minimum), shed any dangling punctuation, and mark the cut.
-  const slice = text.slice(0, DESCRIPTION_MAX - 1);
+  const slice = graphemePrefix(text, DESCRIPTION_MAX - 1);
   const boundary = slice.lastIndexOf(" ");
   const head = (
     boundary >= DESCRIPTION_MIN ? slice.slice(0, boundary) : slice

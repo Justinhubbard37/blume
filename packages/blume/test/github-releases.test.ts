@@ -192,6 +192,27 @@ describe("githubReleasesSource", () => {
     expect(entries[0]?.raw).toContain("seo:");
   });
 
+  it("never splits a surrogate pair at the description cut", async () => {
+    // One unbroken 158-unit token, then an astral emoji straddling the
+    // 159-unit cut: a UTF-16 slice would keep only the high surrogate,
+    // shipping invalid Unicode in the meta description. No space means the
+    // word-boundary path can't rescue it — the cut itself must be
+    // grapheme-safe.
+    const body = `- abc1234: ${"x".repeat(158)}💥${"y".repeat(40)}`;
+    const { fetchImpl } = releasesFetch({ 1: [makeRelease({ body })] });
+    const source = githubReleasesSource(
+      { fetchImpl, name: "changelog", owner: "acme", repo: "sdk" },
+      ctxFor(await tempDir())
+    );
+    const { entries } = await source.load();
+    const meta = entries[0]?.data as { seo?: { description?: string } };
+    const description = meta.seo?.description ?? "";
+    expect(description).toEndWith("…");
+    // No lone surrogate anywhere: the string must round-trip through UTF-8.
+    expect(description).toBe(Buffer.from(description, "utf-8").toString());
+    expect(description).not.toContain("💥");
+  });
+
   it("keeps a short body as-is and omits seo for an empty one", async () => {
     const { fetchImpl } = releasesFetch({
       1: [
