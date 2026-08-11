@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 
+import { detect } from "package-manager-detector/detect";
 import { basename, dirname, isAbsolute, join, relative } from "pathe";
 
 import { blumePackageJson, toPackageName } from "../../core/package-json.ts";
@@ -155,10 +156,30 @@ export const commandsFor = (
 /**
  * Derive the package manager from an npm user-agent string (the first
  * `name/version` token of `npm_config_user_agent`), falling back to npm.
+ * Right for `init`, where the project doesn't exist yet and the invoking
+ * runner is the only signal.
  */
 export const detectPackageManager = (userAgent?: string): PackageManager => {
   const name = userAgent?.split("/")[0] as PackageManager | undefined;
   return name !== undefined && PACKAGE_MANAGERS.includes(name) ? name : "npm";
+};
+
+/**
+ * Detect an existing project's package manager from its lockfile /
+ * `packageManager` field (package-manager-detector), falling back to the
+ * user agent. Right for `eject`: the CLI is often run directly (`npx blume
+ * eject`, a bare `blume eject`), where `npm_config_user_agent` is absent or
+ * names the runner rather than the project's manager, and the old
+ * user-agent-only detection silently printed npm hints for a pnpm project.
+ */
+export const detectProjectPackageManager = async (
+  root: string
+): Promise<PackageManager> => {
+  const detected = await detect({ cwd: root });
+  const name = detected?.name as PackageManager | undefined;
+  return name !== undefined && PACKAGE_MANAGERS.includes(name)
+    ? name
+    : detectPackageManager(process.env.npm_config_user_agent);
 };
 
 /**

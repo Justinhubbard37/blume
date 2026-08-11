@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 import { join } from "pathe";
@@ -11,6 +11,7 @@ import {
   buildPlan,
   commandsFor,
   detectPackageManager,
+  detectProjectPackageManager,
   nextSteps,
   titleize,
   validateContentDir,
@@ -77,6 +78,37 @@ describe("detectPackageManager", () => {
     expect(detectPackageManager()).toBe("npm");
     expect(detectPackageManager("deno/2.0.0")).toBe("npm");
     expect(detectPackageManager("")).toBe("npm");
+  });
+});
+
+describe("detectProjectPackageManager", () => {
+  it("reads an existing project's manager from its lockfile", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "blume-pm-"));
+    try {
+      await writeFile(join(dir, "package.json"), "{}");
+      await writeFile(join(dir, "pnpm-lock.yaml"), "");
+      // The lockfile wins even though this test process itself runs under a
+      // different manager's user agent.
+      expect(await detectProjectPackageManager(dir)).toBe("pnpm");
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("falls back to the user agent when no lockfile is found", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "blume-pm-"));
+    const previous = process.env.npm_config_user_agent;
+    process.env.npm_config_user_agent = "yarn/4.0.0 npm/? node/v20.0.0";
+    try {
+      expect(await detectProjectPackageManager(dir)).toBe("yarn");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.npm_config_user_agent;
+      } else {
+        process.env.npm_config_user_agent = previous;
+      }
+      await rm(dir, { force: true, recursive: true });
+    }
   });
 });
 

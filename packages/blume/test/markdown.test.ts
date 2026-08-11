@@ -117,14 +117,16 @@ describe(toPackageCommands, () => {
   });
 
   it("maps yarn's global form onto every manager's global install", () => {
+    // The yarn tab is pinned to Berry, which removed `global`
+    // (yarnpkg/berry#821) — its honest global command is npm's.
     expect(toPackageCommands("yarn global add typescript")).toStrictEqual({
-      bun: "bun add typescript -g",
-      npm: "npm install typescript -g",
-      pnpm: "pnpm add typescript -g",
-      yarn: "yarn global add typescript",
+      bun: "bun add -g typescript",
+      npm: "npm install -g typescript",
+      pnpm: "pnpm add -g typescript",
+      yarn: "npm install -g typescript",
     });
     expect(toPackageCommands("yarn global remove typescript").yarn).toBe(
-      "yarn global remove typescript"
+      "npm uninstall -g typescript"
     );
   });
 
@@ -154,12 +156,12 @@ describe(toPackageCommands, () => {
     });
   });
 
-  it("routes global installs through yarn global add", () => {
+  it("routes global installs through each manager's global command", () => {
     expect(toPackageCommands("npm i -g vercel")).toStrictEqual({
       bun: "bun add -g vercel",
       npm: "npm install -g vercel",
       pnpm: "pnpm add -g vercel",
-      yarn: "yarn global add vercel",
+      yarn: "npm install -g vercel",
     });
   });
 
@@ -176,12 +178,12 @@ describe(toPackageCommands, () => {
     expect(toPackageCommands("npm run build").yarn).toBe("yarn run build");
   });
 
-  it("routes a global uninstall through yarn global remove", () => {
+  it("routes a global uninstall through each manager's global command", () => {
     expect(toPackageCommands("npm uninstall -g eslint")).toStrictEqual({
       bun: "bun remove -g eslint",
       npm: "npm uninstall -g eslint",
-      pnpm: "pnpm remove -g eslint",
-      yarn: "yarn global remove eslint",
+      pnpm: "pnpm remove --global eslint",
+      yarn: "npm uninstall -g eslint",
     });
   });
 
