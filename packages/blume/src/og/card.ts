@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import { imageSize } from "image-size";
 import { render } from "takumi-js";
 import type { RenderOptions } from "takumi-js";
 import { container, googleFonts, image, text } from "takumi-js/helpers";
@@ -219,17 +220,21 @@ export const truncate = (value: string, max: number): string => {
 // at full height — it stands alone as the brand (no text label beside it).
 const MARK_HEIGHT = 32;
 const MARK_MAX_WIDTH = 240;
-// Accept either quote style and a non-zero min-x/min-y; only width/height
-// matter for the aspect ratio. A miss falls back to a square mark.
-const VIEW_BOX =
-  /viewBox=(?<q>["'])[\d.-]+[\s,]+[\d.-]+[\s,]+(?<w>[\d.]+)[\s,]+(?<h>[\d.]+)\k<q>/u;
-
-/** The SVG's viewBox aspect ratio (w/h), or null without a usable viewBox. */
+/**
+ * The SVG's aspect ratio (w/h), or null when no usable dimensions exist (the
+ * caller falls back to a square mark). image-size (already a dependency)
+ * reads explicit width/height and falls back to the viewBox, tolerating the
+ * quote/whitespace/attribute spellings the old regex silently missed —
+ * `viewBox = "…"`, newline-separated values — which shipped visibly-squashed
+ * marks instead of failing loudly.
+ */
 const logoAspect = (svg: string): number | null => {
-  const box = svg.match(VIEW_BOX);
-  const w = Number(box?.groups?.w);
-  const h = Number(box?.groups?.h);
-  return w && h ? w / h : null;
+  try {
+    const { height, width } = imageSize(Buffer.from(svg));
+    return width && height ? width / height : null;
+  } catch {
+    return null;
+  }
 };
 
 // Render the configured logo as the brand mark. A `currentColor` logo carries

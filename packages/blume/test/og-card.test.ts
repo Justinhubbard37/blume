@@ -170,6 +170,15 @@ describe("renderOgImage", () => {
     await expectPng({ logo: NO_VIEWBOX_LOGO, title: "Hi" });
   });
 
+  it("falls back to a square mark when the logo has no readable size", async () => {
+    // image-size throws on markup it can't measure (no width/height, no
+    // viewBox); the aspect falls back to null and the mark renders square.
+    await expectPng({
+      logo: '<svg><path d="M0 0h24v24H0z" fill="currentColor" /></svg>',
+      title: "Hi",
+    });
+  });
+
   it("renders no brand mark when logo is false", async () => {
     // Without a logo the accent-initial tile stands in; `logo: false` must
     // suppress that fallback too, so the two renders cannot be identical.
