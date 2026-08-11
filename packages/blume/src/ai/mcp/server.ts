@@ -4,6 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 
 import { stripBasePath, withBasePath } from "../../core/base-path.ts";
 import { absoluteUrl } from "../../core/site-url.ts";
@@ -16,8 +17,9 @@ import { MCP_TOOLS } from "./tools.ts";
  * The low-level SDK `Server` is used (rather than the high-level `McpServer`)
  * because the latter's `registerTool` is generic over the caller's Zod instance;
  * Blume's zod and the SDK's may resolve to different copies, whose types don't
- * unify. Hand-written JSON Schema and the SDK's own request schemas avoid that
- * entirely.
+ * unify. Each tool's input is defined once in Blume's own zod: the runtime
+ * parse and the JSON Schema advertised by `tools/list` (via `z.toJSONSchema`)
+ * derive from the same definition, so they cannot drift.
  */
 
 /** Default and maximum number of hits returned by `search_docs`. */
@@ -34,88 +36,31 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Expose-Headers": "Mcp-Session-Id",
 };
 
-/** The optional content-type filter `search_docs` and `list_pages` share. */
-const CONTENT_TYPES_SCHEMA = {
-  description:
-    'Only include pages of these content types (frontmatter `type`, e.g. `["doc", "rfc"]`). `list_pages` shows each page\'s type. Omit to include every type.',
-  items: { type: "string" },
-  type: "array",
-} as const;
-
-/** The optional facet filter `search_docs` and `list_pages` share. */
-const FILTERS_SCHEMA = {
-  additionalProperties: { type: "string" },
-  description:
-    'Only include pages matching every facet, key → required value (e.g. `{"status": "enforced"}`). Facets are metadata the site declares per content type; `list_pages` shows each page\'s facet values. Omit for no facet filtering.',
-  type: "object",
-} as const;
-
-/** JSON Schema for each tool's input, keyed by tool name. */
-const INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
-  get_navigation: { properties: {}, type: "object" },
-  get_page: {
-    properties: {
-      route: {
-        description: "The page route, e.g. `/guides/install`.",
-        type: "string",
-      },
-    },
-    required: ["route"],
-    type: "object",
-  },
-  list_pages: {
-    properties: {
-      contentTypes: CONTENT_TYPES_SCHEMA,
-      filters: FILTERS_SCHEMA,
-    },
-    type: "object",
-  },
-  search_docs: {
-    properties: {
-      contentTypes: CONTENT_TYPES_SCHEMA,
-      filters: FILTERS_SCHEMA,
-      limit: {
-        description: `Maximum hits to return (default ${DEFAULT_SEARCH_LIMIT}).`,
-        maximum: MAX_SEARCH_LIMIT,
-        minimum: 1,
-        type: "integer",
-      },
-      query: { description: "The search query.", type: "string" },
-    },
-    required: ["query"],
-    type: "object",
-  },
-};
-
-/** The `tools/list` payload, derived from shared metadata + input schemas. */
-const TOOL_DEFINITIONS = MCP_TOOLS.map((tool) => ({
-  annotations: tool.annotations,
-  description: tool.description,
-  inputSchema: INPUT_SCHEMAS[tool.name],
-  name: tool.name,
-  title: tool.title,
-}));
-
-const asString = (value: unknown): string =>
-  typeof value === "string" ? value : "";
+// Each field is a preprocess pipe: the input side accepts the sloppy shapes
+// LLM callers actually send (a bare string for an array field, `[]`/`{}`
+// meaning "no filter", out-of-range limits clamped rather than rejected), and
+// the pipe's *output* side is the clean shape — which is exactly what
+// `z.toJSONSchema` emits for `tools/list`. No coercion can ever fail, so a
+// tool call is never rejected on argument shape, matching the previous
+// hand-rolled coercions.
 
 /**
- * The `contentTypes` filter as a string array, or `undefined` when absent or
- * empty — an agent sending `[]` means "no filter", not "match nothing". A bare
+ * The optional content-type filter `search_docs` and `list_pages` share.
+ * `[]` or no usable strings mean "no filter", not "match nothing"; a bare
  * string is accepted as a one-element list.
  */
-const asContentTypes = (value: unknown): string[] | undefined => {
-  const list = Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string")
-    : [value].filter((entry): entry is string => typeof entry === "string");
+const contentTypesField = z.preprocess((value) => {
+  const list = (Array.isArray(value) ? value : [value]).filter(
+    (entry): entry is string => typeof entry === "string"
+  );
   return list.length > 0 ? list : undefined;
-};
+}, z.array(z.string()).optional().describe('Only include pages of these content types (frontmatter `type`, e.g. `["doc", "rfc"]`). `list_pages` shows each page\'s type. Omit to include every type.'));
 
 /**
- * The `filters` facet map with only its string-valued entries, or `undefined`
- * when nothing usable remains — an empty `{}` means "no filter".
+ * The optional facet filter `search_docs` and `list_pages` share. Only
+ * string-valued entries survive; an empty `{}` means "no filter".
  */
-const asFacetFilters = (value: unknown): Record<string, string> | undefined => {
+const filtersField = z.preprocess((value) => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return;
   }
@@ -123,7 +68,74 @@ const asFacetFilters = (value: unknown): Record<string, string> | undefined => {
     (entry): entry is [string, string] => typeof entry[1] === "string"
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}, z.record(z.string(), z.string()).optional().describe('Only include pages matching every facet, key → required value (e.g. `{"status": "enforced"}`). Facets are metadata the site declares per content type; `list_pages` shows each page\'s facet values. Omit for no facet filtering.'));
+
+/** Clamped into range rather than rejected; non-numeric means the default. */
+const limitField = z.preprocess(
+  (value) => {
+    const num = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(num)
+      ? Math.min(Math.max(Math.trunc(num), 1), MAX_SEARCH_LIMIT)
+      : undefined;
+  },
+  z
+    .int()
+    .min(1)
+    .max(MAX_SEARCH_LIMIT)
+    .optional()
+    .describe(`Maximum hits to return (default ${DEFAULT_SEARCH_LIMIT}).`)
+);
+
+/** A required text field; a missing or non-string value coerces to "". */
+const textField = (description: string) =>
+  z.preprocess(
+    (value) => (typeof value === "string" ? value : ""),
+    z.string().describe(description)
+  );
+
+/** Every tool's input schema — the runtime parse and tools/list source. */
+const TOOL_INPUTS = {
+  get_navigation: z.object({}),
+  get_page: z.object({
+    route: textField("The page route, e.g. `/guides/install`."),
+  }),
+  list_pages: z.object({
+    contentTypes: contentTypesField,
+    filters: filtersField,
+  }),
+  search_docs: z.object({
+    contentTypes: contentTypesField,
+    filters: filtersField,
+    limit: limitField,
+    query: textField("The search query."),
+  }),
 };
+
+/**
+ * A tool's advertised JSON Schema. The dialect key is dropped (noise in a
+ * tools/list payload), as is the root `additionalProperties: false` — the
+ * runtime strips unknown keys rather than rejecting them, and the advertised
+ * schema shouldn't promise stricter validation than the server performs.
+ */
+const inputSchemaFor = (schema: z.ZodType): Record<string, unknown> => {
+  const {
+    $schema: _dialect,
+    additionalProperties: _closed,
+    ...rest
+  } = z.toJSONSchema(schema);
+  return rest;
+};
+
+/** The `tools/list` payload, derived from shared metadata + input schemas. */
+const TOOL_DEFINITIONS = MCP_TOOLS.map((tool) => ({
+  annotations: tool.annotations,
+  description: tool.description,
+  inputSchema: inputSchemaFor(
+    TOOL_INPUTS[tool.name as keyof typeof TOOL_INPUTS]
+  ),
+  name: tool.name,
+  title: tool.title,
+}));
 
 /** Whether a page's facet values satisfy every requested filter entry. */
 const matchesFacets = (
@@ -131,14 +143,6 @@ const matchesFacets = (
   filters: Record<string, string>
 ): boolean =>
   Object.entries(filters).every(([key, value]) => facets?.[key] === value);
-
-const asLimit = (value: unknown): number => {
-  const num = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(num)) {
-    return DEFAULT_SEARCH_LIMIT;
-  }
-  return Math.min(Math.max(Math.trunc(num), 1), MAX_SEARCH_LIMIT);
-};
 
 /**
  * Normalize a user-supplied route to a `pages` key (`/`, `/a/b`, no suffix).
@@ -235,14 +239,15 @@ export const buildServer = (
     const { arguments: args = {}, name } = request.params;
 
     if (name === "search_docs") {
+      const input = TOOL_INPUTS.search_docs.parse(args);
       const db = await index();
       const hits = await queryOramaIndex(
         db,
-        asString(args.query),
-        asLimit(args.limit),
+        input.query,
+        input.limit ?? DEFAULT_SEARCH_LIMIT,
         {
-          contentTypes: asContentTypes(args.contentTypes),
-          facets: asFacetFilters(args.filters),
+          contentTypes: input.contentTypes,
+          facets: input.filters,
         }
       );
       // `route` is the key `get_page` takes (the tool descriptions promise
@@ -259,7 +264,8 @@ export const buildServer = (
     }
 
     if (name === "get_page") {
-      const key = normalizeRoute(asString(args.route), data);
+      const input = TOOL_INPUTS.get_page.parse(args);
+      const key = normalizeRoute(input.route, data);
       const markdown = data.pages[key];
       if (markdown === undefined) {
         return text(
@@ -271,8 +277,7 @@ export const buildServer = (
     }
 
     if (name === "list_pages") {
-      const contentTypes = asContentTypes(args.contentTypes);
-      const filters = asFacetFilters(args.filters);
+      const { contentTypes, filters } = TOOL_INPUTS.list_pages.parse(args);
       const routes = data.routes.filter(
         (route) =>
           (!contentTypes || contentTypes.includes(route.contentType)) &&
