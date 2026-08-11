@@ -1698,6 +1698,9 @@ describe("contentAssetsEndpointTemplate", () => {
   });
 
   it("guards staged lookups against path traversal", () => {
-    expect(out).toContain('abs.startsWith(STAGED_DIR + "/")');
+    // The separator-safe spelling: a prefix test against the forward-slash
+    // STAGED_DIR broke on Windows, where resolve() answers with backslashes.
+    expect(out).toContain("const rel = relative(STAGED_DIR, abs);");
+    expect(out).toContain('rel === "" || rel.startsWith("..") || isAbsolute');
   });
 });
