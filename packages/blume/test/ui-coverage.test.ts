@@ -354,6 +354,15 @@ describe("search text helpers", () => {
     );
     expect(sanitizeExcerpt("<?bogus comment>")).toBe("&lt;?bogus comment>");
   });
+
+  it("cannot be spliced into a fresh tag by a dropped one", () => {
+    // Deleting `<b>` in place would leave `<script>` behind; scanning every
+    // `<` instead leaves the leftovers as inert text.
+    expect(sanitizeExcerpt("<<b>script>alert(1)</b>")).toBe(
+      "&lt;script>alert(1)"
+    );
+    expect(sanitizeExcerpt("<scr<b>ipt>alert(1)")).toBe("ipt>alert(1)");
+  });
 });
 
 describe("buildResult", () => {

@@ -84,15 +84,12 @@ export const highlight = (text: string, query: string): string => {
     .join("");
 };
 
-// Any tag-shaped run: an opening `<` with a letter or `/` after it, through the
-// closing `>` (or end of string for an unterminated tag).
-const TAG = /<\/?[a-z][^>]*>?/giu;
+// Either a tag-shaped run — an opening `<` with a letter or `/` after it,
+// through the closing `>` (or end of string for an unterminated tag) — or a
+// lone `<`. A run can't span a later `<` (`[^<>]`), so between the two
+// alternatives every `<` in the input lands inside a captured run.
+const ANGLE_RUN = /(?<run><\/?[a-z][^<>]*>?|<)/iu;
 const BARE_MARK = /^<\/?mark>$/iu;
-// Any `<` that does not begin a bare mark tag. What TAG missed (`<!--`, `<?`,
-// `< 2`) gets entity-escaped so the browser can't reinterpret it — an excerpt
-// smuggling `<!--` would otherwise open a comment in `innerHTML` and swallow
-// the rest of the excerpt, legitimate highlights included.
-const STRAY_ANGLE = /<(?!\/?mark>)/giu;
 
 /**
  * Reduce provider-supplied excerpt markup to the `<mark>` highlighting the
@@ -100,13 +97,24 @@ const STRAY_ANGLE = /<(?!\/?mark>)/giu;
  * rendered via `innerHTML`, so the output alphabet is pinned: bare
  * `<mark>`/`</mark>` tags (attributes make even a mark untrusted), text, and
  * entities. Tag-shaped runs are dropped; every other `<` is escaped, which
- * renders identically but can't be parsed as markup. String-level on purpose:
- * this also runs under DOM-less tests, where DOMPurify/DOMParser don't exist.
+ * renders identically but can't be parsed as markup (`<!--` would otherwise
+ * open a comment in `innerHTML` and swallow the rest of the excerpt). Split on
+ * runs covering every `<` rather than deleting tags in place: a deletion can
+ * splice the text around it into a fresh tag (`<<b>script>` → `<script>`),
+ * while here no `<` survives outside a run, so the only ones emitted are the
+ * bare mark tags. String-level on purpose: this also runs under DOM-less
+ * tests, where DOMPurify/DOMParser don't exist.
  */
 export const sanitizeExcerpt = (html: string): string =>
   html
-    .replaceAll(TAG, (tag) => (BARE_MARK.test(tag) ? tag : ""))
-    .replaceAll(STRAY_ANGLE, "&lt;");
+    .split(ANGLE_RUN)
+    .map((part, index) => {
+      if (index % 2 === 0 || BARE_MARK.test(part)) {
+        return part;
+      }
+      return part === "<" ? "&lt;" : "";
+    })
+    .join("");
 
 /** First index in `text` where any query token matches (case-insensitive). */
 const matchIndex = (text: string, query: string): number => {
