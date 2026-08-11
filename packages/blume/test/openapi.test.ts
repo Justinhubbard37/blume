@@ -938,6 +938,53 @@ describe("render-mdx", () => {
     expect(page.body).not.toContain('&#123;"petId"');
   });
 
+  it("leaves a tilde fence verbatim while escaping surrounding prose", () => {
+    const op = {
+      deprecated: false,
+      description: [
+        "Response shape with {inline} braces:",
+        "",
+        "~~~json",
+        '{"name": "doggie"}',
+        "~~~~",
+        "",
+        "More {prose} after.",
+      ].join("\n"),
+      key: "op",
+      method: "get" as const,
+      operationId: "op",
+      path: "/x",
+      route: "/api/x/op",
+      summary: "Do a thing",
+      tag: "x",
+      tagSlug: "x",
+    };
+    const page = operationMdx(specData(), op);
+    // Tilde fences are code in MDX like backtick fences; the body must pass
+    // through untouched (a longer closing run still closes per CommonMark).
+    expect(page.body).toContain('~~~json\n{"name": "doggie"}\n~~~~');
+    expect(page.body).toContain("&#123;inline&#125;");
+    expect(page.body).toContain("More &#123;prose&#125; after.");
+  });
+
+  it("treats an unclosed tilde fence as running to the end of the text", () => {
+    const page = operationMdx(specData(), {
+      deprecated: false,
+      description: 'Before {braces}.\n\n~~~\n{"open": true}',
+      key: "op",
+      method: "get" as const,
+      operationId: "op",
+      path: "/x",
+      route: "/api/x/op",
+      summary: "Do a thing",
+      tag: "x",
+      tagSlug: "x",
+    });
+    expect(page.body).toContain("Before &#123;braces&#125;.");
+    expect(page.body).toContain('~~~\n{"open": true}');
+    expect(page.body).not.toContain('&#123;"open"');
+  });
+
   it("keeps a double-backtick span verbatim and escapes an unbalanced run", () => {
     const balanced = operationMdx(specData(), {
       deprecated: false,

@@ -36,6 +36,21 @@ const MDX_ESM_KEYWORD = /^(?<keyword>import|export)\b/gmu;
 // the first backtick of a longer fence run — leaving `{` in the real prose
 // unescaped (a compile error) and escaping entities into the fence body.
 const BACKTICK_CODE = /(?<!`)(?<bt>`+)(?!`)[\s\S]*?(?<!`)\k<bt>(?!`)/gu;
+// Tilde fences are code in MDX exactly like backtick fences (they just have no
+// inline form). The opening run is line-anchored per CommonMark, the closing
+// run must be at least as long, and an unclosed fence extends to the end of
+// the text — the second alternative after the closing-fence attempt fails.
+// (Indented code needs no branch here: MDX disables indented code blocks, so a
+// 4-space-indented sample is a paragraph whose braces genuinely need escaping.)
+const TILDE_FENCE =
+  /^[ \t]{0,3}(?<tf>~{3,})[^\n]*(?:[\s\S]*?\n[ \t]{0,3}\k<tf>~*[ \t]*(?=$|\n)|[\s\S]*)/gmu;
+// Either code form; leftmost match wins, so a fence inside a span (or the
+// reverse) is consumed by whichever construct opens first, mirroring how the
+// MDX parser scans.
+const MDX_CODE = new RegExp(
+  `${BACKTICK_CODE.source}|${TILDE_FENCE.source}`,
+  "gmu"
+);
 
 const escapeProse = (text: string): string =>
   text
@@ -45,11 +60,11 @@ const escapeProse = (text: string): string =>
       (keyword) => `&#${keyword.codePointAt(0)};${keyword.slice(1)}`
     );
 
-/** Escape MDX-special syntax in prose while leaving backtick code verbatim. */
+/** Escape MDX-special syntax in prose while leaving code verbatim. */
 const mdxSafe = (text: string): string => {
   let out = "";
   let cursor = 0;
-  for (const match of text.matchAll(BACKTICK_CODE)) {
+  for (const match of text.matchAll(MDX_CODE)) {
     const start = match.index ?? 0;
     out += escapeProse(text.slice(cursor, start));
     out += match[0];
