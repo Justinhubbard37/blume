@@ -226,6 +226,7 @@ const menuRowClass =
 <script>
   import { copyText, flashLabel } from "../copy-feedback.ts";
   import { prefixBase } from "../islands/base-path.ts";
+  import { rafThrottle } from "../raf-throttle.ts";
 
   const CHAT_URLS: Record<string, (q: string) => string> = {
     chatgpt: (q) => `https://chatgpt.com/?hints=search&prompt=${q}`,
@@ -319,12 +320,17 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }`;
         placeMenu(details);
       });
     }
-    window.addEventListener("resize", () => {
-      const open = dropdowns.find((details) => details.open);
-      if (open) {
-        placeMenu(open);
-      }
-    });
+    // rAF-coalesced so a live resize drag re-reads layout once per frame,
+    // not once per event, while the open menu still tracks the viewport.
+    window.addEventListener(
+      "resize",
+      rafThrottle(() => {
+        const open = dropdowns.find((details) => details.open);
+        if (open) {
+          placeMenu(open);
+        }
+      })
+    );
 
     // `data-md` is the base-less logical route; the raw-markdown endpoint is a
     // generated page route, so it's served under the deployment base like any
