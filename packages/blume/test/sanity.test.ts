@@ -250,7 +250,7 @@ describe("sanitySource (field + client resolution edge cases)", () => {
     expect(entries[0]?.ref).toBe("x.md");
   });
 
-  it("keeps distinct refs when slugs slugify to empty (non-ASCII)", async () => {
+  it("keeps non-ASCII slugs as routes instead of falling back to ids", async () => {
     const source = sanitySource(
       {
         client: clientReturning([
@@ -266,7 +266,29 @@ describe("sanitySource (field + client resolution edge cases)", () => {
     );
     const { entries } = await source.load();
     const refs = entries.map((entry) => entry.ref).toSorted();
-    // Each falls back to its unique `_id`, not a shared `untitled.md`.
+    // The ASCII-only slugify used to collapse these to "" and route by _id;
+    // Unicode slugs now survive as authored.
+    expect(refs).toStrictEqual(["こんにちは.md", "你好.md"]);
+  });
+
+  it("keeps distinct refs when slugs still slugify to empty", async () => {
+    const source = sanitySource(
+      {
+        client: clientReturning([
+          { _id: "doc-a", slug: { current: "!!!" } },
+          { _id: "doc-b", slug: { current: "???" } },
+        ]),
+        dataset: "production",
+        name: "guides",
+        projectId: "p1",
+        query: "*",
+      },
+      ctxFor(await tempDir())
+    );
+    const { entries } = await source.load();
+    const refs = entries.map((entry) => entry.ref).toSorted();
+    // Pure punctuation still has nothing to keep: each falls back to its
+    // unique `_id`, not a shared `untitled.md`.
     expect(refs).toStrictEqual(["doc-a.md", "doc-b.md"]);
   });
 

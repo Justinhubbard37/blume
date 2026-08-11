@@ -458,6 +458,17 @@ describe(slugify, () => {
     expect(slugify("Hello, World!")).toBe("hello-world");
     expect(slugify("  Spaced  Out  ")).toBe("spaced-out");
   });
+
+  it("keeps non-ASCII letters instead of deleting them", () => {
+    // Previously collapsed to "" and forced CMS routes onto id fallbacks.
+    expect(slugify("はじめに")).toBe("はじめに");
+    expect(slugify("Руководство пользователя")).toBe(
+      "руководство-пользователя"
+    );
+    expect(slugify("Café Menü")).toBe("café-menü");
+    // macOS-NFD spelling (e + combining acute) slugs like the composed form.
+    expect(slugify("café")).toBe("café");
+  });
 });
 
 describe(extractHeadings, () => {

@@ -28,12 +28,19 @@ const groupLabel = (segment: string): string | null =>
  * anchor ids are *not* slugged here — they use a `github-slugger` in
  * {@link extractHeadings}, matching the renderer (see `markdown/heading-anchors`)
  * so `blume validate` checks anchors against the exact rendered heading ids.
+ *
+ * The keep-class is Unicode letters/marks/numbers, not `\w`: ASCII slugs are
+ * unchanged, but a CJK/Cyrillic/accented slug keeps its characters instead of
+ * collapsing to `""` (which forced Sanity/Notion routes onto their opaque
+ * document-id fallbacks) or dropping accents (`café` → `caf`). NFC first so a
+ * macOS-NFD `é` (e + combining mark) slugs identically to the composed form.
  */
 export const slugify = (text: string): string =>
   text
+    .normalize("NFC")
     .toLowerCase()
     .trim()
-    .replaceAll(/[^\w\s-]/gu, "")
+    .replaceAll(/[^\p{L}\p{M}\p{N}\s_-]/gu, "")
     .replaceAll(/[\s_]+/gu, "-")
     .replaceAll(/-+/gu, "-")
     .replaceAll(/^-|-$/gu, "");
