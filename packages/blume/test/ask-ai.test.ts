@@ -92,23 +92,52 @@ mock.module("dompurify", () => ({
 
 // --- fake browser globals ---------------------------------------------------
 
-/** Stands in for `HTMLElement` in the focus-restore `instanceof` check. */
+/**
+ * Stands in for `HTMLElement` in the focus-restore `instanceof` check, and for
+ * a <body> child the overlay inert sweep can mark.
+ */
 class FakeElement {
+  attributes = new Map<string, string>();
   focusCount = 0;
   isConnected = true;
   focus() {
     this.focusCount += 1;
+  }
+  hasAttribute(name: string): boolean {
+    return this.attributes.has(name);
+  }
+  removeAttribute(name: string): void {
+    this.attributes.delete(name);
+  }
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value);
   }
 }
 (globalThis as { HTMLElement?: unknown }).HTMLElement = FakeElement;
 
 type Listener = (event: unknown) => void;
 const windowListeners = new Map<string, Listener[]>();
+
+// The overlay-mode focus sweep asks matchMedia whether the desktop dock is
+// active. Desktop by default so unrelated tests skip the sweep entirely.
+let mediaMatches = true;
+let mediaListeners: Listener[] = [];
 const fakeWindow = {
   addEventListener(type: string, listener: Listener) {
     windowListeners.set(type, [...(windowListeners.get(type) ?? []), listener]);
   },
   location: { pathname: "/guide" },
+  matchMedia: (_query: string) => ({
+    addEventListener(_type: string, listener: Listener) {
+      mediaListeners.push(listener);
+    },
+    get matches() {
+      return mediaMatches;
+    },
+    removeEventListener(_type: string, listener: Listener) {
+      mediaListeners = mediaListeners.filter((l) => l !== listener);
+    },
+  }),
   removeEventListener(type: string, listener: Listener) {
     windowListeners.set(
       type,
@@ -118,7 +147,10 @@ const fakeWindow = {
 };
 (globalThis as { window?: unknown }).window = fakeWindow;
 
-const fakeBody = { dataset: {} as Record<string, string> };
+const fakeBody = {
+  children: [] as FakeElement[],
+  dataset: {} as Record<string, string>,
+};
 const fakeDocument = { activeElement: null as unknown, body: fakeBody };
 (globalThis as { document?: unknown }).document = fakeDocument;
 
@@ -175,6 +207,9 @@ const render = (): unknown => {
 const fresh = (nextProps: AskProps = {}): unknown => {
   runCleanups();
   windowListeners.clear();
+  mediaMatches = true;
+  mediaListeners = [];
+  fakeBody.children = [];
   delete fakeBody.dataset.blumeAsk;
   fakeDocument.activeElement = null;
   cells = [];
@@ -488,6 +523,61 @@ describe("AskAI open/close", () => {
     tree = render();
     expect(aside(tree).props.inert).toBe(false);
     expect(byLabel(tree, "Ask a question").props.value).toBe("from search");
+  });
+
+  it("inerts the rest of the page while the panel is a small-screen overlay", () => {
+    // Below the desktop dock breakpoint, every other <body> child is swept
+    // inert so Tab can't escape into the page the overlay covers. A sibling
+    // that was already inert (another closed surface) must stay inert on close.
+    const sibling = new FakeElement();
+    const alreadyInert = new FakeElement();
+    alreadyInert.setAttribute("inert", "");
+
+    let tree = fresh();
+    mediaMatches = false;
+    fakeBody.children = [sibling, alreadyInert];
+    byLabel(tree, "Ask AI").props.onClick();
+    tree = render();
+    expect(sibling.hasAttribute("inert")).toBe(true);
+    expect(alreadyInert.hasAttribute("inert")).toBe(true);
+
+    byLabel(tree, "Close").props.onClick();
+    tree = render();
+    expect(sibling.hasAttribute("inert")).toBe(false);
+    expect(alreadyInert.hasAttribute("inert")).toBe(true);
+  });
+
+  it("re-evaluates the sweep when the viewport crosses the dock breakpoint", () => {
+    const sibling = new FakeElement();
+    let tree = fresh();
+    mediaMatches = false;
+    fakeBody.children = [sibling];
+    byLabel(tree, "Ask AI").props.onClick();
+    tree = render();
+    expect(sibling.hasAttribute("inert")).toBe(true);
+    expect(mediaListeners).toHaveLength(1);
+
+    // Growing into the desktop dock releases the sweep — the docked panel is
+    // non-modal and the page stays interactive.
+    mediaMatches = true;
+    for (const listener of mediaListeners) {
+      listener({});
+    }
+    expect(sibling.hasAttribute("inert")).toBe(false);
+
+    // Shrinking back re-applies it.
+    mediaMatches = false;
+    for (const listener of mediaListeners) {
+      listener({});
+    }
+    expect(sibling.hasAttribute("inert")).toBe(true);
+
+    // Closing unsubscribes and releases.
+    byLabel(tree, "Close").props.onClick();
+    tree = render();
+    expect(mediaListeners).toHaveLength(0);
+    expect(sibling.hasAttribute("inert")).toBe(false);
+    expect(aside(tree).props.inert).toBe(true);
   });
 
   it("restores focus to the opener on close, skipping disconnected elements", () => {

@@ -149,6 +149,8 @@ const AskAI = ({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  // The portaled panel root, excluded from the overlay-mode inert sweep.
+  const panelRef = useRef<HTMLElement>(null);
   // Where focus came from when the panel opened, restored on close.
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
@@ -228,6 +230,44 @@ const AskAI = ({
     };
   }, [open]);
 
+  // Below the desktop dock breakpoint the open panel is a full-width overlay,
+  // so Tab must not escape into the page it covers: every other child of
+  // <body> (the panel portals to body) turns inert until close. The desktop
+  // dock keeps the page interactive on purpose — it's a non-modal side panel,
+  // so no sweep runs at ≥1024px. Elements that were already inert are left
+  // alone so closing doesn't accidentally re-enable them.
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const media = window.matchMedia("(min-width: 1024px)");
+    let inerted: Element[] = [];
+    const release = () => {
+      for (const el of inerted) {
+        el.removeAttribute("inert");
+      }
+      inerted = [];
+    };
+    const apply = () => {
+      release();
+      if (media.matches) {
+        return;
+      }
+      inerted = [...document.body.children].filter(
+        (el) => el !== panelRef.current && !el.hasAttribute("inert")
+      );
+      for (const el of inerted) {
+        el.setAttribute("inert", "");
+      }
+    };
+    apply();
+    media.addEventListener("change", apply);
+    return () => {
+      media.removeEventListener("change", apply);
+      release();
+    };
+  }, [open]);
+
   // Keep the newest message in view as it streams in.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -277,6 +317,7 @@ const AskAI = ({
     <aside
       aria-hidden={open ? undefined : "true"}
       aria-label={t.title}
+      ref={panelRef}
       // The closed panel is only translated off-screen; `inert` drops its
       // buttons/textarea from the tab order and the accessibility tree.
       inert={!open}
