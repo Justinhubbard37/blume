@@ -88,16 +88,25 @@ export const highlight = (text: string, query: string): string => {
 // closing `>` (or end of string for an unterminated tag).
 const TAG = /<\/?[a-z][^>]*>?/giu;
 const BARE_MARK = /^<\/?mark>$/iu;
+// Any `<` that does not begin a bare mark tag. What TAG missed (`<!--`, `<?`,
+// `< 2`) gets entity-escaped so the browser can't reinterpret it — an excerpt
+// smuggling `<!--` would otherwise open a comment in `innerHTML` and swallow
+// the rest of the excerpt, legitimate highlights included.
+const STRAY_ANGLE = /<(?!\/?mark>)/giu;
 
 /**
  * Reduce provider-supplied excerpt markup to the `<mark>` highlighting the
- * dialog expects, dropping every other tag. Remote excerpts (Pagefind's index,
- * hosted engines) are rendered via `innerHTML`, so anything beyond bare
- * `<mark>`/`</mark>` — including attributes on `mark` itself — is stripped
- * rather than trusted. Text and existing entities pass through untouched.
+ * dialog expects. Remote excerpts (Pagefind's index, hosted engines) are
+ * rendered via `innerHTML`, so the output alphabet is pinned: bare
+ * `<mark>`/`</mark>` tags (attributes make even a mark untrusted), text, and
+ * entities. Tag-shaped runs are dropped; every other `<` is escaped, which
+ * renders identically but can't be parsed as markup. String-level on purpose:
+ * this also runs under DOM-less tests, where DOMPurify/DOMParser don't exist.
  */
 export const sanitizeExcerpt = (html: string): string =>
-  html.replaceAll(TAG, (tag) => (BARE_MARK.test(tag) ? tag : ""));
+  html
+    .replaceAll(TAG, (tag) => (BARE_MARK.test(tag) ? tag : ""))
+    .replaceAll(STRAY_ANGLE, "&lt;");
 
 /** First index in `text` where any query token matches (case-insensitive). */
 const matchIndex = (text: string, query: string): number => {

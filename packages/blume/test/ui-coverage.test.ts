@@ -341,8 +341,18 @@ describe("search text helpers", () => {
     expect(sanitizeExcerpt("clipped <img src=")).toBe("clipped ");
   });
 
-  it("leaves plain text, stray brackets, and entities untouched", () => {
-    expect(sanitizeExcerpt("1 < 2 &amp; 3 > 2")).toBe("1 < 2 &amp; 3 > 2");
+  it("escapes stray brackets so only mark tags parse as markup", () => {
+    // `&lt;` renders identically to `<` via innerHTML but can't open a tag.
+    expect(sanitizeExcerpt("1 < 2 &amp; 3 > 2")).toBe("1 &lt; 2 &amp; 3 > 2");
+  });
+
+  it("defuses comment openers that would swallow the excerpt", () => {
+    // `<!--` is not tag-shaped, so the tag strip alone would pass it through
+    // to innerHTML, where it comments out everything after it.
+    expect(sanitizeExcerpt("a <!-- b <mark>hit</mark>")).toBe(
+      "a &lt;!-- b <mark>hit</mark>"
+    );
+    expect(sanitizeExcerpt("<?bogus comment>")).toBe("&lt;?bogus comment>");
   });
 });
 
