@@ -1030,6 +1030,40 @@ describe("relevantExcerpt", () => {
     // The 160-char lead-in of heading/sentence context survives intact.
     expect(excerpt).toContain(`${"alpha ".repeat(26)}targetword`);
   });
+
+  it("centers the window for a query in a script without word spaces", () => {
+    // The old [a-z0-9]+ term extraction produced zero terms for any CJK query,
+    // so retrieval found the right page but always injected its head — the
+    // exact failure this function exists to fix. Katakana runs bounded by
+    // spaces segment by rule, not by dictionary, so this is stable across the
+    // ICU builds different platforms ship (macOS vs Linux CI).
+    const content = `${"導入 ".repeat(200)}ファイルの設定はここです。 ${"補足 ".repeat(100)}`;
+    const excerpt = relevantExcerpt(content, "ファイル の 設定", 120);
+    expect(excerpt).toContain("ファイル");
+    expect(excerpt.startsWith("…")).toBe(true);
+  });
+
+  it("normalizes decomposed content so composed query terms still match", () => {
+    // NFD content (macOS filenames, some CMS pipelines) must match an NFC
+    // query; both sides are normalized before positions are computed.
+    const decomposed = `${"x ".repeat(300)}café latte guide ${"y ".repeat(200)}`;
+    const excerpt = relevantExcerpt(decomposed, "café", 80);
+    expect(excerpt).toContain("café latte");
+  });
+
+  it("falls back to regex term extraction without Intl.Segmenter", () => {
+    const original = Intl.Segmenter;
+    // oxlint-disable-next-line no-explicit-any -- deliberate global stub
+    (Intl as any).Segmenter = undefined;
+    try {
+      const content = `${"alpha ".repeat(120)}targetword closes the section. ${"tail ".repeat(60)}`;
+      const excerpt = relevantExcerpt(content, "targetword", 100);
+      expect(excerpt).toContain("targetword");
+    } finally {
+      // oxlint-disable-next-line no-explicit-any -- deliberate global stub
+      (Intl as any).Segmenter = original;
+    }
+  });
 });
 
 describe("resolveAskBackend", () => {

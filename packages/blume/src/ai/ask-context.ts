@@ -90,11 +90,39 @@ const STOPWORDS = new Set([
   "your",
 ]);
 
+/** A run of letters, combining marks and digits inside a word-like segment. */
+const TERM = /[\p{L}\p{M}\p{N}]+/gu;
+
+/**
+ * Word-shaped pieces of a query, NFC-normalized and lowercased. Languages
+ * written without spaces (the CJK/Thai sites the Orama tokenizer goes out of
+ * its way to support) have no delimiter for a regex to split on, so the query
+ * is cut with `Intl.Segmenter` where available — otherwise every excerpt
+ * window silently degrades to the head of the page. The regex fallback covers
+ * runtimes without the segmenter and still handles spaced scripts correctly.
+ */
+const segmentQuery = (query: string): string[] => {
+  const lowered = query.normalize("NFC").toLowerCase();
+  if (typeof Intl.Segmenter !== "function") {
+    return lowered.match(TERM) ?? [];
+  }
+  const pieces: string[] = [];
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+  for (const segment of segmenter.segment(lowered)) {
+    if (segment.isWordLike) {
+      pieces.push(segment.segment);
+    }
+  }
+  return pieces;
+};
+
 /** Distinct, meaningful lowercase terms from a query (drops stopwords). */
-const queryTerms = (query: string): string[] =>
-  [...new Set(query.toLowerCase().match(/[a-z0-9]+/gu))].filter(
+const queryTerms = (query: string): string[] => {
+  const terms = segmentQuery(query).flatMap((piece) => piece.match(TERM) ?? []);
+  return [...new Set(terms)].filter(
     (term) => term.length >= 2 && !STOPWORDS.has(term)
   );
+};
 
 /**
  * The grounding preamble. The model is told to answer strictly from the injected
@@ -137,7 +165,9 @@ export const relevantExcerpt = (
   query: string,
   max: number
 ): string => {
-  const trimmed = content.trim();
+  // NFC to match the normalized query terms; positions are computed on (and
+  // sliced from) this same string, so offsets stay aligned.
+  const trimmed = content.normalize("NFC").trim();
   if (trimmed.length <= max) {
     return trimmed;
   }
