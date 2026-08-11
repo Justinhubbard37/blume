@@ -12,6 +12,7 @@ import {
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
+import { imageSize } from "image-size";
 import pMap from "p-map";
 import { basename, dirname, join, normalize, relative, resolve } from "pathe";
 import { glob } from "tinyglobby";
@@ -869,33 +870,24 @@ interface LogoDimensions {
   width: number;
 }
 
-const SVG_ROOT = /<svg\b(?<attributes>[^>]*)>/u;
-const SVG_WIDTH = /\bwidth\s*=\s*["'](?<value>[^"']+)["']/u;
-const SVG_HEIGHT = /\bheight\s*=\s*["'](?<value>[^"']+)["']/u;
-const SVG_LENGTH = /^\s*(?<value>[\d.]+)(?:px)?\s*$/u;
-const SVG_VIEW_BOX =
-  /\bviewBox\s*=\s*["'][\d.-]+[\s,]+[\d.-]+[\s,]+(?<width>[\d.]+)[\s,]+(?<height>[\d.]+)["']/u;
-
-const parseSvgLength = (value: string | undefined): number | undefined => {
-  const length = Number(value?.match(SVG_LENGTH)?.groups?.value);
-  return length > 0 ? length : undefined;
-};
-
-/** Read dimensions from an SVG's explicit size or its view box. */
+/**
+ * Read dimensions from an SVG's explicit size or its view box. Measured with
+ * image-size — the same parser og/card.ts uses for the OG brand mark, so the
+ * header and the card can't disagree about one logo — which also tolerates
+ * the spellings the old regex missed (unquoted values, `em`/`pt` lengths, a
+ * `>` inside another attribute). An SVG with no usable size returns partial
+ * dimensions or throws; both collapse to undefined.
+ */
 const svgDimensions = (svg: string | undefined): LogoDimensions | undefined => {
-  const attributes = svg?.match(SVG_ROOT)?.groups?.attributes;
-  const width = parseSvgLength(attributes?.match(SVG_WIDTH)?.groups?.value);
-  const height = parseSvgLength(attributes?.match(SVG_HEIGHT)?.groups?.value);
-  if (width && height) {
-    return { height, width };
+  if (!svg) {
+    return;
   }
-
-  const viewBox = attributes?.match(SVG_VIEW_BOX);
-  const viewBoxWidth = Number(viewBox?.groups?.width);
-  const viewBoxHeight = Number(viewBox?.groups?.height);
-  return viewBoxWidth > 0 && viewBoxHeight > 0
-    ? { height: viewBoxHeight, width: viewBoxWidth }
-    : undefined;
+  try {
+    const { height, width } = imageSize(Buffer.from(svg));
+    return height && width ? { height, width } : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 /** Read a local SVG logo from the project root or public directory. */

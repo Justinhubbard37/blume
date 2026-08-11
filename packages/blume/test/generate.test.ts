@@ -602,6 +602,24 @@ describe("buildRuntimeData", () => {
     });
   });
 
+  it("omits dimensions for SVG logos that carry no usable size", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": `export default {
+  logo: { image: { dark: "/dark.svg", light: "/light.svg" } },
+};
+`,
+        "docs/index.md": "# Home\n",
+        // Legal but unmeasurable: comma-only viewBox parses to no width.
+        "public/dark.svg": '<svg viewBox="0,0,24,24"></svg>',
+        // No size attributes at all: image-size throws instead of measuring.
+        "public/light.svg": "<svg><path /></svg>",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.logo.dimensions).toBeUndefined();
+  });
+
   it("falls back to an <img> logo when the SVG file is absent", async () => {
     const project = await scanProject(
       await writeProject({
