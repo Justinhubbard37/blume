@@ -18,6 +18,7 @@ import {
   excerptFor,
   highlight,
   matchSnippet,
+  sanitizeExcerpt,
 } from "../src/components/layout/search/types.ts";
 import type { BlumeProject } from "../src/core/project-graph.ts";
 import { blumeConfigSchema, pageMetaSchema } from "../src/core/schema.ts";
@@ -316,6 +317,32 @@ describe("search text helpers", () => {
 
   it("returns an empty excerpt for empty content", () => {
     expect(excerptFor("", "")).toBe("");
+  });
+
+  it("keeps bare <mark> highlighting in a remote excerpt", () => {
+    expect(sanitizeExcerpt("a <mark>hit</mark> here")).toBe(
+      "a <mark>hit</mark> here"
+    );
+    // Pagefind may emit uppercase-free tags only, but the guard is
+    // case-insensitive either way.
+    expect(sanitizeExcerpt("<MARK>hit</MARK>")).toBe("<MARK>hit</MARK>");
+  });
+
+  it("strips every non-mark tag from a remote excerpt", () => {
+    expect(sanitizeExcerpt('x <img src=1 onerror="a()"> y')).toBe("x  y");
+    expect(sanitizeExcerpt("<script>alert(1)</script>")).toBe("alert(1)");
+    // Attributes make even a mark untrusted.
+    expect(sanitizeExcerpt('<mark onmouseover="a()">hi</mark>')).toBe(
+      "hi</mark>"
+    );
+  });
+
+  it("drops an unterminated trailing tag", () => {
+    expect(sanitizeExcerpt("clipped <img src=")).toBe("clipped ");
+  });
+
+  it("leaves plain text, stray brackets, and entities untouched", () => {
+    expect(sanitizeExcerpt("1 < 2 &amp; 3 > 2")).toBe("1 < 2 &amp; 3 > 2");
   });
 });
 

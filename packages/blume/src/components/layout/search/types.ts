@@ -84,6 +84,21 @@ export const highlight = (text: string, query: string): string => {
     .join("");
 };
 
+// Any tag-shaped run: an opening `<` with a letter or `/` after it, through the
+// closing `>` (or end of string for an unterminated tag).
+const TAG = /<\/?[a-z][^>]*>?/giu;
+const BARE_MARK = /^<\/?mark>$/iu;
+
+/**
+ * Reduce provider-supplied excerpt markup to the `<mark>` highlighting the
+ * dialog expects, dropping every other tag. Remote excerpts (Pagefind's index,
+ * hosted engines) are rendered via `innerHTML`, so anything beyond bare
+ * `<mark>`/`</mark>` — including attributes on `mark` itself — is stripped
+ * rather than trusted. Text and existing entities pass through untouched.
+ */
+export const sanitizeExcerpt = (html: string): string =>
+  html.replaceAll(TAG, (tag) => (BARE_MARK.test(tag) ? tag : ""));
+
 /** First index in `text` where any query token matches (case-insensitive). */
 const matchIndex = (text: string, query: string): number => {
   const tokens = queryTokens(query);
