@@ -1,6 +1,7 @@
 import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
 import type { ContentSignalPolicy, ContentSignals } from "../core/schema.ts";
+import { absoluteUrl } from "../core/site-url.ts";
 import { buildRssFeeds } from "../deploy/rss.ts";
 import { hasApiCatalog } from "./api-catalog.ts";
 
@@ -42,7 +43,7 @@ const askApiUrl = (
     return abs("/api/ask");
   }
   return site && endpoint.startsWith("/")
-    ? `${site.replace(/\/+$/u, "")}${endpoint}`
+    ? absoluteUrl(site, endpoint)
     : endpoint;
 };
 
@@ -88,7 +89,7 @@ export const buildAgentReadability = (
   const deployBase = normalizeBasePath(config.deployment.base);
   const abs = (path: string): string => {
     const based = withBasePath(deployBase, path);
-    return site ? `${site.replace(/\/+$/u, "")}${based}` : based;
+    return site ? absoluteUrl(site, based) : based;
   };
 
   // Advertise `Accept: text/markdown` negotiation only where the deployed site

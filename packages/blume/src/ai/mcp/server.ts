@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { stripBasePath, withBasePath } from "../../core/base-path.ts";
+import { absoluteUrl } from "../../core/site-url.ts";
 import { buildOramaIndex, queryOramaIndex } from "../../search/orama-index.ts";
 import type { OramaDoc } from "../../search/orama-index.ts";
 import type { McpData } from "./data.ts";
@@ -174,7 +175,7 @@ const urlFor = (route: string, data: McpData): string => {
   const path = withBasePath(data.base, route);
   // Concatenate rather than `new URL(path, site)` — a root-absolute path
   // would drop the base path of a subpath deployment (`acme.com/docs`).
-  return data.site ? `${data.site.replace(/\/+$/u, "")}${path}` : path;
+  return data.site ? absoluteUrl(data.site, path) : path;
 };
 
 /** A hit's excerpt: its description, else the head of its content with an

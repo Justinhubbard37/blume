@@ -8,6 +8,7 @@ import {
 } from "../astro/pages.ts";
 import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
+import { siteRoot } from "../core/site-url.ts";
 
 /**
  * Astro's reserved error routes. A user-authored override (`pages/404.astro`,
@@ -70,7 +71,7 @@ export const buildSitemapFiles = (
     return null;
   }
 
-  const base = site.replace(/\/$/u, "");
+  const base = siteRoot(site);
   // Routes carry `basePath`; a `deployment.base` subdirectory is layered on top.
   const deployBase = normalizeBasePath(project.config.deployment.base);
   const seen = new Set<string>();

@@ -2,6 +2,7 @@ import { normalizeBasePath, withBasePath } from "../core/base-path.ts";
 import { rewriteRelativeImages } from "../core/content-assets.ts";
 import matter from "../core/frontmatter.ts";
 import type { BlumeProject } from "../core/project-graph.ts";
+import { absoluteUrl } from "../core/site-url.ts";
 import { readEntryText } from "../core/sources/read.ts";
 import type { NavNode, Navigation, PageRecord } from "../core/types.ts";
 import { buildRssFeeds } from "../deploy/rss.ts";
@@ -17,7 +18,7 @@ import { applyAgentVisibility } from "./visibility.ts";
 // spaces or non-ASCII must still yield a valid Markdown link.
 const pageUrl = (route: string, site?: string, base = ""): string => {
   const path = withBasePath(base, route);
-  return encodeURI(site ? `${site.replace(/\/$/u, "")}${path}` : path);
+  return encodeURI(site ? absoluteUrl(site, path) : path);
 };
 
 // Drafts, hidden, and ordinary `noindex` pages are excluded. Generated API

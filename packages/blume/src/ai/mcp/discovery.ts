@@ -1,5 +1,6 @@
 import { withBasePath } from "../../core/base-path.ts";
-import { trimChar, trimEnd } from "../../core/trim.ts";
+import { absoluteUrl, siteRoot } from "../../core/site-url.ts";
+import { trimChar } from "../../core/trim.ts";
 import { MCP_TOOLS } from "./tools.ts";
 
 /** Inputs needed to describe the MCP server in discovery documents. */
@@ -19,7 +20,7 @@ const serverUrl = (input: McpDiscoveryInput): string => {
   const path = withBasePath(input.base, input.route);
   // Concatenate rather than `new URL(path, site)` — a root-absolute path
   // would drop the base path of a subpath deployment (`acme.com/docs`).
-  return input.site ? `${trimEnd(input.site, "/")}${path}` : path;
+  return input.site ? absoluteUrl(input.site, path) : path;
 };
 
 /**
@@ -127,6 +128,6 @@ export const buildMcpServerCard = (
     transports: [{ endpoint: url, type: "streamable-http" }],
     url,
     version: input.version,
-    ...(input.site ? { websiteUrl: trimEnd(input.site, "/") } : {}),
+    ...(input.site ? { websiteUrl: siteRoot(input.site) } : {}),
   };
 };
