@@ -207,6 +207,26 @@ const kbd = "rounded border border-border bg-muted px-1 py-0.5 font-mono";
     const svg = (name: string, size = 16): string =>
       `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] ?? ""}</svg>`;
 
+    // localStorage access throws SecurityError when storage is blocked (Safari
+    // "Block All Cookies", some embedded webviews). These guards make blocked
+    // storage degrade to session-default preferences instead of throwing inside
+    // connectedCallback before the open/keyboard listeners are attached — which
+    // would leave search completely dead.
+    const readStorage = (key: string): string | null => {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    };
+    const writeStorage = (key: string, value: string): void => {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // Preference simply isn't remembered.
+      }
+    };
+
     class BlumeSearch extends HTMLElement {
       dialog!: HTMLDialogElement;
       input!: HTMLInputElement;
@@ -273,8 +293,7 @@ const kbd = "rounded border border-border bg-muted px-1 py-0.5 font-mono";
           this.popular = [];
         }
 
-        this.previewOn =
-          localStorage.getItem("blume-search-preview") !== "0";
+        this.previewOn = readStorage("blume-search-preview") !== "0";
         this.applyPreviewState();
 
         // Per-language filtering: default to the active locale, with an opt-in
@@ -283,12 +302,11 @@ const kbd = "rounded border border-border bg-muted px-1 py-0.5 font-mono";
           "[data-blume-search-all-locales]"
         );
         if (allToggle) {
-          this.allLocales =
-            localStorage.getItem("blume-search-all-locales") === "1";
+          this.allLocales = readStorage("blume-search-all-locales") === "1";
           allToggle.checked = this.allLocales;
           allToggle.addEventListener("change", () => {
             this.allLocales = allToggle.checked;
-            localStorage.setItem(
+            writeStorage(
               "blume-search-all-locales",
               this.allLocales ? "1" : "0"
             );
@@ -714,10 +732,7 @@ const kbd = "rounded border border-border bg-muted px-1 py-0.5 font-mono";
 
       togglePreview() {
         this.previewOn = !this.previewOn;
-        localStorage.setItem(
-          "blume-search-preview",
-          this.previewOn ? "1" : "0"
-        );
+        writeStorage("blume-search-preview", this.previewOn ? "1" : "0");
         this.applyPreviewState();
         this.updatePreview();
       }
