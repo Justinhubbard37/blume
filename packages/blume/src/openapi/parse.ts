@@ -96,13 +96,23 @@ const ensureProxyDispatcher = async (): Promise<void> => {
   }
 };
 
-/** `Retry-After` in ms when the server sent a sane one, else undefined. */
+/**
+ * `Retry-After` in ms when the server sent a sane one, else undefined. RFC
+ * 9110 allows both forms: delta-seconds (`120`) and an HTTP-date (`Wed, 21
+ * Oct 2015 07:28:00 GMT`); the date form arrives from CDN rate limiters and
+ * was previously ignored.
+ */
 const retryAfterMs = (response: Response): number | undefined => {
   const header = response.headers.get("retry-after");
-  const seconds = header ? Number(header) : Number.NaN;
-  return Number.isFinite(seconds) && seconds > 0
-    ? seconds * SECOND_MS
-    : undefined;
+  if (!header) {
+    return undefined;
+  }
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) {
+    return seconds > 0 ? seconds * SECOND_MS : undefined;
+  }
+  const delta = Date.parse(header) - Date.now();
+  return Number.isFinite(delta) && delta > 0 ? delta : undefined;
 };
 
 /** One fetch attempt, normalized: the body text, or a (maybe-retryable) error. */

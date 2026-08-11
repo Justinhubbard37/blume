@@ -657,6 +657,62 @@ describe("parse.parseSpec remote hardening", () => {
     }
   });
 
+  it("honors the HTTP-date form of Retry-After", async () => {
+    const original = globalThis.fetch;
+    const stub = queued([
+      new Response("slow down", {
+        // RFC 9110's other spelling: an absolute date instead of seconds.
+        headers: { "retry-after": new Date(Date.now() + 1000).toUTCString() },
+        status: 429,
+      }),
+      Response.json(remoteSpec),
+    ]);
+    globalThis.fetch = stub.fetch;
+    const started = performance.now();
+    try {
+      const { document } = await parseSpec(
+        "https://api.test/openapi.json",
+        "/"
+      );
+      expect(document.info?.title).toBe("Remote");
+      expect(stub.calls).toBe(2);
+      // toUTCString truncates to whole seconds, so allow up to a second of
+      // slack below the nominal 1s wait.
+      const waited = performance.now() - started;
+      expect(waited).toBeGreaterThanOrEqual(450);
+      expect(waited).toBeLessThan(1450);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("ignores an unparseable Retry-After and backs off normally", async () => {
+    const original = globalThis.fetch;
+    const stub = queued([
+      new Response("slow down", {
+        headers: { "retry-after": "soonish" },
+        status: 429,
+      }),
+      Response.json(remoteSpec),
+    ]);
+    globalThis.fetch = stub.fetch;
+    const started = performance.now();
+    try {
+      const { document } = await parseSpec(
+        "https://api.test/openapi.json",
+        "/"
+      );
+      expect(document.info?.title).toBe("Remote");
+      expect(stub.calls).toBe(2);
+      // No usable header: only p-retry's 500ms base backoff applies.
+      const waited = performance.now() - started;
+      expect(waited).toBeGreaterThanOrEqual(450);
+      expect(waited).toBeLessThan(950);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it("gives up after repeated failures and throws", async () => {
     const original = globalThis.fetch;
     const stub = queued([new Response("down", { status: 502 })]);
