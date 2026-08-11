@@ -6,7 +6,10 @@ import { createTar } from "nanotar";
  * `.tar.gz` writer for agent-skill archives, on nanotar's ustar writer.
  * Deterministic by construction — fixed mtime/uid/gid/owner attrs,
  * caller-ordered entries, and Node's gzip header carries no timestamp — so a
- * skill's archive digest only changes when its content does.
+ * skill's archive digest only changes when its content does. That holds per
+ * machine: the tar bytes are portable, but zlib's compressed stream differs
+ * across architectures, so gzip-layer digests are not comparable across
+ * platforms.
  */
 
 /** One regular file to archive. Paths are `/`-separated, relative, no `..`. */

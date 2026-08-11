@@ -84,11 +84,14 @@ describe("buildTarGz", () => {
     expect(files[1]?.mode).toBe(0o755);
   });
 
-  it("pins the archive bytes for a fixed entry set", () => {
-    // Golden digest. If this fails, the writer's byte layout changed and the
-    // digest of EVERY published skill archive will churn on the next build —
-    // consumers see every skill as updated. Bump the constant only when that
-    // churn is deliberate (it last changed when the writer moved to nanotar).
+  it("pins the tar bytes for a fixed entry set", () => {
+    // Golden digest of the UNCOMPRESSED tar. If this fails, the writer's byte
+    // layout changed and the digest of EVERY published skill archive will
+    // churn on the next build — consumers see every skill as updated. Bump the
+    // constant only when that churn is deliberate (it last changed when the
+    // writer moved to nanotar). The gzip layer is deliberately excluded: its
+    // bytes vary across platforms (zlib's compressor differs by architecture),
+    // so only the tar layout is pinnable.
     const entries = [
       { content: new TextEncoder().encode("# hi\n"), path: "SKILL.md" },
       {
@@ -98,10 +101,10 @@ describe("buildTarGz", () => {
       },
     ];
     const digest = createHash("sha256")
-      .update(buildTarGz(entries))
+      .update(gunzipSync(buildTarGz(entries)))
       .digest("hex");
     expect(`sha256:${digest}`).toBe(
-      "sha256:2fd15820f947b55ddc7dae42854a57621c7dda2c379ba7663acd5271849cfdf7"
+      "sha256:70642ad8d5a6f4db4153c9d7cf99a1026e134b3852ff04d0df28a54d06f32c75"
     );
   });
 
