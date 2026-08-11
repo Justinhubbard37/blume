@@ -4,6 +4,13 @@ import type {
   PathItemObject,
 } from "@scalar/openapi-types/3.1";
 
+import { slugify } from "./references.ts";
+
+// The slug rules live with the reference resolver so operation routes and
+// reference-source tokens can never drift apart; re-exported for existing
+// importers.
+export { slugify } from "./references.ts";
+
 /**
  * Blume's own OpenAPI model. Specs are parsed and upgraded to 3.1 (see
  * `parse.ts`) with internal `$ref`s left intact — the document stays
@@ -15,13 +22,6 @@ import type {
 
 /** A normalized OpenAPI 3.1 document, internal `$ref`s intact. */
 export type ApiDocument = Document;
-
-const NON_SLUG = /[^a-z0-9]+/gu;
-const SLUG_EDGES = /^-+|-+$/gu;
-
-/** Lowercase, URL-safe slug: `Add a Pet!` -> `add-a-pet`. */
-export const slugify = (text: string): string =>
-  text.toLowerCase().replace(NON_SLUG, "-").replace(SLUG_EDGES, "");
 
 /** The HTTP methods an OpenAPI path item may declare, in spec order. */
 export const HTTP_METHODS = [
@@ -103,8 +103,8 @@ const isOperation = (value: unknown): value is OperationObject =>
 
 /**
  * Assign each distinct tag name a unique slug. `slugify` can collapse
- * different names onto one value — any two all-non-ASCII tags (`ペット`,
- * `注文`) both fall through to the `operations` fallback — and a shared slug
+ * different names onto one value — any two punctuation-only tags (`!!!`,
+ * `???`) both fall through to the `operations` fallback — and a shared slug
  * silently merges the tags' routes, sidebar groups, and overview sections.
  * Collisions gain `-2`, `-3`, … in first-seen order.
  */
