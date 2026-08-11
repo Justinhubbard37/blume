@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
+import pLimit from "p-limit";
+import pMap from "p-map";
 import { join } from "pathe";
 
 import { AGENTS, WINDOWS_COMMAND_NOT_FOUND } from "../audit/agent.ts";
@@ -277,42 +279,31 @@ export const runTranslate = async (
   };
 
   const { items } = options.workList;
-  const results: TranslateItemResult[] = Array.from({ length: items.length });
   const concurrency = Math.max(
     1,
     Math.min(options.concurrency ?? 1, items.length || 1)
   );
 
-  // The persist chain: whichever lane finishes next appends its flush after
-  // the previous one, so two lanes never write the ledger file concurrently.
-  let persisting: Promise<unknown> = Promise.resolve();
-  const persist = (): Promise<unknown> => {
-    // The chain is the mutex: appending with .then() serializes flushes.
-    // oxlint-disable-next-line promise/prefer-await-to-then
-    persisting = persisting.then(() => options.persistLedger?.());
-    return persisting;
-  };
+  // The persist mutex: ledger flushes from concurrent lanes are serialized so
+  // two lanes never write the ledger file at the same time.
+  const persistLimit = pLimit(1);
+  const persist = (): Promise<unknown> =>
+    persistLimit(() => options.persistLedger?.());
 
-  let nextIndex = 0;
-  const worker = async (): Promise<void> => {
-    while (nextIndex < items.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      const item = items[index] as WorkItem;
+  const results = await pMap(
+    items,
+    async (item: WorkItem, index): Promise<TranslateItemResult> => {
       options.onProgress?.({
         index,
         item,
         kind: "item-start",
         total: items.length,
       });
-      // oxlint-disable-next-line no-await-in-loop -- each worker is a serial lane
       const result = await (item.kind === "page"
         ? runPageItem(item, index, context, options.ledger)
         : runMetaItem(item, index, context, options.ledger));
-      results[index] = result;
-      // Flush this item's stamps before claiming the next one, so a kill
-      // loses at most the in-flight items.
-      // oxlint-disable-next-line no-await-in-loop
+      // Flush this item's stamps before the slot frees for the next item, so
+      // a kill loses at most the in-flight items.
       await persist();
       options.onProgress?.({
         index,
@@ -320,9 +311,10 @@ export const runTranslate = async (
         result,
         total: items.length,
       });
-    }
-  };
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+      return result;
+    },
+    { concurrency }
+  );
 
   const diagnostics: Diagnostic[] = [];
   for (const result of results) {

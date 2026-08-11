@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
+import pLimit from "p-limit";
 import { join } from "pathe";
 
 import { BlumeError } from "../diagnostics.ts";
@@ -180,42 +181,6 @@ const withNotionRetry = async <T>(
   }
 };
 
-/**
- * A minimal FIFO semaphore: at most `size` tasks run at once, the rest queue.
- * Notion's rate limit is per-integration (an average of 3 req/s), and a large
- * database fans out one block-children request per page plus one per nested
- * container — an unbounded burst guarantees 429s that even the retry loop
- * can't recover from, so every API call funnels through one of these.
- */
-const createLimiter = (
-  size: number
-): (<T>(task: () => Promise<T>) => Promise<T>) => {
-  let active = 0;
-  const waiting: (() => void)[] = [];
-  return async <T>(task: () => Promise<T>): Promise<T> => {
-    if (active < size) {
-      active += 1;
-    } else {
-      // oxlint-disable-next-line promise/avoid-new -- adapt the queue's wake callback
-      await new Promise<void>((resolve) => {
-        waiting.push(resolve);
-      });
-    }
-    try {
-      return await task();
-    } finally {
-      const handoff = waiting.shift();
-      if (handoff) {
-        // Hand the slot straight to the next queued task; decrementing first
-        // would let a fresh caller slip in and briefly exceed the bound.
-        handoff();
-      } else {
-        active -= 1;
-      }
-    }
-  };
-};
-
 /** Paginate a Notion list endpoint via recursion (no await-in-loop). */
 const collectAll = async <T>(
   page: (cursor?: string) => Promise<NotionList<T>>,
@@ -299,9 +264,12 @@ export const notionSource = (
   ctx?: SourceContext
 ): ContentSource => {
   const props = options.properties ?? {};
-  const limit = createLimiter(
-    Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY)
-  );
+  // A FIFO semaphore: at most N calls run at once, the rest queue. Notion's
+  // rate limit is per-integration (an average of 3 req/s), and a large
+  // database fans out one block-children request per page plus one per nested
+  // container — an unbounded burst guarantees 429s that even the retry loop
+  // can't recover from, so every API call funnels through this limiter.
+  const limit = pLimit(Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY));
   // Every Notion API call goes through the limiter, inside the retry — so a
   // call sleeping through a backoff doesn't hold a slot while it waits.
   const notionCall = <T>(call: () => Promise<T>): Promise<T> =>
