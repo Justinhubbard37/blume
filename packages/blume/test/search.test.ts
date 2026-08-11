@@ -31,6 +31,19 @@ const BODY = [
   "const secret = 1;",
   "```",
   "",
+  "A [reference link][ref] and 5 * 3 stars.\\",
+  "after a hard break.",
+  "",
+  "[ref]: /elsewhere",
+  "",
+  '<Callout kind="warn">',
+  "Callouts keep their inner prose indexed.",
+  "</Callout>",
+  "",
+  "| Region | Latency |",
+  "| ------ | ------- |",
+  "| west   | 40ms    |",
+  "",
 ].join("\n");
 
 const page = (over: Partial<PageRecord> & Pick<PageRecord, "id">): PageRecord =>
@@ -206,6 +219,17 @@ describe("buildSearchDocuments", () => {
     expect(doc?.content).toContain("5 credits each");
     expect(doc?.content).toContain("Retries are billed separately");
     expect(doc?.content).toContain("quota resets at midnight");
+    // Reference-style link text is kept; its definition URL is dropped.
+    expect(doc?.content).toContain("reference link");
+    expect(doc?.content).not.toContain("/elsewhere");
+    // Literal asterisks in prose are text, not emphasis to strip.
+    expect(doc?.content).toContain("5 * 3 stars");
+    // A block-level JSX component is one CommonMark html node: its tags go,
+    // its inner prose stays indexed.
+    expect(doc?.content).toContain("Callouts keep their inner prose indexed");
+    expect(doc?.content).not.toContain("<Callout");
+    // GFM table cells are text.
+    expect(doc?.content).toContain("west");
   });
 
   it("keeps Markdown and fenced code when content is 'markdown'", async () => {
