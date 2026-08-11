@@ -8,6 +8,7 @@ import { buildLlmsFiles } from "../src/ai/llms.ts";
 import {
   isInternalPath,
   normalizeBasePath,
+  normalizeRoute,
   stripBasePath,
   withBasePath,
   withComposedBasePath,
@@ -35,6 +36,17 @@ describe("normalizeBasePath", () => {
     expect(normalizeBasePath("/docs/")).toBe("/docs");
     expect(normalizeBasePath("  /docs  ")).toBe("/docs");
     expect(normalizeBasePath("//a//b//")).toBe("/a/b");
+  });
+});
+
+describe("normalizeRoute", () => {
+  it("canonicalizes to / or /seg with one leading slash", () => {
+    expect(normalizeRoute("")).toBe("/");
+    expect(normalizeRoute("/")).toBe("/");
+    expect(normalizeRoute("///")).toBe("/");
+    expect(normalizeRoute("docs")).toBe("/docs");
+    expect(normalizeRoute("/docs/")).toBe("/docs");
+    expect(normalizeRoute("  api/events  ")).toBe("/api/events");
   });
 });
 

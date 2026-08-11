@@ -1,3 +1,4 @@
+import { normalizeRoute } from "../core/base-path.ts";
 import { buildOramaIndex, queryOramaIndex } from "../search/orama-index.ts";
 import type { OramaDoc } from "../search/orama-index.ts";
 
@@ -131,13 +132,6 @@ const queryTerms = (query: string): string[] => {
  */
 const BASE_INSTRUCTION =
   "You are a helpful documentation assistant for this project. Answer the user's question using ONLY the documentation excerpts below. Each excerpt is headed by its page as `## Page Title (/route)`. If the answer is not covered by the excerpts, say you don't know and suggest where in the docs to look — do not invent details. Always cite the pages you drew from, and write every citation as a Markdown link to that page using its route, e.g. [Page Title](/route).";
-
-/** Normalize a page path to a document `route` (`/`, `/a/b`, no trailing slash). */
-const normalizeRoute = (input: string): string => {
-  const noTrailing = input.trim().replace(/\/+$/u, "");
-  const withSlash = noTrailing.startsWith("/") ? noTrailing : `/${noTrailing}`;
-  return withSlash === "" ? "/" : withSlash;
-};
 
 /** The most recent non-empty user message, used as the retrieval query. */
 const lastUserMessage = (messages: AskMessage[]): string => {

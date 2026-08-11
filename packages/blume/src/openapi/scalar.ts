@@ -4,6 +4,7 @@ import { isAbsolute, join } from "pathe";
 
 import { scalarReferenceTemplate } from "../astro/templates.ts";
 import type { ResolvedConfig } from "../core/schema.ts";
+import { trimChar } from "../core/trim.ts";
 import { resolveAccent, resolveRadius } from "../theme/palette.ts";
 import { resolveReferences } from "./references.ts";
 import type { ReferenceSource } from "./references.ts";
@@ -24,11 +25,10 @@ export interface ReferenceFile {
 }
 
 const URL_SPEC = /^https?:\/\//u;
-const ROUTE_EDGES = /^\/+|\/+$/gu;
 
 /** The `src/pages`-relative file path for a reference route. */
 const referencePagePath = (route: string): string => {
-  const segments = route.replace(ROUTE_EDGES, "");
+  const segments = trimChar(route, "/");
   return `${segments === "" ? "index" : segments}.astro`;
 };
 

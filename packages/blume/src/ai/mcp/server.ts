@@ -6,8 +6,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
-import { stripBasePath, withBasePath } from "../../core/base-path.ts";
+import {
+  normalizeRoute as normalizePageRoute,
+  stripBasePath,
+  withBasePath,
+} from "../../core/base-path.ts";
 import { absoluteUrl } from "../../core/site-url.ts";
+import { trimEnd } from "../../core/trim.ts";
 import { buildOramaIndex, queryOramaIndex } from "../../search/orama-index.ts";
 import type { OramaDoc } from "../../search/orama-index.ts";
 import type { McpData } from "./data.ts";
@@ -165,11 +170,10 @@ const normalizeRoute = (input: string, data: McpData): string => {
   } catch {
     // Malformed percent sequence — compare it as written.
   }
-  const noTrailing = value.replace(/\/+$/u, "");
-  const noSuffix = noTrailing.replace(/\.mdx?$/u, "");
-  const withSlash = noSuffix.startsWith("/") ? noSuffix : `/${noSuffix}`;
-  const based = stripBasePath(data.base, withSlash);
-  return based === "" ? "/" : based;
+  // Trailing slashes come off before the suffix so `/a/b.md/` still loses its
+  // `.md`; normalizePageRoute then settles the leading slash.
+  const noSuffix = trimEnd(value, "/").replace(/\.mdx?$/u, "");
+  return stripBasePath(data.base, normalizePageRoute(noSuffix));
 };
 
 /** Build the absolute (or root-relative) URL for a route. */

@@ -1,6 +1,10 @@
-import { withBasePath } from "../core/base-path.ts";
+import { normalizeRoute, withBasePath } from "../core/base-path.ts";
 import type { ResolvedConfig } from "../core/schema.ts";
-import { trimChar, trimEnd } from "../core/trim.ts";
+import { trimChar } from "../core/trim.ts";
+
+// Re-exported from its home next to the other path helpers; `core/schema.ts`
+// and downstream consumers historically imported it from here.
+export { normalizeRoute } from "../core/base-path.ts";
 
 /**
  * Pure resolution of the configured API reference blocks into concrete routes,
@@ -93,14 +97,6 @@ export const slugify = (text: string): string =>
       .replace(NON_SLUG, "-"),
     "-"
   ).replace(LEADING_MARKS, "");
-
-/** Normalize a configured route to a single leading slash, no trailing slash. */
-export const normalizeRoute = (route: string): string => {
-  const trimmed = route.trim();
-  const withSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  const noTrailing = trimEnd(withSlash, "/");
-  return noTrailing === "" ? "/" : noTrailing;
-};
 
 /** A stable per-reference token from its route: `/api/events` -> `api-events`. */
 const routeSlug = (route: string): string =>
