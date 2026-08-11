@@ -6,6 +6,7 @@ import type { RenderOptions } from "takumi-js";
 import { container, googleFonts, image, text } from "takumi-js/helpers";
 import type { FontSubset, GoogleFontFamily, Node } from "takumi-js/helpers";
 
+import { ACCENTS } from "../theme/palette.ts";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH } from "./dimensions.ts";
 
 /** A local font file registered with the OG card renderer, read at build. */
@@ -55,23 +56,15 @@ export interface OgFontFamilies {
   title?: string;
 }
 
-const ACCENT_HEX: Record<string, string> = {
-  blue: "#3b82f6",
-  green: "#22c55e",
-  orange: "#f97316",
-  pink: "#ec4899",
-  purple: "#8b5cf6",
-  red: "#ef4444",
-  teal: "#14b8a6",
-};
-
-// Named presets map to Blume's palette hex (the preset "blue" is not CSS
-// blue); anything else is handed to Takumi as-is — it parses the full CSS
-// color grammar, and a genuinely malformed value fails the build with a
-// parse error naming it. `hasOwn` keeps a preset name like "constructor"
-// from resolving up the prototype chain.
+// Named presets resolve from the theme's own OKLCH table — Takumi parses the
+// full CSS color grammar, so the card renders exactly the accent the site
+// shows (a separate hand-synced hex palette used to drift: the card's "blue"
+// was Tailwind's, not Blume's). Anything else is handed to Takumi as-is, and
+// a genuinely malformed value fails the build with a parse error naming it.
+// `hasOwn` keeps a preset name like "constructor" from resolving up the
+// prototype chain.
 const resolveAccent = (accent: string): string =>
-  Object.hasOwn(ACCENT_HEX, accent) ? (ACCENT_HEX[accent] as string) : accent;
+  Object.hasOwn(ACCENTS, accent) ? (ACCENTS[accent] as string) : accent;
 
 export interface OgCardPalette {
   accent?: string;

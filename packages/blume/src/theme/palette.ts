@@ -2,8 +2,12 @@ import type { ResolvedConfig } from "../core/schema.ts";
 
 const FALLBACK_ACCENT = "oklch(0.62 0.16 250)";
 
-/** Named accent presets mapped to OKLCH values. */
-const ACCENTS: Record<string, string> = {
+/**
+ * Named accent presets mapped to OKLCH values. The single source of truth for
+ * preset colors: the theme CSS and the OG card (og/card.ts) both resolve from
+ * this table, so a site and its social cards can't disagree about "blue".
+ */
+export const ACCENTS: Record<string, string> = {
   blue: FALLBACK_ACCENT,
   green: "oklch(0.6 0.16 150)",
   orange: "oklch(0.68 0.17 50)",
