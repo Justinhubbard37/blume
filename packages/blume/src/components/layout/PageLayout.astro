@@ -309,36 +309,12 @@ const bannerKey = banner?.dismissible ? banner.key : null;
       )
     }
     <script>
+      import { syncDrawerInert } from "./drawer-inert.ts";
       // Dev-only: friendly hint after a React island hydration mismatch;
       // tree-shaken out of production builds.
       import "./hydration-hint.ts";
 
-      // The closed tabs drawer is only translated off-canvas, so its links
-      // would stay in the tab order. Mirror the header's `data-blume-nav-open`
-      // toggle into `inert`/`aria-hidden` below `lg` (64rem), matching the
-      // breakpoint where the drawer is display-hidden anyway.
-      const drawer = document.querySelector<HTMLElement>(
-        "[data-blume-nav-drawer]"
-      );
-      if (drawer) {
-        const desktop = window.matchMedia("(min-width: 64rem)");
-        const syncDrawer = () => {
-          const hidden =
-            !desktop.matches &&
-            !document.documentElement.hasAttribute("data-blume-nav-open");
-          drawer.inert = hidden;
-          if (hidden) {
-            drawer.setAttribute("aria-hidden", "true");
-          } else {
-            drawer.removeAttribute("aria-hidden");
-          }
-        };
-        syncDrawer();
-        desktop.addEventListener("change", syncDrawer);
-        new MutationObserver(syncDrawer).observe(document.documentElement, {
-          attributeFilter: ["data-blume-nav-open"],
-        });
-      }
+      syncDrawerInert();
     </script>
   </body>
 </html>

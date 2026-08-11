@@ -713,6 +713,7 @@ const bannerKey = banner?.dismissible ? banner.key : null;
     ></button>
     <script>
       import { copyText, createCopyFlash } from "../copy-feedback.ts";
+      import { syncDrawerInert } from "./drawer-inert.ts";
       import { chromeIcons as icons } from "../../theme/chrome-icons.ts";
       // Registers the <blume-mermaid> custom element (emitted by ```mermaid
       // fences). Mermaid itself is lazy-loaded only on pages that use a diagram.
@@ -724,32 +725,7 @@ const bannerKey = banner?.dismissible ? banner.key : null;
       // Tree-shaken out of production builds.
       import "./hydration-hint.ts";
 
-      // The closed mobile drawer is only translated off-canvas, so its links
-      // would stay in the tab order on every page. Mirror the header's
-      // `data-blume-nav-open` toggle into `inert`/`aria-hidden` — but only
-      // below `lg` (64rem), where the same element isn't the static sidebar.
-      const drawer = document.querySelector<HTMLElement>(
-        "[data-blume-nav-drawer]"
-      );
-      if (drawer) {
-        const desktop = window.matchMedia("(min-width: 64rem)");
-        const syncDrawer = () => {
-          const hidden =
-            !desktop.matches &&
-            !document.documentElement.hasAttribute("data-blume-nav-open");
-          drawer.inert = hidden;
-          if (hidden) {
-            drawer.setAttribute("aria-hidden", "true");
-          } else {
-            drawer.removeAttribute("aria-hidden");
-          }
-        };
-        syncDrawer();
-        desktop.addEventListener("change", syncDrawer);
-        new MutationObserver(syncDrawer).observe(document.documentElement, {
-          attributeFilter: ["data-blume-nav-open"],
-        });
-      }
+      syncDrawerInert();
 
       const svg = (name: string, cls = "") =>
         `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${cls ? ` class="${cls}"` : ""}>${icons[name]}</svg>`;
