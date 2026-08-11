@@ -224,6 +224,7 @@ const menuRowClass =
 </div>
 
 <script>
+  import { copyText, flashLabel } from "../copy-feedback.ts";
   import { prefixBase } from "../islands/base-path.ts";
 
   const CHAT_URLS: Record<string, (q: string) => string> = {
@@ -376,24 +377,9 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }`;
           `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: id, type: "http", url: mcpUrl }))}`
         );
 
-      const flash = (el: Element | null, text: string) => {
-        if (!(el instanceof HTMLElement)) {
-          return;
-        }
-        // Remember the element's own (localized) label once — capturing it at
-        // click time would capture "Copied!" on a double-click and stick.
-        el.dataset.blumeLabel ??= el.textContent ?? "";
-        el.textContent = text;
-        setTimeout(() => {
-          el.textContent = el.dataset.blumeLabel ?? "";
-        }, 1500);
-      };
       const copy = async (value: string, el: Element | null) => {
-        try {
-          await navigator.clipboard.writeText(value);
-          flash(el, copiedLabel);
-        } catch {
-          // Clipboard unavailable; nothing to do.
+        if ((await copyText(value)) && el instanceof HTMLElement) {
+          flashLabel(el, copiedLabel);
         }
       };
       root
@@ -420,9 +406,6 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }`;
     }
 
     const label = root.querySelector("[data-blume-copy-label]");
-    // Captured once — inside the handler a double-click would capture and
-    // permanently restore "Copied!".
-    const original = label?.textContent ?? "";
     root
       .querySelector("[data-blume-copy-page]")
       ?.addEventListener("click", async () => {
@@ -431,12 +414,11 @@ hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }`;
           if (!response.ok) {
             throw new Error(`Fetching ${md} failed (${response.status})`);
           }
-          await navigator.clipboard.writeText(await response.text());
-          if (label) {
-            label.textContent = copiedLabel;
-            setTimeout(() => {
-              label.textContent = original;
-            }, 1500);
+          if (
+            (await copyText(await response.text())) &&
+            label instanceof HTMLElement
+          ) {
+            flashLabel(label, copiedLabel);
           }
         } catch (error) {
           // Clipboard or fetch unavailable; don't flash "Copied!" untruthfully.

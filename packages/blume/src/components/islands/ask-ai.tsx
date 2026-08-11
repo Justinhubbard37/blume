@@ -5,6 +5,7 @@ import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
 import type { UIStrings } from "../../core/i18n-ui.ts";
+import { copyText } from "../copy-feedback.ts";
 import { joinBase, prefixBase } from "./base-path.ts";
 import { useAskAI } from "./hooks.ts";
 
@@ -308,7 +309,7 @@ const AskAI = ({
     const text = messages
       .map((m) => `${m.role === "user" ? t.you : t.ai}: ${m.content}`)
       .join("\n\n");
-    void navigator.clipboard?.writeText(text);
+    void copyText(text);
   };
 
   const hasMessages = messages.length > 0;

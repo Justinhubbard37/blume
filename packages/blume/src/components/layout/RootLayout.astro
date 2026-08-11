@@ -712,6 +712,7 @@ const bannerKey = banner?.dismissible ? banner.key : null;
       type="button"
     ></button>
     <script>
+      import { copyText, createCopyFlash } from "../copy-feedback.ts";
       import { chromeIcons as icons } from "../../theme/chrome-icons.ts";
       // Registers the <blume-mermaid> custom element (emitted by ```mermaid
       // fences). Mermaid itself is lazy-loaded only on pages that use a diagram.
@@ -766,14 +767,6 @@ const bannerKey = banner?.dismissible ? banner.key : null;
         document.body.getAttribute("data-i18n-copy-code") || "Copy code";
       const copiedLabel =
         document.body.getAttribute("data-i18n-copied") || "Copied!";
-
-      // Shared polite live region: the icon swap is invisible to screen
-      // readers, so copy success is announced here. Cleared when a button's
-      // checked state resets so the next copy re-announces.
-      const copyStatus = document.createElement("span");
-      copyStatus.className = "sr-only";
-      copyStatus.setAttribute("aria-live", "polite");
-      document.body.appendChild(copyStatus);
 
       const languageLabels: Record<string, string> = {
         astro: "Astro",
@@ -854,7 +847,7 @@ const bannerKey = banner?.dismissible ? banner.key : null;
             button.classList.toggle(cls, !checked);
           }
         };
-        let resetTimeout: number | undefined;
+        const flash = createCopyFlash(setChecked, copiedLabel);
         button.addEventListener("click", async () => {
           const code = pre.querySelector("code");
           let text = code?.textContent ?? "";
@@ -870,20 +863,9 @@ const bannerKey = banner?.dismissible ? banner.key : null;
             }
             text = clone.textContent ?? "";
           }
-          try {
-            await navigator.clipboard.writeText(text);
-          } catch {
-            return;
+          if (await copyText(text)) {
+            flash();
           }
-          if (resetTimeout) {
-            window.clearTimeout(resetTimeout);
-          }
-          setChecked(true);
-          copyStatus.textContent = copiedLabel;
-          resetTimeout = window.setTimeout(() => {
-            setChecked(false);
-            copyStatus.textContent = "";
-          }, 1500);
         });
         pre.appendChild(button);
       }
