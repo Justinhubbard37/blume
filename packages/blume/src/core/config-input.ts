@@ -205,6 +205,8 @@ export interface SanitySource {
 /** A Notion database; pages become entries, blocks become MDX. */
 export interface NotionSource {
   type: "notion";
+  /** Max concurrent Notion API requests; default 3 (Notion's per-integration pace). */
+  concurrency?: number;
   /** Notion database id. */
   database: string;
   /** Opt-in dev polling interval (seconds); omit to freeze for the session. */

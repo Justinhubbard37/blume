@@ -593,11 +593,96 @@ describe("notionSource (block + property edge cases)", () => {
   });
 });
 
+// Pages without a title property slug to their id, so any count is fine.
+const pageStub = (id: string) => ({ id, properties: {} });
+
+describe("notionSource (request pacing)", () => {
+  /**
+   * A client whose block fetches report how many are in flight at once. Each
+   * call parks for a tick so overlapping requests are actually observed
+   * overlapping — with 429 fan-out this is exactly the burst the limiter caps.
+   */
+  const trackingClient = (
+    pageCount: number,
+    onRequest: (inFlight: number) => void
+  ): NotionClientLike => {
+    let inFlight = 0;
+    return {
+      blocks: {
+        children: {
+          list: async () => {
+            inFlight += 1;
+            onRequest(inFlight);
+            await sleep(5);
+            inFlight -= 1;
+            return { has_more: false, next_cursor: null, results: [] };
+          },
+        },
+      },
+      databases: {
+        query: () =>
+          Promise.resolve({
+            has_more: false,
+            next_cursor: null,
+            results: Array.from({ length: pageCount }, (_, i) =>
+              pageStub(`p${i}`)
+            ),
+          }),
+      },
+    } as unknown as NotionClientLike;
+  };
+
+  it("bounds concurrent API requests to the default pool of 3", async () => {
+    let peak = 0;
+    const source = notionSource(
+      {
+        client: trackingClient(10, (n) => {
+          peak = Math.max(peak, n);
+        }),
+        database: "db1",
+        fetchImpl,
+        name: "handbook",
+      },
+      await ctxFor()
+    );
+    const { entries } = await source.load();
+    // All ten pages import, but never more than three requests at once.
+    expect(entries).toHaveLength(10);
+    expect(peak).toBe(3);
+  });
+
+  it("honors a configured concurrency", async () => {
+    let peak = 0;
+    const source = notionSource(
+      {
+        client: trackingClient(6, (n) => {
+          peak = Math.max(peak, n);
+        }),
+        concurrency: 1,
+        database: "db1",
+        fetchImpl,
+        name: "handbook",
+      },
+      await ctxFor()
+    );
+    const { entries } = await source.load();
+    expect(entries).toHaveLength(6);
+    expect(peak).toBe(1);
+  });
+});
+
 describe("resolveSources (notion)", () => {
   it("wires a notion config into a staged source", () => {
     const config = blumeConfigSchema.parse({
       content: {
-        sources: [{ database: "db1", prefix: "handbook", type: "notion" }],
+        sources: [
+          {
+            concurrency: 2,
+            database: "db1",
+            prefix: "handbook",
+            type: "notion",
+          },
+        ],
       },
     });
     const context = {

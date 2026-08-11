@@ -304,6 +304,8 @@ const sanitySourceSchema = z.object({
 
 /** A Notion database; pages become entries, blocks become MDX. */
 const notionSourceSchema = z.object({
+  /** Max concurrent Notion API requests; default 3 (Notion's per-integration pace). */
+  concurrency: z.number().positive().optional(),
   database: z.string(),
   /** Opt-in dev polling interval (seconds); omit to freeze for the session. */
   pollInterval: z.number().positive().optional(),

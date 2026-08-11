@@ -96,6 +96,12 @@ export interface NotionSourceOptions {
   prefix?: string;
   /** The Notion database id. */
   database: string;
+  /**
+   * Maximum concurrent Notion API requests. Notion allows an average of 3
+   * requests per second per integration, so a large database must pace its
+   * block-tree fan-out or every request 429s. Default 3.
+   */
+  concurrency?: number;
   /** Integration token; defaults to `NOTION_TOKEN`. */
   token?: string;
   properties?: NotionPropertyMap;
@@ -141,12 +147,15 @@ const RATE_LIMITED = 429;
 const MAX_RETRIES = 4;
 const BASE_DELAY_MS = 500;
 const SECOND_MS = 1000;
+const DEFAULT_CONCURRENCY = 3;
 
 /**
  * Retry a Notion API call on a `429 rate_limited`, honoring the `Retry-After`
  * header and otherwise backing off exponentially. A large workspace fans out
  * many concurrent block-children requests, so without this a single 429 would
- * reject the batch and abort the whole import.
+ * reject the batch and abort the whole import. The exponential wait is
+ * jittered so calls rate-limited together don't retry in lockstep and trip
+ * the limit again as a herd.
  */
 const withNotionRetry = async <T>(
   call: () => Promise<T>,
@@ -163,10 +172,48 @@ const withNotionRetry = async <T>(
       (error as { headers?: Record<string, string> }).headers?.["retry-after"]
     );
     const wait =
-      retryAfter > 0 ? retryAfter * SECOND_MS : BASE_DELAY_MS * 2 ** attempt;
+      retryAfter > 0
+        ? retryAfter * SECOND_MS
+        : BASE_DELAY_MS * 2 ** attempt * (1 + Math.random());
     await sleep(wait);
     return withNotionRetry(call, attempt + 1);
   }
+};
+
+/**
+ * A minimal FIFO semaphore: at most `size` tasks run at once, the rest queue.
+ * Notion's rate limit is per-integration (an average of 3 req/s), and a large
+ * database fans out one block-children request per page plus one per nested
+ * container — an unbounded burst guarantees 429s that even the retry loop
+ * can't recover from, so every API call funnels through one of these.
+ */
+const createLimiter = (
+  size: number
+): (<T>(task: () => Promise<T>) => Promise<T>) => {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    if (active < size) {
+      active += 1;
+    } else {
+      // oxlint-disable-next-line promise/avoid-new -- adapt the queue's wake callback
+      await new Promise<void>((resolve) => {
+        waiting.push(resolve);
+      });
+    }
+    try {
+      return await task();
+    } finally {
+      const handoff = waiting.shift();
+      if (handoff) {
+        // Hand the slot straight to the next queued task; decrementing first
+        // would let a fresh caller slip in and briefly exceed the bound.
+        handoff();
+      } else {
+        active -= 1;
+      }
+    }
+  };
 };
 
 /** Paginate a Notion list endpoint via recursion (no await-in-loop). */
@@ -252,6 +299,13 @@ export const notionSource = (
   ctx?: SourceContext
 ): ContentSource => {
   const props = options.properties ?? {};
+  const limit = createLimiter(
+    Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY)
+  );
+  // Every Notion API call goes through the limiter, inside the retry — so a
+  // call sleeping through a backoff doesn't hold a slot while it waits.
+  const notionCall = <T>(call: () => Promise<T>): Promise<T> =>
+    withNotionRetry(() => limit(call));
   const cache = snapshotCache(
     ctx?.cacheDir ?? join(".blume", "cache", options.name)
   );
@@ -284,7 +338,7 @@ export const notionSource = (
     blockId: string
   ): Promise<NotionBlock[]> =>
     collectAll((cursor) =>
-      withNotionRetry(() =>
+      notionCall(() =>
         client.blocks.children.list({ block_id: blockId, start_cursor: cursor })
       )
     );
@@ -458,12 +512,12 @@ export const notionSource = (
   };
 
   // Hoisted out of `load` so the retry closure doesn't nest past the linter's
-  // 4-level limit (source factory → queryDatabase → withNotionRetry callback).
+  // 4-level limit (source factory → queryDatabase → notionCall callback).
   const queryDatabase = (
     client: NotionClientLike,
     cursor?: string
   ): Promise<NotionList<NotionPage>> =>
-    withNotionRetry(() =>
+    notionCall(() =>
       client.databases.query({
         database_id: options.database,
         start_cursor: cursor,
