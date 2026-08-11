@@ -3,6 +3,7 @@ import type { ColorFunction } from "consola/utils";
 
 import { AGENTS } from "../audit/agent.ts";
 import type { AgentKind } from "../audit/agent.ts";
+import { duration, money, seconds } from "../cli/report-format.ts";
 import { countBySeverity } from "../core/diagnostics.ts";
 import type { Diagnostic } from "../core/types.ts";
 import type {
@@ -58,20 +59,6 @@ export const SPINNER_INTERVAL_MS = 80;
 
 /** The clear-to-start-of-line prefix every TTY rewrite uses. */
 const REWRITE = `\r${ESC}[K`;
-
-const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)}s`;
-
-const money = (cost: number | undefined): string =>
-  cost === undefined ? "" : `$${cost.toFixed(2)}`;
-
-const duration = (ms: number): string => {
-  if (ms < 60_000) {
-    return seconds(ms);
-  }
-  const minutes = Math.floor(ms / 60_000);
-  const rest = Math.round((ms % 60_000) / 1000);
-  return `${minutes}m ${rest}s`;
-};
 
 /** `docs/guides/install.mdx → fr`, or the batched meta call's label. */
 export const itemLabel = (item: WorkItem): string =>
