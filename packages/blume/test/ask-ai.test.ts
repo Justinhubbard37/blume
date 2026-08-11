@@ -154,6 +154,41 @@ const fakeBody = {
 const fakeDocument = { activeElement: null as unknown, body: fakeBody };
 (globalThis as { document?: unknown }).document = fakeDocument;
 
+type MutationBatch = { addedNodes: unknown[] }[];
+interface RecordedObserver {
+  disconnect: () => void;
+  disconnected: boolean;
+  notify: (records: MutationBatch) => void;
+  observe: (target: unknown) => void;
+  observed: unknown;
+}
+let mutationObservers: RecordedObserver[] = [];
+/**
+ * Stands in for MutationObserver: the island's sweep constructs one per open;
+ * tests feed mutation batches through `notify` and assert `disconnected`.
+ * Returning an object literal makes `new` hand it back as the instance.
+ */
+const fakeMutationObserver = function fakeMutationObserver(
+  this: unknown,
+  notify: (records: MutationBatch) => void
+): RecordedObserver {
+  const observer: RecordedObserver = {
+    disconnect() {
+      observer.disconnected = true;
+    },
+    disconnected: false,
+    notify,
+    observe(target) {
+      observer.observed = target;
+    },
+    observed: null,
+  };
+  mutationObservers.push(observer);
+  return observer;
+};
+(globalThis as { MutationObserver?: unknown }).MutationObserver =
+  fakeMutationObserver;
+
 // An Apple platform (⌘ hint) with a recording clipboard. Defined before the
 // island is imported, since `IS_APPLE` is computed at module scope.
 const clipboardWrites: string[] = [];
@@ -209,6 +244,7 @@ const fresh = (nextProps: AskProps = {}): unknown => {
   windowListeners.clear();
   mediaMatches = true;
   mediaListeners = [];
+  mutationObservers = [];
   fakeBody.children = [];
   delete fakeBody.dataset.blumeAsk;
   fakeDocument.activeElement = null;
@@ -578,6 +614,51 @@ describe("AskAI open/close", () => {
     expect(mediaListeners).toHaveLength(0);
     expect(sibling.hasAttribute("inert")).toBe(false);
     expect(aside(tree).props.inert).toBe(true);
+  });
+
+  it("sweeps nodes portaled into body while the overlay is open", () => {
+    let tree = fresh();
+    mediaMatches = false;
+    byLabel(tree, "Ask AI").props.onClick();
+    tree = render();
+    const observer = mutationObservers.at(-1) as RecordedObserver;
+    expect(observer.observed).toBe(fakeBody);
+
+    // A zoom overlay arrives after the open-time sweep; a text node and an
+    // already-inert element ride the same mutation batch.
+    const late = new FakeElement();
+    const preInerted = new FakeElement();
+    preInerted.setAttribute("inert", "");
+    const textNode = { nodeType: 3 };
+    observer.notify([{ addedNodes: [late, textNode, preInerted] }]);
+    expect(late.hasAttribute("inert")).toBe(true);
+    expect(preInerted.hasAttribute("inert")).toBe(true);
+
+    // Close: the latecomer is released, the pre-inerted element is left
+    // alone (it was not ours to re-enable), and the observer disconnects.
+    byLabel(tree, "Close").props.onClick();
+    tree = render();
+    expect(late.hasAttribute("inert")).toBe(false);
+    expect(preInerted.hasAttribute("inert")).toBe(true);
+    expect(observer.disconnected).toBe(true);
+  });
+
+  it("leaves additions interactive while the desktop dock is active", () => {
+    let tree = fresh();
+    mediaMatches = false;
+    byLabel(tree, "Ask AI").props.onClick();
+    tree = render();
+    const observer = mutationObservers.at(-1) as RecordedObserver;
+
+    // Growing into the dock releases the sweep; a node arriving then must
+    // stay interactive — the docked panel is non-modal on purpose.
+    mediaMatches = true;
+    for (const listener of mediaListeners) {
+      listener({});
+    }
+    const late = new FakeElement();
+    observer.notify([{ addedNodes: [late] }]);
+    expect(late.hasAttribute("inert")).toBe(false);
   });
 
   it("restores focus to the opener on close, skipping disconnected elements", () => {

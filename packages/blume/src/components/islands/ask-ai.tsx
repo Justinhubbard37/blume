@@ -262,8 +262,32 @@ const AskAI = ({
       }
     };
     apply();
+    // The sweep snapshots body's children at open time, but overlays keep
+    // arriving afterwards — medium-zoom's backdrop, a mermaid render, another
+    // island's portal all append to <body> — and an unswept latecomer is a
+    // tab stop hiding behind the overlay. Fold additions into the sweep for
+    // as long as it is active.
+    const observer = new MutationObserver((records) => {
+      if (media.matches) {
+        return;
+      }
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (
+            node instanceof HTMLElement &&
+            node !== panelRef.current &&
+            !node.hasAttribute("inert")
+          ) {
+            node.setAttribute("inert", "");
+            inerted.push(node);
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true });
     media.addEventListener("change", apply);
     return () => {
+      observer.disconnect();
       media.removeEventListener("change", apply);
       release();
     };
