@@ -84,6 +84,27 @@ describe("buildTarGz", () => {
     expect(files[1]?.mode).toBe(0o755);
   });
 
+  it("pins the archive bytes for a fixed entry set", () => {
+    // Golden digest. If this fails, the writer's byte layout changed and the
+    // digest of EVERY published skill archive will churn on the next build —
+    // consumers see every skill as updated. Bump the constant only when that
+    // churn is deliberate (it last changed when the writer moved to nanotar).
+    const entries = [
+      { content: new TextEncoder().encode("# hi\n"), path: "SKILL.md" },
+      {
+        content: new TextEncoder().encode("echo ok\n"),
+        executable: true,
+        path: "scripts/run.sh",
+      },
+    ];
+    const digest = createHash("sha256")
+      .update(buildTarGz(entries))
+      .digest("hex");
+    expect(`sha256:${digest}`).toBe(
+      "sha256:2fd15820f947b55ddc7dae42854a57621c7dda2c379ba7663acd5271849cfdf7"
+    );
+  });
+
   it("rejects escaping and oversized paths", () => {
     const content = new Uint8Array(0);
     expect(() => buildTarGz([{ content, path: "../evil" }])).toThrow(
