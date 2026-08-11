@@ -1121,6 +1121,30 @@ describe("render-mdx", () => {
     expect(description).toContain("…");
   });
 
+  it("keeps literal punctuation intact in the meta description", () => {
+    // The old regex strip deleted every *_`#> character, mangling prose that
+    // legitimately contains them: snake_case → snakecase, C# → C.
+    const op = {
+      deprecated: false,
+      description:
+        "Filter by `user_id` or a C# client. Sorts use snake_case keys.",
+      key: "op",
+      method: "get" as const,
+      operationId: "op",
+      path: "/pets",
+      route: "/api/pets/op",
+      summary: "List pets",
+      tag: "pet",
+      tagSlug: "pet",
+    };
+    const { description } = operationMdx(specData(), op).data.seo as {
+      description: string;
+    };
+    expect(description).toContain("user_id");
+    expect(description).toContain("C# client");
+    expect(description).toContain("snake_case keys");
+  });
+
   it("falls back to the API name when a long endpoint leaves no room for prose", () => {
     const op = {
       deprecated: false,

@@ -1,3 +1,6 @@
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { toString as mdastToString } from "mdast-util-to-string";
+
 import type { ApiOperationRef, ApiSpecData } from "./model.ts";
 import type { ReferenceSource } from "./references.ts";
 
@@ -85,19 +88,22 @@ export interface RenderedPage {
 // `description`: the prose already renders in the body, and a `description`
 // frontmatter field would print it a second time as the page subtitle.
 const META_DESCRIPTION_MAX = 160;
-const PARAGRAPH_BREAK = /\n\s*\n/u;
-const MARKDOWN_LINK = /\[(?<text>[^\]]*)\]\([^)]*\)/gu;
-const MARKDOWN_MARKS = /[*_`#>]/gu;
 const WHITESPACE = /\s+/gu;
 const TRAILING_WORD = /\s+\S*$/u;
 
-/** Flatten markdown prose to its first paragraph as single-line plain text. */
-const plainProse = (markdown: string): string =>
-  (markdown.trim().split(PARAGRAPH_BREAK).at(0) ?? "")
-    .replace(MARKDOWN_LINK, "$<text>")
-    .replace(MARKDOWN_MARKS, "")
-    .replace(WHITESPACE, " ")
-    .trim();
+/**
+ * Flatten markdown prose to its first paragraph as single-line plain text,
+ * via a real parse (`mdast-util-to-string`). The regex strip this replaces
+ * was lossy on literal prose — `snake_case` → `snakecase`, `C#` → `C` — and
+ * these strings ship as `seo.description` meta tags. A description with no
+ * paragraph (say, only a heading or list) falls back to its first block.
+ */
+const plainProse = (markdown: string): string => {
+  const tree = fromMarkdown(markdown);
+  const first =
+    tree.children.find((node) => node.type === "paragraph") ?? tree.children[0];
+  return first ? mdastToString(first).replace(WHITESPACE, " ").trim() : "";
+};
 
 /** Cap `text` at `max` characters, cutting on a word boundary. */
 const clip = (text: string, max: number): string => {
