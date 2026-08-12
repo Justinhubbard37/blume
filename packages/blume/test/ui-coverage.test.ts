@@ -130,6 +130,7 @@ describe("flattenPages", () => {
           route: "/group/old",
         },
       ],
+      display: "flat",
       kind: "group",
       label: "Group",
       route: "/group",
@@ -154,6 +155,7 @@ describe("findBreadcrumbs", () => {
       children: [
         { kind: "page", label: "Intro", pageId: "i", route: "/group/intro" },
       ],
+      display: "flat",
       kind: "group",
       label: "Group",
       route: "/group",
@@ -490,6 +492,16 @@ describe("layout chrome sources", () => {
     expect(source).toContain(
       'class="shrink-0 text-muted-foreground rtl:-scale-x-100"'
     );
+  });
+
+  it("resolves the display mode per node, never from a global prop", async () => {
+    // The builder stamps each generated group with its resolved display
+    // (index frontmatter > folder meta > global); the renderer must read that
+    // node value for both the row branches and the drill-in panel collection,
+    // or per-group overrides silently regress to the sidebar-wide mode.
+    const source = await layoutSource("NavTree.astro");
+    expect(source).toContain('const display = item.display ?? "flat";');
+    expect(source).toContain('(node.display ?? "flat") === "page"');
   });
 
   it("uses the sidebar row radius for the full-width NavTree back button", async () => {
