@@ -38,6 +38,8 @@ const makePage = (
   sourcePath: `/abs/${over.id}`,
   title: over.id,
   translationKey: over.route,
+  version: "",
+  versionKey: over.route,
   ...over,
 });
 
@@ -51,6 +53,7 @@ const makeGraph = (pages: PageRecord[]): ContentGraph =>
       tabs: [],
     },
     navigationByLocale: {},
+    navigationByVersion: {},
     pages,
     routes: new Map(pages.map((page) => [page.route, page.id])),
   }) as ContentGraph;

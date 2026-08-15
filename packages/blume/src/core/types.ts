@@ -121,9 +121,24 @@ export interface PageRecord {
   locale: string;
   /**
    * Locale-agnostic logical route shared by every translation (e.g.
-   * `/guides/x`). Pages with the same key are translations of each other.
+   * `/guides/x`, or `/v1.0/guides/x` under versioning — the key is
+   * version-specific, so translations group within their version).
+   * Pages with the same key are translations of each other.
    */
   translationKey: string;
+  /**
+   * Resolved docs version: an archived id (`v1.0`) for snapshot pages, `""`
+   * for the current (unprefixed) docs — including every page of an
+   * unversioned project.
+   */
+  version: string;
+  /**
+   * Version- and locale-agnostic logical route (e.g. `/guides/x` for
+   * `/v1.0/guides/x`). Pages with the same key and locale are the same
+   * logical page across versions — this drives the switcher's same-page
+   * navigation and the canonical-to-latest lookup.
+   */
+  versionKey: string;
   /**
    * True for entries filled in from the fallback locale to pad a locale's
    * navigation for pages it hasn't translated yet. The record's content —
@@ -271,6 +286,12 @@ export interface ContentGraph {
   navigation: Navigation;
   /** Navigation per locale; one entry per configured locale under i18n. */
   navigationByLocale: Record<string, Navigation>;
+  /**
+   * Navigation per archived version, keyed by version id and then locale code
+   * (`""` on a single-locale site). The current version's trees are
+   * `navigation`/`navigationByLocale`; empty when versioning is off.
+   */
+  navigationByVersion: Record<string, Record<string, Navigation>>;
   /** Map of route -> pageId for fast lookup and duplicate detection. */
   routes: Map<string, string>;
   diagnostics: Diagnostic[];
@@ -292,6 +313,13 @@ export interface LocaleSwitchOption {
   current: boolean;
   /** True when this locale has no real translation (renders fallback content). */
   untranslated: boolean;
+}
+
+/** A docs version a logical page exists in, for the switcher and canonicals. */
+export interface VersionAlternate {
+  /** Version id; `""` for the current (unprefixed) docs. */
+  version: string;
+  path: string;
 }
 
 /** A route entry written to `blume.manifest.json`. */
@@ -318,6 +346,15 @@ export interface RouteManifestEntry {
   locale: string;
   /** Locales this logical page is genuinely translated into (excludes fallbacks). */
   alternates: RouteAlternate[];
+  /** Resolved docs version (`""` for the current docs; see `PageRecord.version`). */
+  version: string;
+  /**
+   * Versions this logical page exists in within this route's locale — the
+   * current version first, then archived versions in configured order. Drives
+   * the switcher's same-page navigation and the canonical-to-latest lookup.
+   * Empty when versioning is off.
+   */
+  versionAlternates: VersionAlternate[];
   /** True when this route renders fallback content for a missing translation. */
   fallback?: boolean;
   /** Resolved "last updated" ISO date, when the feature is enabled. */

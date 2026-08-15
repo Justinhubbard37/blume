@@ -313,6 +313,8 @@ const makePage = (
   sourcePath: `/abs/${navPath}.mdx`,
   title: route,
   translationKey: navPath,
+  version: "",
+  versionKey: navPath,
 });
 
 const makeGraph = (pages: PageRecord[]): ContentGraph =>
@@ -320,6 +322,7 @@ const makeGraph = (pages: PageRecord[]): ContentGraph =>
     diagnostics: [],
     navigation: { featured: [], selectors: [], sidebar: [], tabs: [] },
     navigationByLocale: {},
+    navigationByVersion: {},
     pages,
     routes: new Map(pages.map((page) => [page.route, page.id])),
   }) as ContentGraph;

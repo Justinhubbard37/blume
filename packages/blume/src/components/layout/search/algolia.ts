@@ -8,6 +8,7 @@ interface AlgoliaRecord {
   title: string;
   description?: string;
   content?: string;
+  version?: string;
 }
 
 /**
@@ -27,11 +28,18 @@ export const createSearch = (opts: {
           hitsPerPage: SEARCH_LIMIT,
           indexName: opts.indexName,
           query,
-          // The sync uploads `locale` on every record so an i18n site can
-          // scope hosted results to the active language.
-          ...(options?.locale && {
-            facetFilters: [`locale:${options.locale}`],
-          }),
+          // The sync uploads `locale` and `version` on every record so a
+          // site can scope hosted results to the active language and the
+          // viewed docs version (the current docs upload as "current").
+          ...(() => {
+            const facetFilters = [
+              ...(options?.locale ? [`locale:${options.locale}`] : []),
+              ...(options?.version === undefined
+                ? []
+                : [`version:${options.version || "current"}`]),
+            ];
+            return facetFilters.length > 0 ? { facetFilters } : {};
+          })(),
         },
       ],
     });
@@ -46,6 +54,9 @@ export const createSearch = (opts: {
       ),
       title: highlight(record.title, query),
       url: record.url,
+      // Records store the current docs' version as "current" (hosted backends
+      // treat empty facet values unreliably); the hit contract uses "".
+      version: record.version === "current" ? "" : record.version,
     }));
     return { hits, sections: [] };
   };

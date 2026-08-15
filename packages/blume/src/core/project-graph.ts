@@ -24,6 +24,7 @@ import type {
   PageRecord,
   ProjectContext,
 } from "./types.ts";
+import { versionsDiagnostics } from "./versions.ts";
 
 /** Build mode: drafts are kept in `dev` and dropped in `build`. */
 export type BuildMode = "dev" | "build";
@@ -177,6 +178,7 @@ const normalizeLoadedEntries = (
           staged: source.staged,
         },
         typeFrontmatter,
+        versions: config.versions,
       });
       if (normalized.pages.length === 0 && normalized.diagnostics.length > 0) {
         droppedPages += 1;
@@ -259,7 +261,10 @@ export const scanProject = async (
     Promise.all(
       sources.map(async (source) => ({ source, ...(await source.load()) }))
     ),
-    discoverFolderMeta(metaSources, { localeDirs }),
+    discoverFolderMeta(metaSources, {
+      localeDirs,
+      versionDirs: config.versions?.archived.map((version) => version.id),
+    }),
   ]);
 
   // Folder meta contributed by the sources themselves (the OpenAPI source
@@ -313,10 +318,16 @@ export const scanProject = async (
     i18n: config.i18n,
     navigation: config.navigation,
     sharedFolderMeta,
+    versions: config.versions,
   });
   const manifest = buildManifest({ config, context, graph });
 
-  const i18nWarnings = config.i18n ? i18nDiagnostics(pages, config.i18n) : [];
+  const i18nWarnings = config.i18n
+    ? i18nDiagnostics(pages, config.i18n, config.versions)
+    : [];
+  const versionWarnings = config.versions
+    ? versionsDiagnostics(pages, config.versions)
+    : [];
 
   return {
     config,
@@ -327,6 +338,7 @@ export const scanProject = async (
       ...entryIdDiagnostics(pages, resolveDocsCollection(config, context).base),
       ...graph.diagnostics,
       ...i18nWarnings,
+      ...versionWarnings,
     ],
     droppedPages,
     graph,
