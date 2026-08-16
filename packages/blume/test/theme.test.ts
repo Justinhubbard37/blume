@@ -176,6 +176,14 @@ describe("tailwindEntryTemplate", () => {
     expect(userAt).toBeGreaterThan(configAt);
   });
 
+  it("opts into cross-document view transitions with a reduced-motion escape", () => {
+    expect(entry).toContain(`@view-transition {
+  navigation: auto;
+}`);
+    expect(entry).toContain("::view-transition-old(*)");
+    expect(entry).toContain("animation: none !important;");
+  });
+
   it("routes font tokens through overridable indirection variables", () => {
     expect(entry).toContain("--font-sans: var(--blume-font-body);");
     expect(entry).toContain("--font-mono: var(--blume-font-mono);");

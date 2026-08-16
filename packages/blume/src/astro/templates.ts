@@ -694,6 +694,11 @@ ${userConfigSetup}export default defineConfig({
     },
   },
   devToolbar: { enabled: false },
+  // Navigations are full document loads (no client router), so the next page's
+  // HTML is fetched on hover/viewport to hide the request latency behind the
+  // user's intent. Pairs with the cross-document view-transition rule in the
+  // theme sheet, which smooths the swap itself.
+  prefetch: { prefetchAll: true },
   vite: {
     plugins: [tailwindcss(), prerenderDepsPlugin(), serverAppResolvePlugin()],
     // Everything hydration can reach must be part of the dev dep optimizer's

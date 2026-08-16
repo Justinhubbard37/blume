@@ -666,6 +666,9 @@ describe("astroConfigTemplate", () => {
     );
     expect(out).toContain("prerenderDepsPlugin()");
     expect(out).toContain("serverAppResolvePlugin()");
+    // Navigations are full document loads, so every link prefetches on
+    // hover/viewport to hide the request latency behind user intent.
+    expect(out).toContain("prefetch: { prefetchAll: true },");
     // Both lazy client-side deps are pre-bundled through the `blume` package so
     // their CJS/UMD entries get ESM interop in dev; the nested form is required
     // because neither is a direct dep of the generated project, and
