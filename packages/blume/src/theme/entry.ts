@@ -182,7 +182,8 @@ ${THEME_MAPPING}
   /* Headings use the display font (defaults to the body font when unset).
      The tightened tracking is part of the theme, not the font: display-tuned
      families bake it into their metrics, but a text family promoted to
-     headings (including the Inter default) reads loose without it. */
+     headings (including the Inter default) reads loose without it. -0.05em
+     was matched visually against Inter Tight, the previous display default. */
   h1,
   h2,
   h3,
@@ -190,7 +191,7 @@ ${THEME_MAPPING}
   h5,
   h6 {
     font-family: var(--font-display);
-    letter-spacing: -0.025em;
+    letter-spacing: -0.05em;
   }
   :focus-visible {
     outline: 2px solid var(--blume-accent);

@@ -187,8 +187,9 @@ describe("tailwindEntryTemplate", () => {
   it("bakes display-grade tracking into headings, not the font", () => {
     // Any display font gets tightened heading tracking from the theme — the
     // Inter default (and most text families) reads loose at heading sizes.
+    // -0.05em was matched visually against the old Inter Tight default.
     expect(entry).toContain(`font-family: var(--font-display);
-    letter-spacing: -0.025em;`);
+    letter-spacing: -0.05em;`);
   });
 
   it("routes font tokens through overridable indirection variables", () => {
