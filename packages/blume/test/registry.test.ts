@@ -65,7 +65,10 @@ describe("eject", () => {
     // and the hosted MCP server.
     await writeFiles(root, {
       "blume.config.ts": `export default {
-        ai: { ask: { enabled: true }, mcp: { enabled: true } },
+        ai: {
+          ask: { enabled: true, instructions: "Answer in pirate speak." },
+          mcp: { enabled: true },
+        },
         deployment: { site: "https://example.com" },
         openapi: { enabled: true, renderer: "scalar", spec: "openapi.json" },
         search: { mixedbread: { storeId: "store-1" }, provider: "mixedbread" },
@@ -108,6 +111,11 @@ describe("eject", () => {
     // Feature-gated endpoints: Ask AI, OG images, mixedbread search, the RSS
     // feed, and the OpenAPI reference page.
     expect(has("src/pages/api/ask.ts")).toBe(true);
+    // The custom `ai.ask.instructions` survive ejection in the endpoint's
+    // system prompt (they were previously dropped on this path).
+    expect(readFileSync(join(root, "src/pages/api/ask.ts"), "utf-8")).toContain(
+      "Answer in pirate speak."
+    );
     expect(has("src/pages/og/[...slug].png.ts")).toBe(true);
     expect(has("src/pages/api/search.ts")).toBe(true);
     expect(has("src/pages/[section]/rss.xml.ts")).toBe(true);
