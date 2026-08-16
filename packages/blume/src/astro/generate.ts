@@ -1624,6 +1624,11 @@ export const generateRuntime = async (
   // private and filtered out anyway, but the intent is the user's pages.
   const ogRoutes = customOgRoutes(pages, config.title, config.seo.og.titles);
 
+  // Whether the generated `/changelog` index exists — shared by the OG endpoint
+  // (which adds the index's own card) and the page write below. Computed here,
+  // before the MCP discovery pages are appended, on the user's own pages.
+  const changelogIndex = hasGeneratedChangelog(project, pages);
+
   // The hosted MCP server. The `.well-known` discovery docs are injected as
   // prerendered routes alongside user pages; the server endpoint itself is a
   // normal (server-rendered) page written by `writeMcpFiles`.
@@ -1780,12 +1785,12 @@ export const generateRuntime = async (
   if (config.seo.og.enabled) {
     await write(
       join(srcDir, "pages", "og", "[...slug].png.ts"),
-      ogEndpointTemplate(ogRoutes, projectOgFonts(project))
+      ogEndpointTemplate(ogRoutes, projectOgFonts(project), changelogIndex)
     );
   }
 
   // Changelog index (`/changelog`), rendered through the Update timeline layout.
-  if (hasGeneratedChangelog(project, pages)) {
+  if (changelogIndex) {
     await write(
       join(srcDir, "pages", "changelog.astro"),
       changelogIndexTemplate({
@@ -1906,7 +1911,7 @@ export const generateRuntime = async (
     ...pages.map((page) => page.pattern),
     ...referenceRoutes(config),
   ]);
-  if (hasGeneratedChangelog(project, pages)) {
+  if (changelogIndex) {
     navTargetRoutes.add("/changelog");
   }
   // Curated `search.popular` icons live outside the navigation model, so they

@@ -2,6 +2,8 @@ import { execFileSync } from "node:child_process";
 
 import { relative } from "pathe";
 
+import type { Diagnostic } from "./types.ts";
+
 /** Normalized form of the `lastModified` config. */
 export interface ResolvedLastModified {
   enabled: boolean;
@@ -94,4 +96,51 @@ export const gitLastModifiedTimes = (
   } catch {
     return new Map();
   }
+};
+
+/**
+ * Whether the repository containing `root` is a shallow clone. Returns false
+ * when git is unavailable or the project isn't a repo — those cases already
+ * yield no dates at all, and the shallow warning would only mislead.
+ */
+export const isShallowGitRepository = (root: string): boolean => {
+  try {
+    return (
+      execFileSync(
+        // oxlint-disable-next-line sonarjs/no-os-command-from-path -- git is a required dev-tool dependency resolved from PATH
+        "git",
+        ["-C", root, "rev-parse", "--is-shallow-repository"],
+        // stderr silenced: outside a repository the probe fails by design.
+        { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }
+      ).trim() === "true"
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * A warning for git-derived dates silently missing because the build ran in a
+ * shallow clone — the default on Vercel and `actions/checkout`, where `git log`
+ * only sees the last few commits, so most pages get no date and the sitemap's
+ * `<lastmod>` / "Last updated" stamps quietly disappear in production while
+ * working locally. Empty when every page got a date or the clone isn't
+ * shallow.
+ */
+export const lastModifiedShallowWarning = (
+  root: string,
+  undatedCount: number
+): Diagnostic[] => {
+  if (undatedCount === 0 || !isShallowGitRepository(root)) {
+    return [];
+  }
+  return [
+    {
+      code: "BLUME_SHALLOW_GIT_HISTORY",
+      message: `lastModified is on, but this build runs in a shallow git clone, so ${undatedCount} page(s) have no git-derived date — their sitemap <lastmod> and "Last updated" stamps are omitted.`,
+      severity: "warning",
+      suggestion:
+        "Fetch full history in CI: set the VERCEL_DEEP_CLONE=true environment variable on Vercel, or fetch-depth: 0 for actions/checkout.",
+    },
+  ];
 };

@@ -8,6 +8,8 @@ import { dirname, join } from "pathe";
 
 import {
   gitLastModifiedTimes,
+  isShallowGitRepository,
+  lastModifiedShallowWarning,
   parseGitLog,
   resolveLastModifiedConfig,
 } from "../src/core/last-modified.ts";
@@ -203,5 +205,66 @@ describe("gitLastModifiedTimes", () => {
     // An empty pathspec list would otherwise log the whole repository.
     const root = await makeRepoDir();
     expect(gitLastModifiedTimes(root, [], []).size).toBe(0);
+  });
+});
+
+describe("shallow clone detection", () => {
+  const dirs: string[] = [];
+
+  const makeRepoDir = async (): Promise<string> => {
+    const root = realpathSync(await mkdtemp(join(tmpdir(), "blume-shallow-")));
+    dirs.push(root);
+    return root;
+  };
+
+  // A full fixture repo plus a `--depth 1` clone of it. The `file://` URL is
+  // load-bearing: a plain-path local clone ignores `--depth` and stays full.
+  const makeShallowPair = async (): Promise<{
+    full: string;
+    shallow: string;
+  }> => {
+    const full = await makeRepoDir();
+    await writeFile(join(full, "index.md"), "# Home\n");
+    initRepo(full);
+    runGit(full, ["add", "-A"]);
+    runGit(full, ["-c", "commit.gpgsign=false", "commit", "-m", "one"]);
+    const shallow = join(await makeRepoDir(), "clone");
+    runGit(dirname(shallow), [
+      "clone",
+      "--depth",
+      "1",
+      `file://${full}`,
+      shallow,
+    ]);
+    return { full, shallow };
+  };
+
+  afterAll(async () => {
+    await Promise.all(
+      dirs.map((dir) => rm(dir, { force: true, recursive: true }))
+    );
+  });
+
+  it("tells shallow clones apart from full ones and non-repos", async () => {
+    const { full, shallow } = await makeShallowPair();
+    expect(isShallowGitRepository(shallow)).toBe(true);
+    expect(isShallowGitRepository(full)).toBe(false);
+    // Outside any repository the answer is false — there, no dates exist at
+    // all and the shallow hint would only mislead.
+    const bare = await makeRepoDir();
+    expect(isShallowGitRepository(bare)).toBe(false);
+  });
+
+  it("warns about undated pages only in a shallow clone", async () => {
+    const { full, shallow } = await makeShallowPair();
+    const warnings = lastModifiedShallowWarning(shallow, 3);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.code).toBe("BLUME_SHALLOW_GIT_HISTORY");
+    expect(warnings[0]?.severity).toBe("warning");
+    expect(warnings[0]?.message).toContain("3 page(s)");
+    expect(warnings[0]?.suggestion).toContain("VERCEL_DEEP_CLONE");
+    // Every page dated, or a full clone: nothing to warn about.
+    expect(lastModifiedShallowWarning(shallow, 0)).toHaveLength(0);
+    expect(lastModifiedShallowWarning(full, 3)).toHaveLength(0);
   });
 });

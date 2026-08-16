@@ -379,6 +379,24 @@ describe("changelogIndexTemplate", () => {
     expect(out).toContain("const canonical = base ? base + basedRoute : null;");
   });
 
+  it("wires the generated OG card, gated on og.enabled", () => {
+    const out = changelogIndexTemplate({ ...exportOpts, staged: false });
+    expect(out).toContain(
+      'const ogPath = data.config.og.enabled ? withBase("/og/changelog.png") : null;'
+    );
+    expect(out).toContain("ogImage={ogImage}");
+    expect(out).toContain("ogGenerated={Boolean(ogImage)}");
+    expect(out).not.toContain("ogImage={null}");
+  });
+
+  it("leaves the site-title suffix to the layout", () => {
+    // Prefixing config.title here doubled the brand in the document title
+    // ("Acme Changelog - Acme").
+    const out = changelogIndexTemplate({ ...exportOpts, staged: false });
+    expect(out).toContain("const pageTitle = changelogTitle;");
+    expect(out).not.toContain('data.config.title + " " + changelogTitle');
+  });
+
   it("links each timeline heading to its own generated page", () => {
     const out = changelogIndexTemplate({ ...exportOpts, staged: false });
     // Route lookup keyed by the collection entry id (matches the manifest).
@@ -450,9 +468,7 @@ describe("changelogIndexTemplate", () => {
     expect(out).toContain(
       'data.ui.changelog?.description ??\n  "Product updates, new features, and fixes from every release.";'
     );
-    expect(out).toContain(
-      'const pageTitle = data.config.title + " " + changelogTitle;'
-    );
+    expect(out).toContain("const pageTitle = changelogTitle;");
     expect(out).toContain("<h1>{changelogTitle}</h1>");
     expect(out).toContain("description: changelogDescription,");
     expect(out).not.toContain("<h1>Changelog</h1>");
@@ -1596,6 +1612,16 @@ describe("static endpoint templates", () => {
       "const families: OgFontFamilies | undefined = undefined"
     );
     expect(endpoint).not.toContain("data.config.og.fonts");
+  });
+
+  it("adds the changelog index card only when the index is generated", () => {
+    const withIndex = ogEndpointTemplate([], {}, true);
+    expect(withIndex).toContain(
+      'add("changelog", data.ui.changelog?.title ?? "Changelog");'
+    );
+    // Without the generated index there is no /changelog page to card.
+    expect(ogEndpointTemplate()).not.toContain('add("changelog"');
+    expect(ogEndpointTemplate([], {}, false)).not.toContain('add("changelog"');
   });
 
   it("bakes resolved fonts and role families into the OG endpoint", () => {

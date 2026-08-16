@@ -37,10 +37,13 @@ const pageDescription =
   navigation={data.navigation}
   ogEnabled={config.og.enabled}
   ogImage="/opengraph-image.png"
+  ogImageAlt={pageTitle}
+  ogImageSize={{ height: 630, width: 1200 }}
   page={{ description: pageDescription, route: "/", title: pageTitle }}
   searchEnabled={config.search.enabled}
   site={{ description: config.description, title: config.title }}
   siteUrl={config.site}
+  structuredDataEnabled={config.structuredData}
   themeMode={config.theme.mode}
   x={config.x}
 >

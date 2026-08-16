@@ -6,6 +6,7 @@ import { buildContentGraph } from "./graph.ts";
 import { i18nDiagnostics } from "./i18n.ts";
 import {
   gitLastModifiedTimes,
+  lastModifiedShallowWarning,
   resolveLastModifiedConfig,
 } from "./last-modified.ts";
 import { buildManifest } from "./manifest.ts";
@@ -294,6 +295,7 @@ export const scanProject = async (
   // (which shares these page objects) picks them up. Frontmatter always wins;
   // git applies to filesystem entries, other sources supply dates on the entry.
   const lastModified = resolveLastModifiedConfig(config.lastModified);
+  const lastModifiedWarnings: Diagnostic[] = [];
   if (lastModified.enabled && lastModified.source === "git") {
     const fsPaths = pages
       .map((page) => page.sourcePath)
@@ -310,6 +312,14 @@ export const scanProject = async (
         page.lastModified = gitTimes.get(page.sourcePath);
       }
     }
+    // A shallow CI clone (Vercel, actions/checkout) silently drops most dates;
+    // surface that instead of letting production diverge from local builds.
+    const undated = pages.filter(
+      (page) => page.sourcePath && !page.lastModified
+    ).length;
+    lastModifiedWarnings.push(
+      ...lastModifiedShallowWarning(context.root, undated)
+    );
   }
 
   const graph = buildContentGraph(pages, {
@@ -339,6 +349,7 @@ export const scanProject = async (
       ...graph.diagnostics,
       ...i18nWarnings,
       ...versionWarnings,
+      ...lastModifiedWarnings,
     ],
     droppedPages,
     graph,
