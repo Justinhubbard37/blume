@@ -17,9 +17,23 @@ const META_FILES = [
   "**/meta.$.mjs",
 ];
 
+/**
+ * A meta module's default export before validation: `folderMetaSchema` parses
+ * it only after any factory is resolved, so it carries the loader's raw type.
+ */
+type MetaModuleExport = Awaited<
+  ReturnType<ReturnType<typeof createModuleLoader>>
+>;
+
+/** A factory-style meta module default-exports a function returning the meta. */
+const isMetaFactory = (
+  mod: MetaModuleExport
+): mod is () => MetaModuleExport | Promise<MetaModuleExport> =>
+  typeof mod === "function";
+
 /** Resolve a meta module's default export, calling it if it is a factory. */
-const resolveMeta = async (mod: unknown): Promise<unknown> =>
-  typeof mod === "function" ? await (mod as () => unknown)() : mod;
+const resolveMeta = async (mod: MetaModuleExport) =>
+  isMetaFactory(mod) ? await mod() : mod;
 
 /** A filesystem content source to scan for folder meta: its on-disk root and
  * optional route prefix. The prefix is folded into every key so meta lines up
@@ -75,8 +89,9 @@ export const discoverFolderMeta = async (
   shared: Map<string, FolderMeta>;
   diagnostics: Diagnostic[];
 }> => {
-  const list: FolderMetaSource[] =
-    typeof sources === "string" ? [{ root: sources }] : sources;
+  const list: FolderMetaSource[] = Array.isArray(sources)
+    ? sources
+    : [{ root: sources }];
   const localeDirs = new Set(options.localeDirs);
   const versionDirs = new Set(options.versionDirs);
 
@@ -112,6 +127,8 @@ export const discoverFolderMeta = async (
                 value: await resolveMeta(await load(file)),
               };
             } catch (error) {
+              // SAFETY: jiti surfaces load/evaluate failures as Error
+              // instances, and only `message` is read downstream.
               return { error: error as Error, file, ok: false };
             }
           }

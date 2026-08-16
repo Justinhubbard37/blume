@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { blumeConfigSchema } from "../src/core/schema.ts";
+import type { BlumeConfigInput } from "../src/core/schema.ts";
 import {
   examplesEntryTemplate,
   tailwindEntryTemplate,
@@ -19,7 +20,7 @@ import {
   resolveRadius,
 } from "../src/theme/palette.ts";
 
-const themeOf = (over: Record<string, unknown>) =>
+const themeOf = (over: BlumeConfigInput["theme"]) =>
   blumeConfigSchema.parse({ theme: over }).theme;
 
 describe("resolveAccent", () => {
@@ -423,9 +424,14 @@ describe("configuredCssVars", () => {
   });
 });
 
+/** A theme whose `fonts` was never set — what the builders see in that case. */
+interface FontlessTheme {
+  fonts?: FontsConfig;
+}
+
 describe("font builders without a fonts config", () => {
   // An unset `theme.fonts` arrives as undefined; all three builders no-op.
-  const absent: { fonts?: FontsConfig } = {};
+  const absent: FontlessTheme = {};
   it("returns no entries, css, or preload vars when fonts is undefined", () => {
     expect(buildFontEntries(absent.fonts)).toStrictEqual([]);
     expect(buildFontsCss(absent.fonts)).toBe("");

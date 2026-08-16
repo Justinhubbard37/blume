@@ -135,10 +135,13 @@ const ensureGroup = (
   return group;
 };
 
-const pageOrder = (
-  page: PageRecord,
-  filename: string
-): { order: number; orderIsAuthored: boolean } => {
+interface PageOrder {
+  order: number;
+  /** Whether the order came from the author (frontmatter or a rank prefix). */
+  orderIsAuthored: boolean;
+}
+
+const pageOrder = (page: PageRecord, filename: string): PageOrder => {
   if (page.meta.sidebar.order !== undefined) {
     return { order: page.meta.sidebar.order, orderIsAuthored: true };
   }
@@ -623,6 +626,10 @@ const routeForRef = (
   return byRoute.get(normalized)?.route ?? withBasePath(basePath, normalized);
 };
 
+/** An explicit-config sidebar item written as a bare page-ref string. */
+const isPageRef = (item: SidebarItemConfig): item is string =>
+  typeof item === "string";
+
 /**
  * Convert one non-group explicit-config sidebar item (string ref, `root`, or
  * `href`) to a nav node, or null to skip. Group items (`item.items`) are handled
@@ -633,7 +640,7 @@ const configItemToNode = (
   byRoute: Map<string, PageRecord>,
   basePath: string
 ): NavNode | null => {
-  if (typeof item === "string") {
+  if (isPageRef(item)) {
     const page = byRoute.get(normalizeRef(item));
     if (!page) {
       return null;
@@ -686,7 +693,7 @@ const buildConfigSidebar = (
 ): NavNode[] => {
   const nodes: NavNode[] = [];
   for (const item of items) {
-    if (typeof item !== "string" && item.items) {
+    if (!isPageRef(item) && item.items) {
       nodes.push({
         badge: item.badge,
         children: buildConfigSidebar(item.items, byRoute, display, basePath),
@@ -758,6 +765,12 @@ const withTabHrefs = (tabs: NavTab[], sidebar: NavNode[]): NavTab[] =>
  * pass through). With no base this is a pure pass-through — the arrays keep
  * their exact authored shape.
  */
+interface NavChrome {
+  featured: FeaturedLink[];
+  selectors: NavSelector[];
+  tabs: NavTab[];
+}
+
 const rebaseNavChrome = (
   basePath: string,
   options: {
@@ -765,11 +778,7 @@ const rebaseNavChrome = (
     selectors?: NavSelector[];
     tabs?: NavTab[];
   }
-): {
-  featured: FeaturedLink[];
-  selectors: NavSelector[];
-  tabs: NavTab[];
-} => {
+): NavChrome => {
   const featured = options.featured ?? [];
   const selectors = options.selectors ?? [];
   const tabs = options.tabs ?? [];
@@ -789,12 +798,17 @@ const rebaseNavChrome = (
       ...selector,
       items: selector.items.map(rebasePath),
     })),
-    tabs: tabs.map((tab) => ({
-      ...tab,
-      ...(tab.href ? { href: withBasePath(basePath, tab.href) } : {}),
-      items: tab.items?.map(rebasePath),
-      path: withBasePath(basePath, tab.path),
-    })),
+    tabs: tabs.map((tab) => {
+      const rebased: NavTab = {
+        ...tab,
+        items: tab.items?.map(rebasePath),
+        path: withBasePath(basePath, tab.path),
+      };
+      if (tab.href) {
+        rebased.href = withBasePath(basePath, tab.href);
+      }
+      return rebased;
+    }),
   };
 };
 

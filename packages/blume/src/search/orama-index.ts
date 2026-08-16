@@ -1,5 +1,10 @@
 import { create, insertMultiple, search } from "@orama/orama";
-import type { AnyOrama, Tokenizer } from "@orama/orama";
+import type {
+  AnyOrama,
+  EnumArrComparisonOperator,
+  EnumComparisonOperator,
+  Tokenizer,
+} from "@orama/orama";
 
 /**
  * The minimal document shape both the client-side search dialog and the
@@ -147,12 +152,20 @@ const addBigrams = (run: string, tokens: Set<string>): void => {
  * either way — whether they stand between segments, as 「クーリング・オフ」
  * does, or inside one.
  */
+/**
+ * `Intl.Segmenter` is missing on some runtimes even though the lib type
+ * declares it, so the constructor's presence is probed before use.
+ */
+const hasSegmenter = (
+  segmenter: typeof Intl.Segmenter | undefined
+): segmenter is typeof Intl.Segmenter => typeof segmenter === "function";
+
 const segmentingTokenizer = (locale?: string): Tokenizer | undefined => {
   const language = locale?.toLowerCase().split(/[-_]/u)[0] ?? "";
   if (!SEGMENTED_LANGUAGES.has(language)) {
     return;
   }
-  if (typeof Intl.Segmenter !== "function") {
+  if (!hasSegmenter(Intl.Segmenter)) {
     return;
   }
   const segmenter = new Intl.Segmenter(language, { granularity: "word" });
@@ -223,10 +236,9 @@ export const buildOramaIndex = async (
   locale?: string
 ): Promise<AnyOrama> => {
   const tokenizer = segmentingTokenizer(locale);
-  const db = create({
-    schema: SCHEMA,
-    ...(tokenizer ? { components: { tokenizer } } : {}),
-  });
+  const db = tokenizer
+    ? create({ components: { tokenizer }, schema: SCHEMA })
+    : create({ schema: SCHEMA });
   await insertMultiple(
     db,
     documents.map((doc) =>
@@ -258,6 +270,18 @@ export interface OramaQueryFilters {
 }
 
 /**
+ * The exact-match `where` clause the filters compile to. Orama types `where`
+ * openly (any schema property to an operator), mirrored here by the index
+ * signature; this module only ever emits the two enum operators.
+ */
+interface OramaWhereClause {
+  [property: string]:
+    | EnumArrComparisonOperator
+    | EnumComparisonOperator
+    | undefined;
+}
+
+/**
  * Query the index, returning the matching documents (highest-ranked first).
  * `filters` narrows results by exact `where` matches on the enum fields:
  * `locale` to one language, `contentTypes` to a set of page types, `facets`
@@ -276,31 +300,38 @@ export const queryOramaIndex = async (
   filters?: OramaQueryFilters
 ): Promise<OramaDoc[]> => {
   const facetTerms = filters?.facets ? toFacetTerms(filters.facets) : [];
-  const where = {
-    ...(filters?.locale ? { locale: { eq: filters.locale } } : {}),
-    // `""` (the current docs) is a real filter value, so test for presence.
-    ...(filters?.version === undefined
-      ? {}
-      : { version: { eq: filters.version } }),
-    ...(filters?.contentTypes && filters.contentTypes.length > 0
-      ? { contentType: { in: filters.contentTypes } }
-      : {}),
-    ...(facetTerms.length > 0
-      ? { facetTerms: { containsAll: facetTerms } }
-      : {}),
-  };
-  const params = {
+  const where: OramaWhereClause = {};
+  if (filters?.locale) {
+    where.locale = { eq: filters.locale };
+  }
+  // `""` (the current docs) is a real filter value, so test for presence.
+  if (filters?.version !== undefined) {
+    where.version = { eq: filters.version };
+  }
+  if (filters?.contentTypes && filters.contentTypes.length > 0) {
+    where.contentType = { in: filters.contentTypes };
+  }
+  if (facetTerms.length > 0) {
+    where.facetTerms = { containsAll: facetTerms };
+  }
+  const unfiltered = {
     boost: BOOST,
     limit,
     properties: ["title", "description", "content"],
     term,
-    ...(Object.keys(where).length > 0 ? { where } : {}),
   };
+  const params =
+    Object.keys(where).length > 0 ? { ...unfiltered, where } : unfiltered;
   const bigrammed = BIGRAM_LANGUAGES.has(db.tokenizer?.language ?? "");
+  // The result-document generic is OramaDoc because `buildOramaIndex` is the
+  // only writer to this database and inserts OramaDoc records (plus the
+  // derived `facetTerms`).
   const strict = bigrammed
-    ? await search(db, { ...params, threshold: ALL_TOKENS })
+    ? await search<AnyOrama, OramaDoc>(db, { ...params, threshold: ALL_TOKENS })
     : undefined;
   const found =
-    strict && strict.hits.length > 0 ? strict : await search(db, params);
-  return found.hits.map((hit) => hit.document as unknown as OramaDoc);
+    strict && strict.hits.length > 0
+      ? strict
+      : await search<AnyOrama, OramaDoc>(db, params);
+  return found.hits.map((hit) => hit.document);
 };

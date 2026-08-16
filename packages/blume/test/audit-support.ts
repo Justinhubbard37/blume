@@ -80,6 +80,8 @@ interface ContextOptions {
 export const context = (options: ContextOptions = {}): AuditContext => {
   const pages = options.pages ?? [snapshot()];
   const redirects = options.redirects ?? [];
+  // SAFETY: only the config fields the checks read are populated (see above);
+  // the checks never touch the graph, manifest, or source machinery.
   const project = {
     config: {
       ai: { llmsTxt: options.llmsTxt ?? { enabled: true, openapi: true } },
@@ -97,7 +99,7 @@ export const context = (options: ContextOptions = {}): AuditContext => {
       versions: options.versions,
     },
     context: { configFile: options.configFile ?? null },
-  } as unknown as BlumeProject;
+  } as BlumeProject;
 
   const byUrl = new Map(pages.map((page) => [page.url, page]));
   return {

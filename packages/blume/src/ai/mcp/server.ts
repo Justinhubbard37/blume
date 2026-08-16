@@ -1,4 +1,5 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import type { ServerOptions } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
   CallToolRequestSchema,
@@ -33,7 +34,7 @@ const MAX_SEARCH_LIMIT = 20;
 /** Excerpt length when a page has no description. */
 const EXCERPT_LENGTH = 200;
 
-const CORS_HEADERS: Record<string, string> = {
+const CORS_HEADERS = {
   "Access-Control-Allow-Headers":
     "Content-Type, Mcp-Session-Id, Mcp-Protocol-Version",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -65,11 +66,15 @@ const contentTypesField = z.preprocess((value) => {
  * The optional facet filter `search_docs` and `list_pages` share. Only
  * string-valued entries survive; an empty `{}` means "no filter".
  */
+/** Accepts any plain object, so the string-valued entries can be sifted out. */
+const looseFacetObject = z.record(z.string(), z.unknown());
+
 const filtersField = z.preprocess((value) => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  const candidate = looseFacetObject.safeParse(value);
+  if (!candidate.success) {
     return;
   }
-  const entries = Object.entries(value).filter(
+  const entries = Object.entries(candidate.data).filter(
     (entry): entry is [string, string] => typeof entry[1] === "string"
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
@@ -78,7 +83,9 @@ const filtersField = z.preprocess((value) => {
 /** Clamped into range rather than rejected; non-numeric means the default. */
 const limitField = z.preprocess(
   (value) => {
-    const num = typeof value === "number" ? value : Number(value);
+    // `Number` is the identity on numbers, so one conversion covers both the
+    // well-typed call and a numeric string.
+    const num = Number(value);
     return Number.isFinite(num)
       ? Math.min(Math.max(Math.trunc(num), 1), MAX_SEARCH_LIMIT)
       : undefined;
@@ -93,15 +100,16 @@ const limitField = z.preprocess(
 
 /** A required text field; a missing or non-string value coerces to "". */
 const textField = (description: string) =>
-  z.preprocess(
-    (value) => (typeof value === "string" ? value : ""),
-    z.string().describe(description)
-  );
+  z.preprocess((value) => {
+    const parsed = z.string().safeParse(value);
+    return parsed.success ? parsed.data : "";
+  }, z.string().describe(description));
 
 /** An optional trimmed text field; blank or non-string means "absent". */
 const optionalTextField = (description: string) =>
   z.preprocess((value) => {
-    const trimmed = typeof value === "string" ? value.trim() : "";
+    const parsed = z.string().safeParse(value);
+    const trimmed = parsed.success ? parsed.data.trim() : "";
     return trimmed || undefined;
   }, z.string().optional().describe(description));
 
@@ -150,7 +158,7 @@ const TOOL_INPUTS = {
  * runtime strips unknown keys rather than rejecting them, and the advertised
  * schema shouldn't promise stricter validation than the server performs.
  */
-const inputSchemaFor = (schema: z.ZodType): Record<string, unknown> => {
+const inputSchemaFor = (schema: z.ZodType) => {
   const {
     $schema: _dialect,
     additionalProperties: _closed,
@@ -164,11 +172,36 @@ const TOOL_DEFINITIONS = MCP_TOOLS.map((tool) => ({
   annotations: tool.annotations,
   description: tool.description,
   inputSchema: inputSchemaFor(
+    // SAFETY: TOOL_INPUTS declares a schema for every MCP_TOOLS name; the two
+    // lists are maintained together so names and descriptions never drift.
     TOOL_INPUTS[tool.name as keyof typeof TOOL_INPUTS]
   ),
   name: tool.name,
   title: tool.title,
 }));
+
+/** One `search_docs` result entry; `version` only appears on versioned sites. */
+interface SearchHitPayload {
+  contentType: string | undefined;
+  excerpt: string;
+  facets: Record<string, string> | undefined;
+  route: string;
+  title: string;
+  url: string;
+  version?: string;
+}
+
+/** One `list_pages` entry; `version` only appears on versioned sites. */
+interface PageListingPayload {
+  contentType: string;
+  description: string | undefined;
+  facets: Record<string, string> | undefined;
+  lastModified: string | null;
+  route: string;
+  title: string;
+  url: string;
+  version?: string;
+}
 
 /** Whether a page's facet values satisfy every requested filter entry. */
 const matchesFacets = (
@@ -265,10 +298,11 @@ const excerptFor = (doc: OramaDoc): string => {
   return doc.content.length > EXCERPT_LENGTH ? `${head}…` : head;
 };
 
-const text = (value: string, isError = false) => ({
-  content: [{ text: value, type: "text" as const }],
-  ...(isError ? { isError: true } : {}),
-});
+/** A tool call's text result, marked as an error when `isError` is set. */
+const text = (value: string, isError = false) => {
+  const content = [{ text: value, type: "text" as const }];
+  return isError ? { content, isError: true } : { content };
+};
 
 /** Lazily builds the Orama index over a snapshot's documents, once. */
 export type OramaIndexProvider = () => Promise<
@@ -296,12 +330,12 @@ export const buildServer = (
   data: McpData,
   index: OramaIndexProvider
 ): Server => {
+  const serverOptions: ServerOptions = data.instructions
+    ? { capabilities: { tools: {} }, instructions: data.instructions }
+    : { capabilities: { tools: {} } };
   const server = new Server(
     { name: data.name, version: data.version },
-    {
-      capabilities: { tools: {} },
-      ...(data.instructions ? { instructions: data.instructions } : {}),
-    }
+    serverOptions
   );
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({
@@ -327,15 +361,20 @@ export const buildServer = (
       );
       // `route` is the key `get_page` takes (the tool descriptions promise
       // it); `url` is where the page is served.
-      const results = hits.map((doc: OramaDoc) => ({
-        contentType: doc.contentType,
-        excerpt: excerptFor(doc),
-        facets: doc.facets,
-        route: doc.route,
-        title: doc.title,
-        url: urlFor(doc.route, data),
-        ...(data.archivedVersions ? { version: doc.version ?? "" } : {}),
-      }));
+      const results = hits.map((doc: OramaDoc) => {
+        const hit: SearchHitPayload = {
+          contentType: doc.contentType,
+          excerpt: excerptFor(doc),
+          facets: doc.facets,
+          route: doc.route,
+          title: doc.title,
+          url: urlFor(doc.route, data),
+        };
+        if (data.archivedVersions) {
+          hit.version = doc.version ?? "";
+        }
+        return hit;
+      });
       return text(JSON.stringify(results, null, 2));
     }
 
@@ -365,16 +404,21 @@ export const buildServer = (
       );
       return text(
         JSON.stringify(
-          routes.map((route) => ({
-            contentType: route.contentType,
-            description: route.description,
-            facets: route.facets,
-            lastModified: route.lastModified,
-            route: route.route,
-            title: route.title,
-            url: urlFor(route.route, data),
-            ...(data.archivedVersions ? { version: route.version } : {}),
-          })),
+          routes.map((route) => {
+            const listing: PageListingPayload = {
+              contentType: route.contentType,
+              description: route.description,
+              facets: route.facets,
+              lastModified: route.lastModified,
+              route: route.route,
+              title: route.title,
+              url: urlFor(route.route, data),
+            };
+            if (data.archivedVersions) {
+              listing.version = route.version;
+            }
+            return listing;
+          }),
           null,
           2
         )

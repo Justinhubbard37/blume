@@ -23,6 +23,14 @@ import type { StandardSchema } from "./standard-schema.ts";
 // Shared primitives
 // ---------------------------------------------------------------------------
 
+// `typeof` checks live in named predicates (the form the oxlint anti-slop
+// config sanctions); generic so each site keeps its own union narrowing.
+const isString = <Value>(value: Value): value is Value & string =>
+  typeof value === "string";
+
+const isBoolean = <Value>(value: Value): value is Value & boolean =>
+  typeof value === "boolean";
+
 /** Icon inputs in serializable contexts (frontmatter, meta files). */
 const iconName = z.string().min(1);
 
@@ -157,6 +165,11 @@ export const pageMetaSchema = pageMetaBaseSchema;
 export type PageMeta = z.infer<typeof pageMetaBaseSchema>;
 export type PageMetaInput = z.input<typeof pageMetaBaseSchema>;
 
+/** Built-in page frontmatter keys; custom keys must never redeclare one. */
+const BUILT_IN_PAGE_META_KEYS = new Set<string>(
+  pageMetaBaseSchema.keyof().options
+);
+
 /**
  * A map of custom frontmatter keys to user-supplied validation schemas,
  * consumed through the Standard Schema `~standard` contract — never Zod's own
@@ -178,7 +191,7 @@ const customKeySchemaRecord = (where: string) =>
     .default({})
     .superRefine((value, ctx) => {
       for (const key of Object.keys(value)) {
-        if (Object.hasOwn(pageMetaBaseSchema.shape, key)) {
+        if (BUILT_IN_PAGE_META_KEYS.has(key)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `"${key}" is a built-in frontmatter field and cannot be redeclared via ${where}.`,
@@ -363,11 +376,13 @@ const githubReleasesSourceSchema = z.strictObject({
  */
 const customSourceSchema = z.object({
   source: z.custom<ContentSource>(
-    (val) =>
+    (val): val is ContentSource =>
       typeof val === "object" &&
       val !== null &&
-      typeof (val as { load?: unknown }).load === "function" &&
-      typeof (val as { name?: unknown }).name === "string",
+      "load" in val &&
+      typeof val.load === "function" &&
+      "name" in val &&
+      typeof val.name === "string",
     { message: "custom source must be a ContentSource (with name + load)" }
   ),
   type: z.literal("custom"),
@@ -566,7 +581,7 @@ const localFontSchema = z.strictObject({
 const fontValueSchema = z
   .union([z.string(), remoteFontSchema, localFontSchema])
   .superRefine((value, ctx) => {
-    if (typeof value === "string" && !isFontSlug(value)) {
+    if (isString(value) && !isFontSlug(value)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `Unknown font "${value}". Supported fonts: ${FONT_SLUGS.join(", ")}. For any other family, use the object form: { name: "..." } (remote provider) or { name: "...", variants: [...] } (local files).`,
@@ -589,7 +604,7 @@ const perModeValueSchema = z
   ])
   .optional()
   .transform((value) =>
-    typeof value === "string" ? { dark: value, light: value } : value
+    isString(value) ? { dark: value, light: value } : value
   );
 
 const themeConfigSchema = z.strictObject({
@@ -600,7 +615,7 @@ const themeConfigSchema = z.strictObject({
     ])
     .default("blue")
     .transform((value) =>
-      typeof value === "string" ? { dark: value, light: value } : value
+      isString(value) ? { dark: value, light: value } : value
     ),
   action: z.string().optional(),
   background: perModeValueSchema,
@@ -690,6 +705,8 @@ const searchConfigSchema = z
   .superRefine((value, ctx) => {
     // Hosted providers can't work without their credentials; flag a missing
     // block with a path so the diagnostic points at `search.<provider>`.
+    // SAFETY: providers without a config block (orama, pagefind, …) miss the
+    // map and read undefined, which the `field &&` guard below absorbs.
     const field =
       PROVIDER_CONFIG_KEY[value.provider as keyof typeof PROVIDER_CONFIG_KEY];
     if (field && !value[field]) {
@@ -726,7 +743,7 @@ const PRIVATE_JWK_PARAMS = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"];
 const publicJwkSchema = z
   .record(z.string(), z.unknown())
   .superRefine((jwk, ctx) => {
-    if (typeof jwk.kty !== "string" || jwk.kty.length === 0) {
+    if (!isString(jwk.kty) || jwk.kty.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'A JWK must declare its key type ("kty").',
@@ -838,7 +855,7 @@ const aiConfigSchema = z.strictObject({
     ])
     .default(true)
     .transform((value) =>
-      typeof value === "boolean" ? { enabled: value, openapi: true } : value
+      isBoolean(value) ? { enabled: value, openapi: true } : value
     ),
   // Serializers for the agent-facing Markdown downlevel (the `.md` mirror,
   // llms-full.txt, MCP get_page), keyed by JSX name. Functions live here —
@@ -850,9 +867,12 @@ const aiConfigSchema = z.strictObject({
   markdownComponents: z
     .record(
       z.string(),
-      z.custom<ComponentMarkdown>((value) => typeof value === "function", {
-        message: "Expected a serializer function.",
-      })
+      z.custom<ComponentMarkdown>(
+        (value): value is ComponentMarkdown => typeof value === "function",
+        {
+          message: "Expected a serializer function.",
+        }
+      )
     )
     .default({}),
   /** Expose the docs as an MCP server for connecting agents. */
@@ -941,7 +961,7 @@ const exportConfigSchema = z
     }),
   ])
   .transform((value) =>
-    typeof value === "boolean" ? { epub: value, pdf: value } : value
+    isBoolean(value) ? { epub: value, pdf: value } : value
   );
 
 /** A configured locale: ISO-ish code plus display metadata for the switcher. */
@@ -1318,11 +1338,22 @@ const githubConfigSchema = z.strictObject({
   repo: z.string(),
 });
 
+/** The theme fields the structural code-theme check inspects. */
+interface CodeThemeFields {
+  colors?: unknown;
+  settings?: unknown;
+  tokenColors?: unknown;
+}
+
+/** A non-null, non-array object — the floor for a theme and its `colors` map. */
+const isThemeObject = <Value>(value: Value): value is Value & CodeThemeFields =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const codeThemeSchema = z.custom<CodeTheme>((value) => {
-  if (typeof value === "string") {
+  if (isString(value)) {
     return true;
   }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isThemeObject(value)) {
     return false;
   }
   // Token rules live in `settings` (Shiki's canonical field, also the TextMate
@@ -1330,20 +1361,15 @@ const codeThemeSchema = z.custom<CodeTheme>((value) => {
   // VS Code spelling Shiki falls back to). A colors-only theme (editor fg/bg,
   // no token rules) is also valid — Shiki renders it from `colors` alone. Each
   // field present must have the right shape, and at least one must be present.
-  const theme = value as Record<string, unknown>;
   const settingsValid =
-    theme.settings === undefined || Array.isArray(theme.settings);
+    value.settings === undefined || Array.isArray(value.settings);
   const tokenColorsValid =
-    theme.tokenColors === undefined || Array.isArray(theme.tokenColors);
-  const colorsValid =
-    theme.colors === undefined ||
-    (typeof theme.colors === "object" &&
-      theme.colors !== null &&
-      !Array.isArray(theme.colors));
+    value.tokenColors === undefined || Array.isArray(value.tokenColors);
+  const colorsValid = value.colors === undefined || isThemeObject(value.colors);
   const hasContent =
-    theme.settings !== undefined ||
-    theme.tokenColors !== undefined ||
-    theme.colors !== undefined;
+    value.settings !== undefined ||
+    value.tokenColors !== undefined ||
+    value.colors !== undefined;
   return settingsValid && tokenColorsValid && colorsValid && hasContent;
 }, "Expected a Shiki theme name or custom theme object");
 
@@ -1382,7 +1408,7 @@ const examplesConfigSchema = z
     }),
   ])
   .transform((value): { css?: string; source: string } =>
-    typeof value === "string" ? { source: value } : value
+    isString(value) ? { source: value } : value
   );
 
 /**
@@ -1598,7 +1624,7 @@ const tocConfigSchema = z
   ])
   .default(true)
   .transform((value) => {
-    if (typeof value === "boolean") {
+    if (isBoolean(value)) {
       return { enabled: value, maxLevel: 3, minLevel: 2 };
     }
     return {

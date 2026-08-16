@@ -82,11 +82,11 @@ export type FontEntry =
       variants: LocalFontVariant[];
     };
 
-const FALLBACKS: Record<FontCategory, string[]> = {
+const FALLBACKS = {
   mono: ["ui-monospace", "SF Mono", "Menlo", "monospace"],
   sans: ["ui-sans-serif", "system-ui", "sans-serif"],
   serif: ["ui-serif", "Georgia", "serif"],
-};
+} satisfies Record<FontCategory, string[]>;
 
 /** Slug -> Google family + weights + fallback category. Keep keys alphabetical. */
 export const GOOGLE_FONTS = {
@@ -223,12 +223,16 @@ const SLOTS: FontSlot[] = ["display", "body", "mono"];
 const slotCategory = (slot: FontSlot): FontCategory =>
   slot === "mono" ? "mono" : "sans";
 
+/** Whether a slot value is the slug-string form (vs a custom font object). */
+const isSlugValue = (value: FontValue): value is string =>
+  typeof value === "string";
+
 /** A slot value normalized into an entry, or null for an unknown slug string. */
 const resolveFontValue = (
   slot: FontSlot,
   value: FontValue
 ): FontEntry | null => {
-  if (typeof value === "string") {
+  if (isSlugValue(value)) {
     if (!isFontSlug(value)) {
       return null;
     }
@@ -320,7 +324,7 @@ export const buildFontEntries = (fonts: FontsConfig): FontEntry[] => {
 
 /** The slug backing a slot's CSS variable, or null for an unknown slug string. */
 const slotSlug = (value: FontValue): string | null => {
-  if (typeof value === "string") {
+  if (isSlugValue(value)) {
     return isFontSlug(value) ? value : null;
   }
   return slugifyFontName(value.name);

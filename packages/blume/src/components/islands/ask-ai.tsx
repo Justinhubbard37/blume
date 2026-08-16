@@ -100,12 +100,21 @@ const Glyph = ({ path, size = 16 }: { path: string; size?: number }) => (
 const EMPTY_SUGGESTIONS: Suggestion[] = [];
 
 // The toggle shortcut accepts both ⌘I and Ctrl+I; show the right modifier per
-// platform (same detection Search.astro uses for its ⌘K hint). Guarded so the
-// island still server-renders, where `navigator` doesn't exist; the hint itself
-// only renders client-side, inside the portaled panel.
+// platform (same detection Search.astro uses for its ⌘K hint). Guarded via
+// `globalThis` so the island still server-renders where `navigator` doesn't
+// exist; the hint itself only renders client-side, inside the portaled panel.
 const IS_APPLE =
-  typeof navigator !== "undefined" &&
-  /mac|iphone|ipad|ipod/iu.test(navigator.platform);
+  globalThis.navigator !== undefined &&
+  /mac|iphone|ipad|ipod/iu.test(globalThis.navigator.platform);
+
+// Duck-typed (`closest` presence) rather than `instanceof Element`, which
+// needs a DOM global the test environment doesn't provide.
+const isElementLike = (target: EventTarget | null): target is Element => {
+  // SAFETY: the cast only names the probed surface; `closest` is verified to
+  // exist before the caller uses it.
+  const candidate = target as Partial<Element> | null;
+  return typeof candidate?.closest === "function";
+};
 
 // Ghost icon button, matching the header's theme toggle and repo link.
 const TRIGGER_CLASS =
@@ -163,6 +172,8 @@ const AskAI = ({
   // The search modal forwards its query so "Ask AI: <query>" carries straight in.
   useEffect(() => {
     const handler = (event: Event) => {
+      // SAFETY: `blume:open-ask-ai` is only ever dispatched as a CustomEvent
+      // whose optional detail carries the search query.
       const query = (event as CustomEvent<{ query?: string }>).detail?.query;
       if (query) {
         setInput(query);
@@ -190,11 +201,8 @@ const AskAI = ({
         // An Escape aimed at a modal surface stacked on top (the search
         // dialog traps focus inside itself) dismisses that surface only —
         // this window listener still fires for it, and closing the panel
-        // underneath too would eat the user's conversation view. Duck-typed
-        // (`closest` presence) rather than `instanceof Element`, which needs
-        // a DOM global the test environment doesn't provide.
-        const target = event.target as Partial<Element> | null;
-        if (typeof target?.closest === "function" && target.closest("dialog")) {
+        // underneath too would eat the user's conversation view.
+        if (isElementLike(event.target) && event.target.closest("dialog")) {
           return;
         }
         setOpen(false);
@@ -346,12 +354,12 @@ const AskAI = ({
       // The closed panel is only translated off-screen; `inert` drops its
       // buttons/textarea from the tab order and the accessibility tree.
       inert={!open}
-      className={`fixed inset-y-0 end-0 z-[60] flex w-[var(--blume-ask-width)] flex-col border-border border-s bg-background shadow-2xl transition-transform duration-200 ease-out ${
+      className={`border-border bg-background fixed inset-y-0 end-0 z-[60] flex w-[var(--blume-ask-width)] flex-col border-s shadow-2xl transition-transform duration-200 ease-out ${
         open ? "translate-x-0" : "translate-x-full rtl:-translate-x-full"
       }`}
     >
-      <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-border border-b px-4">
-        <span className="font-semibold text-foreground">{t.title}</span>
+      <header className="border-border flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4">
+        <span className="text-foreground font-semibold">{t.title}</span>
         <div className="flex items-center gap-0.5">
           <button
             aria-label={t.copy}
@@ -383,7 +391,7 @@ const AskAI = ({
       </header>
 
       <div
-        className="flex flex-1 flex-col scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent overflow-y-auto"
+        className="scrollbar-thumb-border flex flex-1 scrollbar-thin scrollbar-track-transparent flex-col overflow-y-auto"
         ref={scrollRef}
       >
         {hasMessages ? (
@@ -393,7 +401,7 @@ const AskAI = ({
             {messages.map((message, index) =>
               message.role === "user" ? (
                 <div
-                  className="max-w-[85%] self-end whitespace-pre-wrap rounded-blume bg-muted px-3 py-2 text-foreground text-sm"
+                  className="rounded-blume bg-muted text-foreground max-w-[85%] self-end px-3 py-2 text-sm whitespace-pre-wrap"
                   // oxlint-disable-next-line react/no-array-index-key -- append-only list, see above
                   key={index}
                 >
@@ -412,7 +420,7 @@ const AskAI = ({
                       }}
                     />
                   ) : (
-                    <span className="animate-pulse text-muted-foreground">
+                    <span className="text-muted-foreground animate-pulse">
                       …
                     </span>
                   )}
@@ -423,18 +431,18 @@ const AskAI = ({
         ) : (
           <div className="mt-auto flex flex-col gap-0.5 p-4">
             {suggestions.length === 0 && (
-              <p className="px-2 text-muted-foreground text-sm">{t.empty}</p>
+              <p className="text-muted-foreground px-2 text-sm">{t.empty}</p>
             )}
             {suggestions.map((suggestion) => (
               <button
-                className="flex cursor-pointer items-center gap-2.5 rounded-blume px-2 py-2 text-start text-foreground text-sm transition-colors hover:bg-muted"
+                className="rounded-blume text-foreground hover:bg-muted flex cursor-pointer items-center gap-2.5 px-2 py-2 text-start text-sm transition-colors"
                 key={suggestion.label}
                 onClick={() => runQuestion(suggestion.label)}
                 type="button"
               >
                 {suggestion.icon && (
                   <span
-                    className="shrink-0 text-muted-foreground [&_svg]:h-[18px] [&_svg]:w-[18px]"
+                    className="text-muted-foreground shrink-0 [&_svg]:h-[18px] [&_svg]:w-[18px]"
                     // oxlint-disable-next-line react/no-danger -- trusted server-resolved inline SVG glyph
                     dangerouslySetInnerHTML={{ __html: suggestion.icon }}
                   />
@@ -442,12 +450,12 @@ const AskAI = ({
                 <span>{suggestion.label}</span>
               </button>
             ))}
-            <p className="mt-3 flex items-center gap-1.5 px-2 text-muted-foreground text-sm">
+            <p className="text-muted-foreground mt-3 flex items-center gap-1.5 px-2 text-sm">
               {t.tip}
-              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-sans text-xs">
+              <kbd className="border-border bg-muted rounded border px-1.5 py-0.5 font-sans text-xs">
                 {IS_APPLE ? "⌘" : "Ctrl"}
               </kbd>
-              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-sans text-xs">
+              <kbd className="border-border bg-muted rounded border px-1.5 py-0.5 font-sans text-xs">
                 I
               </kbd>
             </p>
@@ -456,12 +464,12 @@ const AskAI = ({
       </div>
 
       <form
-        className="relative shrink-0 border-border border-t"
+        className="border-border relative shrink-0 border-t"
         onSubmit={onSubmit}
       >
         <textarea
           aria-label={t.label}
-          className="max-h-48 min-h-[5rem] w-full resize-none bg-transparent px-4 py-3.5 pe-14 text-foreground text-sm pointer-coarse:text-base outline-none placeholder:text-muted-foreground"
+          className="text-foreground placeholder:text-muted-foreground max-h-48 min-h-[5rem] w-full resize-none bg-transparent px-4 py-3.5 pe-14 text-sm outline-none pointer-coarse:text-base"
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={onInputKeyDown}
           placeholder={t.placeholder}
@@ -471,7 +479,7 @@ const AskAI = ({
         />
         <button
           aria-label={t.send}
-          className="absolute end-3 bottom-3 inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-blume bg-foreground text-background transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-blume bg-foreground text-background absolute end-3 bottom-3 inline-flex h-8 w-8 cursor-pointer items-center justify-center transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
           disabled={busy || input.trim().length === 0}
           type="submit"
         >

@@ -93,49 +93,56 @@ export const buildMcpData = async (project: BlumeProject): Promise<McpData> => {
     }
     const page = pageById.get(route.id);
     const facets = page ? pageFacets(page, config) : undefined;
-    routes.push({
+    const entry: McpRoute = {
       contentType: route.contentType,
       description: page?.description,
-      ...(facets ? { facets } : {}),
       indexable: route.indexable,
       lastModified: route.lastModified ?? null,
       locale: route.locale,
       route: route.path,
       title: route.title,
       version: route.version,
-    });
+    };
+    if (facets) {
+      entry.facets = facets;
+    }
+    routes.push(entry);
   }
 
-  return {
-    ...(config.versions
-      ? {
-          archivedVersions: config.versions.archived.map(
-            (version) => version.id
-          ),
-        }
-      : {}),
+  const data: McpData = {
     base: normalizeBasePath(config.deployment.base),
     defaultLocale: config.i18n?.defaultLocale,
-    documents: documents.map((doc) => ({
-      content: doc.content,
-      contentType: doc.contentType,
-      description: doc.description,
-      ...(doc.facets ? { facets: doc.facets } : {}),
-      locale: doc.locale,
-      route: doc.route,
-      title: doc.title,
-      version: doc.version,
-    })),
+    documents: documents.map((doc) => {
+      const document: OramaDoc = {
+        content: doc.content,
+        contentType: doc.contentType,
+        description: doc.description,
+        locale: doc.locale,
+        route: doc.route,
+        title: doc.title,
+        version: doc.version,
+      };
+      if (doc.facets) {
+        document.facets = doc.facets;
+      }
+      return document;
+    }),
     instructions: config.ai.mcp.instructions,
     name: config.ai.mcp.name ?? config.title,
     navigation: graph.navigation,
-    ...(config.i18n ? { navigationByLocale: graph.navigationByLocale } : {}),
-    ...(config.versions
-      ? { navigationByVersion: graph.navigationByVersion }
-      : {}),
     pages,
     routes,
     site: config.deployment.site ?? null,
     version: manifest.blumeVersion,
   };
+  if (config.versions) {
+    data.archivedVersions = config.versions.archived.map(
+      (version) => version.id
+    );
+    data.navigationByVersion = graph.navigationByVersion;
+  }
+  if (config.i18n) {
+    data.navigationByLocale = graph.navigationByLocale;
+  }
+  return data;
 };

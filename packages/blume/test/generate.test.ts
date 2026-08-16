@@ -759,7 +759,7 @@ describe("buildRuntimeData", () => {
   });
 });
 
-const KITCHEN_SINK: Record<string, string> = {
+const KITCHEN_SINK = {
   "blume.config.ts": `export default {
   ai: { ask: { enabled: true }, mcp: { enabled: true } },
   deployment: { site: "https://example.com" },
@@ -1342,7 +1342,10 @@ describe("ensureDepsLink version-less conflict", () => {
 });
 
 describe("resolveReactCompiler", () => {
+  // SAFETY: resolveReactCompiler reads only `react.compiler`, so this partial
+  // config is all it needs.
   const compilerOn = { react: { compiler: true } } as ResolvedConfig;
+  // SAFETY: same partial-config shortcut as `compilerOn`.
   const compilerOff = { react: { compiler: false } } as ResolvedConfig;
 
   it("resolves Blume's shipped babel plugin as an absolute path", () => {
@@ -1365,6 +1368,8 @@ describe("resolveReactCompiler", () => {
 });
 
 describe("reactCompilerWarnings", () => {
+  // SAFETY: reactCompilerWarnings reads only `react.compiler`, so this partial
+  // config is all it needs.
   const compilerOn = { react: { compiler: true } } as ResolvedConfig;
 
   it("warns when the compiler was requested but its plugin is missing", () => {
@@ -1414,8 +1419,12 @@ describe("diagnosticWarning", () => {
 
 // A parsed (schema-defaulted) `ai.ask` block, the shape askProviderWarnings
 // receives from the resolved config.
-const parsedAsk = (ask: Record<string, unknown>) =>
-  blumeConfigSchema.parse({ ai: { ask } }).ai.ask;
+const parsedAsk = (ask: {
+  baseUrl?: string;
+  enabled: boolean;
+  endpoint?: string;
+  provider?: string;
+}) => blumeConfigSchema.parse({ ai: { ask } }).ai.ask;
 
 describe("generateRuntime preflight and write failures", () => {
   it("warns when the search provider's SDK isn't installed anywhere", () => {

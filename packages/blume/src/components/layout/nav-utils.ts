@@ -209,10 +209,7 @@ export const sidebarForRoute = (
 };
 
 /** Resolve previous/next pages around the current route. */
-export const getPagination = (
-  flat: FlatPage[],
-  route: string
-): { prev: FlatPage | null; next: FlatPage | null } => {
+export const getPagination = (flat: FlatPage[], route: string) => {
   const index = flat.findIndex((page) => page.route === route);
   if (index === -1) {
     return { next: null, prev: null };

@@ -46,9 +46,39 @@ import { buildOramaIndex, queryOramaIndex } from "../src/search/orama-index.ts";
 const buildSitemap = (project: BlumeProject): string | null =>
   buildSitemapFiles(project)?.[0]?.xml ?? null;
 
+/** The arguments the MCP tool calls in these tests pass. */
+interface ToolArgs {
+  locale?: string;
+  query?: string;
+  version?: string;
+}
+
+/** Overrides spread into the `versions` block of the parsed config input. */
+interface VersionsOverrides {
+  archived?:
+    | {
+        banner?: boolean | string;
+        canonical?: "latest" | "self";
+        id: string;
+        label?: string;
+        noindex?: boolean;
+      }[]
+    | undefined;
+  current?: { badge?: string; label?: string };
+}
+
+/** Overrides merged into the top level of the parsed config input. */
+interface TopLevelOverrides {
+  i18n?: {
+    defaultLocale: string;
+    locales: { code: string; label: string }[];
+    parser?: string;
+  };
+}
+
 const config = (
-  over: Record<string, unknown> = {},
-  topLevel: Record<string, unknown> = {}
+  over: VersionsOverrides = {},
+  topLevel: TopLevelOverrides = {}
 ): ResolvedConfig =>
   blumeConfigSchema.parse({
     ...topLevel,
@@ -59,9 +89,7 @@ const config = (
     },
   });
 
-const versionsOf = (
-  over: Record<string, unknown> = {}
-): ResolvedVersionsConfig => {
+const versionsOf = (over: VersionsOverrides = {}): ResolvedVersionsConfig => {
   const value = config(over).versions;
   if (!value) {
     throw new Error("expected versions");
@@ -69,6 +97,8 @@ const versionsOf = (
   return value;
 };
 
+// SAFETY: the version helpers under test read only `source.name` and
+// `source.ref` from a page record.
 const pageWithRef = (ref: string): PageRecord =>
   ({ source: { name: "filesystem", ref } }) as PageRecord;
 
@@ -595,6 +625,8 @@ const manifestIn = async (contentRoot: string, resolved: ResolvedConfig) => {
   const graph = await graphIn(contentRoot, resolved);
   return buildManifest({
     config: resolved,
+    // SAFETY: buildManifest reads only `contentRoot` and `root` from the
+    // project context.
     context: { contentRoot, root: dirname(contentRoot) } as ProjectContext,
     graph,
   });
@@ -878,10 +910,7 @@ describe("agent surfaces with versions", () => {
     expect(data.navigationByVersion?.["v1.0"]).toBeDefined();
 
     const handler = createMcpFetchHandler(data);
-    const callToolRaw = async (
-      name: string,
-      args?: Record<string, unknown>
-    ) => {
+    const callToolRaw = async (name: string, args?: ToolArgs) => {
       const response = await handler(
         new Request("https://example.com/mcp", {
           body: JSON.stringify({
@@ -897,20 +926,24 @@ describe("agent surfaces with versions", () => {
           method: "POST",
         })
       );
+      // SAFETY: the MCP handler always answers tools/call with a JSON-RPC
+      // envelope carrying a `result` of this shape.
       return (await response.json()) as {
         result?: { content?: { text: string }[]; isError?: boolean };
       };
     };
-    const callTool = async (name: string, args?: Record<string, unknown>) => {
+    const callTool = async (name: string, args?: ToolArgs) => {
       const body = await callToolRaw(name, args);
       return body.result?.content?.[0]?.text ?? "";
     };
 
     // list_pages defaults to the current docs; "all" widens; an id narrows.
+    // SAFETY: list_pages returns a JSON array of page entries with `route`.
     const current = JSON.parse(await callTool("list_pages")) as {
       route: string;
     }[];
     expect(current.map((route) => route.route)).toEqual(["/guides/x"]);
+    // SAFETY: list_pages returns a JSON array of page entries with `route`.
     const all = JSON.parse(
       await callTool("list_pages", { version: "all" })
     ) as { route: string }[];
@@ -919,6 +952,8 @@ describe("agent surfaces with versions", () => {
       "/v1.0/guides/x",
       "/v1.0/old-only",
     ]);
+    // SAFETY: archived list_pages entries also carry the `version` they
+    // belong to.
     const archived = JSON.parse(
       await callTool("list_pages", { version: "v1.0" })
     ) as { route: string; version: string }[];
@@ -929,16 +964,20 @@ describe("agent surfaces with versions", () => {
     expect(archived[0]?.version).toBe("v1.0");
 
     // search_docs mirrors the same scoping.
+    // SAFETY: search_docs returns a JSON array of hits with `route`.
     const hits = JSON.parse(
       await callTool("search_docs", { query: "guide" })
     ) as { route: string }[];
     expect(hits.map((hit) => hit.route)).toEqual(["/guides/x"]);
+    // SAFETY: search_docs returns a JSON array of hits with `route`.
     const archivedHits = JSON.parse(
       await callTool("search_docs", { query: "guide", version: "v1.0" })
     ) as { route: string }[];
     expect(archivedHits.map((hit) => hit.route)).toEqual(["/v1.0/guides/x"]);
 
     // get_navigation returns the snapshot's tree for a version id.
+    // SAFETY: get_navigation returns a JSON navigation object rooted at
+    // `root`.
     const nav = JSON.parse(
       await callTool("get_navigation", { version: "v1.0" })
     ) as { root?: string };
@@ -993,7 +1032,7 @@ describe("agent surfaces with versions and i18n", () => {
     // get_navigation resolves a locale (with and without a version).
     const data = await buildMcpData(project);
     const handler = createMcpFetchHandler(data);
-    const navFor = async (args: Record<string, unknown>) => {
+    const navFor = async (args: ToolArgs) => {
       const response = await handler(
         new Request("https://example.com/mcp", {
           body: JSON.stringify({
@@ -1009,9 +1048,13 @@ describe("agent surfaces with versions and i18n", () => {
           method: "POST",
         })
       );
+      // SAFETY: the MCP handler always answers tools/call with a JSON-RPC
+      // envelope carrying a `result` of this shape.
       const body = (await response.json()) as {
         result?: { content?: { text: string }[] };
       };
+      // SAFETY: get_navigation returns a JSON navigation object rooted at
+      // `root`.
       return JSON.parse(body.result?.content?.[0]?.text ?? "{}") as {
         root?: string;
       };

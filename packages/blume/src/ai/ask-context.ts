@@ -102,9 +102,13 @@ const TERM = /[\p{L}\p{M}\p{N}]+/gu;
  * window silently degrades to the head of the page. The regex fallback covers
  * runtimes without the segmenter and still handles spaced scripts correctly.
  */
+const hasSegmenter = (
+  segmenter: typeof Intl.Segmenter | undefined
+): segmenter is typeof Intl.Segmenter => typeof segmenter === "function";
+
 const segmentQuery = (query: string): string[] => {
   const lowered = query.normalize("NFC").toLowerCase();
-  if (typeof Intl.Segmenter !== "function") {
+  if (!hasSegmenter(Intl.Segmenter)) {
     return lowered.match(TERM) ?? [];
   }
   const pieces: string[] = [];

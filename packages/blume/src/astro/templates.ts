@@ -37,6 +37,8 @@ const hasWorkspacesField = (pkgPath: string): boolean => {
     return false;
   }
   try {
+    // SAFETY: parsed from the user's own package.json; only the presence of a
+    // `workspaces` field is read, so this loose shape is all the cast claims.
     const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
       workspaces?: unknown;
     };
@@ -71,16 +73,19 @@ const findWorkspaceRoot = (start: string): string => {
   }
 };
 
-const ADAPTER_IMPORTS: Record<string, string> = {
+type DeploymentAdapter = NonNullable<ResolvedConfig["deployment"]["adapter"]>;
+
+const ADAPTER_IMPORTS = {
   cloudflare: "@astrojs/cloudflare",
   netlify: "@astrojs/netlify",
   node: "@astrojs/node",
   vercel: "@astrojs/vercel",
-};
+} satisfies Record<DeploymentAdapter, string>;
 
-const ADAPTER_OPTIONS: Record<string, string> = {
-  node: '{ mode: "standalone" }',
-};
+/** Adapter constructor arguments, for the adapters that need any. */
+const ADAPTER_OPTIONS = new Map<DeploymentAdapter, string>([
+  ["node", '{ mode: "standalone" }'],
+]);
 
 const WRANGLER_CONFIG_FILES = [
   "wrangler.jsonc",
@@ -370,6 +375,12 @@ const renderImageOption = (config: ResolvedConfig): string =>
     ? `\n  image: ${JSON.stringify(config.image)},`
     : "";
 
+/** What `resolveOptimizeDeps` feeds the generated `optimizeDeps` block. */
+interface OptimizeDepsConfig {
+  optimizeDepsEntries: string[];
+  optimizeDepsInclude: string[];
+}
+
 /**
  * Startup-scan entry points and forced includes for the dev dep optimizer:
  * the Vite root is the generated runtime, so user pages, convention islands,
@@ -383,7 +394,7 @@ const resolveOptimizeDeps = (options: {
   context: ProjectContext;
   needsReact: boolean;
   reactCompilerPath: string | null | undefined;
-}): { optimizeDepsEntries: string[]; optimizeDepsInclude: string[] } => {
+}): OptimizeDepsConfig => {
   const { context } = options;
   const optimizeDepsEntries = [
     ...(context.pagesRoot ? [`${context.pagesRoot}/**/*.astro`] : []),
@@ -474,7 +485,7 @@ export const astroConfigTemplate = (options: {
     if (deployment.adapter === "cloudflare") {
       return resolveCloudflareAdapterArgs(context);
     }
-    return ADAPTER_OPTIONS[deployment.adapter] ?? "";
+    return ADAPTER_OPTIONS.get(deployment.adapter) ?? "";
   })();
   // Vercel resolves its Build Output tree and its `@vercel/nft` dependency
   // trace against the Astro root, which for Blume is the hidden `.blume`
@@ -547,19 +558,23 @@ export const astroConfigTemplate = (options: {
               )}, fallbacks: ${JSON.stringify(
                 font.fallbacks
               )}, options: { variants: ${JSON.stringify(
-                font.variants.map((variant) => ({
-                  ...(variant.weight === undefined
-                    ? {}
-                    : { weight: variant.weight }),
-                  ...(variant.style === undefined
-                    ? {}
-                    : { style: variant.style }),
-                  src: [
-                    isAbsolute(variant.src)
-                      ? variant.src
-                      : join(context.root, variant.src),
-                  ],
-                }))
+                font.variants.map((variant) => {
+                  const face: Pick<typeof variant, "style" | "weight"> = {};
+                  if (variant.weight !== undefined) {
+                    face.weight = variant.weight;
+                  }
+                  if (variant.style !== undefined) {
+                    face.style = variant.style;
+                  }
+                  return {
+                    ...face,
+                    src: [
+                      isAbsolute(variant.src)
+                        ? variant.src
+                        : join(context.root, variant.src),
+                    ],
+                  };
+                })
               )} } }`
             : `{ provider: fontProviders.${font.provider}(), name: ${JSON.stringify(
                 font.name
@@ -1095,10 +1110,17 @@ export const createSearch = () => create({ indexUrl${
   } });
 `;
 
+/**
+ * Public credential fields baked into a hosted provider's generated client
+ * (Algolia/Orama Cloud/Typesense config values from `search.*`, all plain
+ * strings or numbers; `JSON.stringify` drops the absent ones).
+ */
+type HostedSearchCredentials = Record<string, string | number | undefined>;
+
 /** A client that passes public credentials straight to the provider SDK. */
 const hostedSearchClient = (
   module: string,
-  options: Record<string, unknown>
+  options: HostedSearchCredentials
 ): string =>
   `${SEARCH_CLIENT_HEADER}${searchClientImport(module)}
 export const createSearch = () => create(${JSON.stringify(options)});
@@ -1107,7 +1129,7 @@ export const createSearch = () => create(${JSON.stringify(options)});
 /** Build the per-provider config object the hosted client is created with. */
 const hostedSearchOptions = (
   search: ResolvedConfig["search"]
-): { module: string; options: Record<string, unknown> } | null => {
+): { module: string; options: HostedSearchCredentials } | null => {
   switch (search.provider) {
     case "algolia": {
       return { module: "algolia", options: { ...search.algolia } };
@@ -1389,7 +1411,9 @@ export const ALL: APIRoute = ({ request }) => handler(request);
 };
 
 /** Generate a prerendered endpoint that serves a fixed JSON payload. */
-export const staticJsonEndpointTemplate = (payload: unknown): string =>
+export const staticJsonEndpointTemplate = <Payload extends object>(
+  payload: Payload
+): string =>
   `// Generated by Blume. Do not edit.
 export const prerender = true;
 
@@ -1510,8 +1534,9 @@ export async function GET({ props }: { props: { title: string } }) {
  * live inside our shell. `dataImport` is the route-depth-aware relative path to
  * the generated data module the layout reads.
  */
-export const scalarReferenceTemplate = (options: {
-  configuration: Record<string, unknown>;
+export const scalarReferenceTemplate = <Configuration extends object>(options: {
+  /** Scalar options forwarded verbatim (spec/theme config plus the author's `scalar` escape hatch). */
+  configuration: Configuration;
   dataImport: string;
   noindex?: boolean;
   route: string;

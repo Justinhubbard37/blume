@@ -166,6 +166,7 @@ export interface PageRecord {
    * schemas (schema output, so transforms apply). Present only when the
    * project opts in and the page carries at least one value.
    */
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- values are outputs of arbitrary user-supplied zod schemas (transforms included), so no narrower type exists
   custom?: Record<string, unknown>;
   headings: Heading[];
   /** Whether the file is `.md`/`.mdx`. */

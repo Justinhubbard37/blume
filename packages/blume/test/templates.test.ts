@@ -39,6 +39,7 @@ import {
   stagedContentDir,
   staticJsonEndpointTemplate,
 } from "../src/astro/templates.ts";
+import type { BlumeConfig } from "../src/core/config-input.ts";
 import { blumeConfigSchema } from "../src/core/schema.ts";
 import type { ProjectContext } from "../src/core/types.ts";
 
@@ -65,10 +66,10 @@ const context = (over: Partial<ProjectContext> = {}): ProjectContext => ({
 
 // A parsed config whose `ai.ask` block is always present, so resolveAskBackend
 // receives a fully-resolved (schema-defaulted) backend config.
-const askConfig = (ask: Record<string, unknown>) =>
+const askConfig = (ask: NonNullable<BlumeConfig["ai"]>["ask"]) =>
   blumeConfigSchema.parse({ ai: { ask } }).ai.ask;
 
-const withProvider = (search: Record<string, unknown>) =>
+const withProvider = (search: BlumeConfig["search"]) =>
   blumeConfigSchema.parse({ search });
 
 const island = (over: Partial<IslandSpec> = {}): IslandSpec => ({
@@ -410,6 +411,8 @@ describe("changelogIndexTemplate", () => {
     // and the TOC slugs stay in agreement.
     expect(out.indexOf("const headings")).toBeGreaterThan(end);
     // Run the generated dedupe pass to pin its behavior.
+    // SAFETY: the generated snippet sliced above maps heading items to their
+    // deduplicated id strings — the exact signature asserted below.
     // oxlint-disable-next-line no-new-func -- evaluating our own generated output
     const dedupe = new Function(
       "items",

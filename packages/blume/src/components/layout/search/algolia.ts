@@ -44,6 +44,8 @@ export const createSearch = (opts: {
       ],
     });
     const [first] = results;
+    // SAFETY: the build-time sync uploads every record in the AlgoliaRecord
+    // shape, so hits returned by that index carry those fields.
     const records =
       first && "hits" in first ? (first.hits as AlgoliaRecord[]) : [];
     const hits = records.map((record) => ({

@@ -22,8 +22,8 @@ const route = (over: Partial<BlumeRoute>): BlumeRoute => ({
   ...over,
 });
 
-const data = (routes: BlumeRoute[]): BlumeData =>
-  ({ routes }) as unknown as BlumeData;
+// SAFETY: getBlumeCollection reads only the routes list.
+const data = (routes: BlumeRoute[]): BlumeData => ({ routes }) as BlumeData;
 
 describe("getBlumeCollection", () => {
   it("returns docs routes sorted by path, excluding hidden ones", () => {

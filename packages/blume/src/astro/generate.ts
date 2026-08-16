@@ -489,12 +489,14 @@ export const ensureDepsLink = async (
  * (`<build.server>/.prerender/`) output — so it fires for exactly that build.
  * Inert in dev, where there is no build and `writeBundle` never runs.
  */
-export const prerenderDepsPlugin = (
-  pkgDir: string = packageRoot()
-): {
+export interface PrerenderDepsPlugin {
   name: string;
   writeBundle: (options: { dir?: string }) => Promise<void>;
-} => ({
+}
+
+export const prerenderDepsPlugin = (
+  pkgDir: string = packageRoot()
+): PrerenderDepsPlugin => ({
   name: "blume:prerender-deps",
   writeBundle: async (options) => {
     if (!options.dir || basename(options.dir) !== ".prerender") {
@@ -528,14 +530,16 @@ interface ServerAppResolveContext {
  * Stripping the spurious `.js` and delegating back to Astro's resolver lets the
  * reload complete cleanly, so the renamed route resolves without a restart.
  */
-export const serverAppResolvePlugin = (): {
+export interface ServerAppResolvePlugin {
   enforce: "pre";
   name: string;
   resolveId: (
     this: ServerAppResolveContext,
     id: string
   ) => Promise<string | null>;
-} => ({
+}
+
+export const serverAppResolvePlugin = (): ServerAppResolvePlugin => ({
   enforce: "pre",
   name: "blume:server-app-resolve",
   async resolveId(id) {
@@ -548,20 +552,20 @@ export const serverAppResolvePlugin = (): {
 });
 
 /** Astro integration package each non-React island framework needs installed. */
-const ISLAND_FRAMEWORK_DEPS: Record<string, string> = {
-  svelte: "@astrojs/svelte",
-  vue: "@astrojs/vue",
-};
+const ISLAND_FRAMEWORK_DEPS = new Map([
+  ["svelte", "@astrojs/svelte"],
+  ["vue", "@astrojs/vue"],
+]);
 
 /**
  * Adapter package the project must install itself for each deployment
  * platform whose adapter Blume doesn't ship. Node and Vercel ship with Blume,
  * so they never need this.
  */
-const DEPLOYMENT_ADAPTER_DEPS: Record<string, string> = {
-  cloudflare: "@astrojs/cloudflare",
-  netlify: "@astrojs/netlify",
-};
+const DEPLOYMENT_ADAPTER_DEPS = new Map([
+  ["cloudflare", "@astrojs/cloudflare"],
+  ["netlify", "@astrojs/netlify"],
+]);
 
 /**
  * Warn when a Vue/Svelte island is present but its Astro integration isn't
@@ -574,7 +578,7 @@ const islandFrameworkWarnings = (
 ): string[] => {
   const warnings: string[] = [];
   for (const framework of frameworks) {
-    const dep = ISLAND_FRAMEWORK_DEPS[framework];
+    const dep = ISLAND_FRAMEWORK_DEPS.get(framework);
     if (dep && !canResolveFrom(root, dep)) {
       warnings.push(
         `Islands use ${framework}, which needs "${dep}". Install it (e.g. \`npm install ${dep} ${framework}\`).`
@@ -599,7 +603,7 @@ const deploymentAdapterWarnings = (
 ): string[] => {
   const dep =
     deployment.output === "server" && deployment.adapter
-      ? DEPLOYMENT_ADAPTER_DEPS[deployment.adapter]
+      ? DEPLOYMENT_ADAPTER_DEPS.get(deployment.adapter)
       : undefined;
   if (
     dep &&
@@ -906,6 +910,10 @@ const readLogoSvg = (
   return file ? readFileSync(file, "utf-8") : undefined;
 };
 
+/** Narrows a config union's string shorthand from its object form. */
+const isStringShorthand = <T>(value: T | string): value is string =>
+  typeof value === "string";
+
 /**
  * Resolve the configured logo. A single SVG is read and inlined so a
  * `currentColor` logo follows the theme; other images keep their URL for an
@@ -916,12 +924,12 @@ const resolveLogo = (project: BlumeProject): BlumeLogo | null => {
   if (!logo) {
     return null;
   }
-  const config = typeof logo === "string" ? { image: logo } : logo;
+  const config = isStringShorthand(logo) ? { image: logo } : logo;
   // `text` is passed through verbatim: `undefined` lets the brand fall back to
   // the site title, `""` renders the mark alone (a logo with the wordmark baked
   // in).
   const { href, image: source, text } = config;
-  const image = typeof source === "string" ? { light: source } : source;
+  const image = isStringShorthand(source) ? { light: source } : source;
   const light = image?.light ?? image?.dark;
   const dark = image?.dark ?? image?.light;
   const alt = image?.alt ?? "";
@@ -957,18 +965,18 @@ const FAVICON_CANDIDATES = [
 ];
 
 /** `<link type>` MIME for the favicon extensions we recognize. */
-const FAVICON_TYPES: Record<string, string> = {
-  ico: "image/x-icon",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  png: "image/png",
-  svg: "image/svg+xml",
-};
+const FAVICON_TYPES = new Map([
+  ["ico", "image/x-icon"],
+  ["jpeg", "image/jpeg"],
+  ["jpg", "image/jpeg"],
+  ["png", "image/png"],
+  ["svg", "image/svg+xml"],
+]);
 
 /** Infer the `<link type>` MIME from a filename, when we recognize the extension. */
 const faviconType = (name: string): string | undefined => {
   const ext = name.split(".").pop()?.toLowerCase();
-  return ext ? FAVICON_TYPES[ext] : undefined;
+  return ext ? FAVICON_TYPES.get(ext) : undefined;
 };
 
 /** Read a file and encode it as a `data:` URI of the given MIME type. */
@@ -1041,7 +1049,7 @@ const resolveBanner = (config: ResolvedConfig): BlumeBanner | null => {
   if (!banner) {
     return null;
   }
-  if (typeof banner === "string") {
+  if (isStringShorthand(banner)) {
     return { content: banner, dismissible: false, key: banner };
   }
   return {

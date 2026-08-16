@@ -143,7 +143,7 @@ const entryIdDiagnostics = (
 const normalizeLoadedEntries = (
   loaded: ({ source: ContentSource } & SourceLoadResult)[],
   config: ResolvedConfig
-): { pages: PageRecord[]; diagnostics: Diagnostic[]; droppedPages: number } => {
+) => {
   // Only thread `frontmatter.extend` / `content.types` through when a project
   // opts in, so the known-key split in `normalizeEntry` stays off the default
   // path.

@@ -199,6 +199,8 @@ const mergeUI = (base: UIStrings, override?: UIStringsOverride): UIStrings => {
   }
   const out: UIStrings = structuredClone(base);
   for (const [group, values] of Object.entries(override)) {
+    // SAFETY: UIStrings is exactly two levels of string leaves, and the
+    // override schema mirrors its groups, so `group` indexes a string map.
     const target = (out as Record<string, Record<string, string>>)[group];
     if (target && values) {
       Object.assign(target, values);

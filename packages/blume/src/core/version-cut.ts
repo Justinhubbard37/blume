@@ -11,7 +11,7 @@ import { scanProject } from "./project-graph.ts";
 import { VERSION_ID } from "./schema.ts";
 import { nextFenceState } from "./sources/normalize.ts";
 import type { FenceState } from "./sources/normalize.ts";
-import { VERSION_SHAPED, versionizeRoute } from "./versions.ts";
+import { VERSION_LIKE, versionizeRoute } from "./versions.ts";
 
 /** What `cutVersion` did, for the CLI to report. */
 export interface CutResult {
@@ -106,6 +106,12 @@ const rewriteLine = (line: string, rewrites: Map<string, string>): string => {
   return count === 0 ? line : out + line.slice(cursor);
 };
 
+/** A page's link-rewritten text and how many of its lines changed. */
+export interface SnapshotRewrite {
+  text: string;
+  count: number;
+}
+
 /**
  * Rewrite a copied page's root-absolute internal links to their snapshot
  * equivalents, skipping fenced and inline code. Relative links need no
@@ -114,7 +120,7 @@ const rewriteLine = (line: string, rewrites: Map<string, string>): string => {
 export const rewriteSnapshotLinks = (
   source: string,
   rewrites: Map<string, string>
-): { text: string; count: number } => {
+): SnapshotRewrite => {
   let fence: FenceState = null;
   let count = 0;
   const lines = source.split("\n").map((line) => {
@@ -241,7 +247,7 @@ export const cutVersion = async (
       if (
         excluded.has(entry.name) ||
         entry.name.startsWith(".") ||
-        (entry.isDirectory() && VERSION_SHAPED.test(entry.name))
+        (entry.isDirectory() && VERSION_LIKE.test(entry.name))
       ) {
         return;
       }

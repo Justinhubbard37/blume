@@ -23,7 +23,7 @@ import type { Diagnostic, PageRecord } from "./types.ts";
  * unconfigured-snapshot diagnostic and by `blume version` to keep such folders
  * out of new snapshots.
  */
-export const VERSION_SHAPED = /^v\d/iu;
+export const VERSION_LIKE = /^v\d/iu;
 
 /** True when the project opts into versioning. */
 export const versionsEnabled = (
@@ -54,6 +54,18 @@ export const archivedVersion = (
 ): ArchivedVersionConfig | undefined =>
   versions.archived.find((version) => version.id === id);
 
+/** A resolved version (`""` for current) and the version-stripped remainder. */
+export interface DetectedVersion {
+  version: string;
+  rest: string[];
+}
+
+/** {@link DetectedVersion} for a slash-joined source ref. */
+export interface DetectedVersionRef {
+  version: string;
+  rest: string;
+}
+
 /**
  * Detect a leading archived-version directory in a path's segments. The
  * current version lives at the content root, so only archived ids are matched
@@ -65,7 +77,7 @@ export const archivedVersion = (
 export const detectVersion = (
   parts: string[],
   versions: ResolvedVersionsConfig
-): { version: string; rest: string[] } => {
+): DetectedVersion => {
   const [first] = parts;
   if (first && versions.archived.some((version) => version.id === first)) {
     return { rest: parts.slice(1), version: first };
@@ -81,7 +93,7 @@ export const detectVersion = (
 export const detectVersionRef = (
   ref: string,
   versions: ResolvedVersionsConfig
-): { version: string; rest: string } => {
+): DetectedVersionRef => {
   const { version, rest } = detectVersion(ref.split("/"), versions);
   return { rest: rest.join("/"), version };
 };
@@ -130,7 +142,7 @@ export const versionsDiagnostics = (
 ): Diagnostic[] => {
   // Exact-id comparison, matching `detectVersion`: a folder that differs from
   // a configured id only by case (`V1.0/` vs `v1.0`) is NOT routed as that
-  // snapshot, so it must still warn. `VERSION_SHAPED` is case-insensitive on
+  // snapshot, so it must still warn. `VERSION_LIKE` is case-insensitive on
   // its own.
   const configured = new Set(versions.archived.map((version) => version.id));
   const seen = new Set<string>();
@@ -142,7 +154,7 @@ export const versionsDiagnostics = (
     if (
       first &&
       !seen.has(first) &&
-      VERSION_SHAPED.test(first) &&
+      VERSION_LIKE.test(first) &&
       !configured.has(first)
     ) {
       seen.add(first);

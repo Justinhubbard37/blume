@@ -44,6 +44,8 @@ const makePage = (
 });
 
 const makeGraph = (pages: PageRecord[]): ContentGraph =>
+  // SAFETY: link validation reads only pages and routes; the empty nav shells
+  // stand in for the graph fields it never touches.
   ({
     diagnostics: [],
     navigation: {

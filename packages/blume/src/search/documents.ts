@@ -261,12 +261,11 @@ export const buildSearchDocuments = async (
       const tags = page?.meta?.search?.tags;
       const crumb = crumbs.get(route.path);
       const facets = page ? pageFacets(page, project.config) : undefined;
-      return {
+      const document: SearchDocument = {
         breadcrumb: crumb?.breadcrumb ?? [],
         content: body,
         contentType: route.contentType,
         description: page?.description ?? "",
-        ...(facets ? { facets } : {}),
         locale: route.locale,
         route: route.path,
         section: crumb?.section || "Docs",
@@ -274,6 +273,10 @@ export const buildSearchDocuments = async (
         title: route.title,
         version: route.version,
       };
+      if (facets) {
+        document.facets = facets;
+      }
+      return document;
     })
   );
 };

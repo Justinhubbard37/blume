@@ -24,7 +24,11 @@
 export const ACCEPT_MARKDOWN_HEADER_VALUE =
   "(.*,)?\\s*text/(x-)?markdown(\\s*[;,].*)?$";
 
-/** A Build Output API route — the subset these helpers read and write. */
+/**
+ * A Build Output API route — the subset these helpers read and write. Parsed
+ * routes keep whatever other fields they carry at runtime; only these are
+ * typed.
+ */
 export interface VercelRoute {
   continue?: boolean;
   dest?: string;
@@ -32,8 +36,11 @@ export interface VercelRoute {
   has?: { key?: string; type: string; value?: string }[];
   headers?: Record<string, string>;
   src?: string;
-  [key: string]: unknown;
 }
+
+/** Whether a parsed route field is a real string (the config is raw JSON). */
+const isString = (value: string | undefined): value is string =>
+  typeof value === "string";
 
 const ACCEPT_MARKDOWN_CONDITION: VercelRoute["has"] = [
   { key: "accept", type: "header", value: ACCEPT_MARKDOWN_HEADER_VALUE },
@@ -171,10 +178,10 @@ const isNegotiationRoute = (route: VercelRoute): boolean =>
   ) === true ||
   (route.continue === true &&
     route.headers?.vary === "Accept" &&
-    typeof route.src === "string" &&
+    isString(route.src) &&
     Object.keys(route).length === 3) ||
   (route.continue === true &&
-    typeof route.headers?.link === "string" &&
+    isString(route.headers?.link) &&
     route.src === HOME_SRC &&
     Object.keys(route).length === 3);
 

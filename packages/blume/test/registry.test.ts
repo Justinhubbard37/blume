@@ -264,12 +264,15 @@ describe("eject", () => {
     // The releases API returns no releases: the changelog index must still be
     // ejected so its route (and any nav tab pointing at it) does not 404.
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (() =>
-      Promise.resolve({
-        json: () => Promise.resolve([]),
-        ok: true,
-        status: 200,
-      } as unknown as Response)) as unknown as typeof fetch;
+    // SAFETY: the releases source only calls fetch(url) and reads ok/status/
+    // json off the real Response; fetch's static properties are never touched.
+    globalThis.fetch = ((_input: RequestInfo | URL) =>
+      Promise.resolve(
+        new Response("[]", {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        })
+      )) as typeof fetch;
     try {
       await eject(root);
     } finally {

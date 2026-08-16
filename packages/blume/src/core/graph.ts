@@ -31,9 +31,7 @@ interface BuildContentGraphOptions {
 type FallbackLocale = ReturnType<typeof resolveFallbackLocale>;
 
 /** Build the route → page-id map, flagging any duplicate-route collisions. */
-const collectRoutes = (
-  pages: PageRecord[]
-): { diagnostics: Diagnostic[]; routes: Map<string, string> } => {
+const collectRoutes = (pages: PageRecord[]) => {
   const routes = new Map<string, string>();
   const diagnostics: Diagnostic[] = [];
   for (const page of pages) {
@@ -89,12 +87,16 @@ const localePagesFor = (
  * the active locale's entry, else the default locale's, else the map's first
  * entry (which is also what a single-locale site gets).
  */
+/** A label is either one string for every locale or a per-locale map. */
+const isSingleLabel = (label: LocalizableLabel): label is string =>
+  typeof label === "string";
+
 const resolveLabel = (
   label: LocalizableLabel,
   locale: string,
   defaultLocale?: string
 ): string => {
-  if (typeof label === "string") {
+  if (isSingleLabel(label)) {
     return label;
   }
   return (
@@ -146,15 +148,20 @@ const buildLocaleNavigation = (
     options.navigation.tabs,
     code,
     i18n.defaultLocale
-  ).map((tab) => ({
-    ...tab,
-    ...(tab.href ? { href: localizePath(tab.href) } : {}),
-    items: tab.items?.map((item) => ({
-      ...item,
-      path: localizePath(item.path),
-    })),
-    path: localizePath(tab.path),
-  }));
+  ).map((tab) => {
+    const localized = {
+      ...tab,
+      items: tab.items?.map((item) => ({
+        ...item,
+        path: localizePath(item.path),
+      })),
+      path: localizePath(tab.path),
+    };
+    if (localized.href) {
+      localized.href = localizePath(localized.href);
+    }
+    return localized;
+  });
   const real = pages.filter((page) => page.locale === code);
   const localePages = localePagesFor(
     code,
@@ -213,10 +220,7 @@ const buildI18nNavigation = (
   i18n: ResolvedI18nConfig,
   diagnostics: Diagnostic[],
   version = ""
-): {
-  navigation: Navigation;
-  navigationByLocale: Record<string, Navigation>;
-} => {
+) => {
   // Pages of the fallback locale, by translation key — used to fill in a
   // locale's sidebar for pages it hasn't translated yet.
   const fallback = resolveFallbackLocale(i18n);
@@ -256,7 +260,7 @@ const buildI18nNavigation = (
       }
     }
   }
-  const navigation = navigationByLocale[i18n.defaultLocale] ?? {
+  const navigation: Navigation = navigationByLocale[i18n.defaultLocale] ?? {
     featured: [],
     selectors: [],
     sidebar: [],
@@ -271,7 +275,7 @@ const buildVersionNavigation = (
   versionPages: PageRecord[],
   options: BuildContentGraphOptions,
   diagnostics: Diagnostic[]
-): Record<string, Navigation> => {
+) => {
   const { i18n } = options;
   if (i18n) {
     return buildI18nNavigation(versionPages, options, i18n, diagnostics, id)
@@ -311,24 +315,32 @@ export const buildContentGraph = (
     ? pages.filter((page) => page.version === "")
     : pages;
 
-  const { navigation, navigationByLocale } = i18n
-    ? buildI18nNavigation(currentPages, options, i18n, diagnostics)
-    : {
-        navigation: buildNavigation(currentPages, {
-          basePath: options.basePath ?? "",
-          diagnostics,
-          display: options.navigation.sidebar.display,
-          featured: options.navigation.featured,
-          folderMeta: options.folderMeta,
-          selectors: options.navigation.selectors,
-          sharedFolderMeta: options.sharedFolderMeta,
-          sidebar: options.navigation.sidebar.items,
-          // No locale to prefer: a per-locale label map resolves to its first
-          // entry on a single-locale site.
-          tabs: resolveTabLabels(options.navigation.tabs, ""),
-        }),
-        navigationByLocale: {} as Record<string, Navigation>,
-      };
+  // A single-locale site has no per-locale trees; the empty map is its
+  // navigationByLocale.
+  let navigationByLocale: Record<string, Navigation> = {};
+  let navigation: Navigation;
+  if (i18n) {
+    ({ navigation, navigationByLocale } = buildI18nNavigation(
+      currentPages,
+      options,
+      i18n,
+      diagnostics
+    ));
+  } else {
+    navigation = buildNavigation(currentPages, {
+      basePath: options.basePath ?? "",
+      diagnostics,
+      display: options.navigation.sidebar.display,
+      featured: options.navigation.featured,
+      folderMeta: options.folderMeta,
+      selectors: options.navigation.selectors,
+      sharedFolderMeta: options.sharedFolderMeta,
+      sidebar: options.navigation.sidebar.items,
+      // No locale to prefer: a per-locale label map resolves to its first
+      // entry on a single-locale site.
+      tabs: resolveTabLabels(options.navigation.tabs, ""),
+    });
+  }
 
   const navigationByVersion: Record<string, Record<string, Navigation>> = {};
   for (const { id } of options.versions?.archived ?? []) {

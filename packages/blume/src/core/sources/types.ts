@@ -17,6 +17,7 @@ export interface SourceEntry {
   /** Logical route input; defaults to `ref` if omitted. May include slashes. */
   slug?: string;
   /** Frontmatter-equivalent metadata, validated against the Blume meta schema. */
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- pre-validation frontmatter from YAML/CMS payloads; the meta schema parses it downstream
   data: Record<string, unknown>;
   /** The renderable body as Markdown/MDX source text (frontmatter stripped). */
   body: { format: "md" | "mdx"; text: string };

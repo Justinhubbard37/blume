@@ -761,6 +761,7 @@ export interface AiConfig {
 /** Web Bot Auth signature directory. Off until at least one key is listed. */
 export interface WebBotAuthConfig {
   /** Public JWKs to publish (e.g. an Ed25519 key: `kty: "OKP"`, `crv: "Ed25519"`, `x: …`). */
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- mirrors the schema's `z.record(z.unknown())` (the drift guard requires it); JWK parameters are validated at parse time, not typed.
   keys?: Record<string, unknown>[];
 }
 
@@ -1182,6 +1183,7 @@ interface ReferenceConfig {
    * `hideTestRequestButton`, `orderSchemaPropertiesBy`. These win over Blume's
    * derived spec/theme config, so it's a full escape hatch to Scalar's API.
    */
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- mirrors the schema's `z.record(z.unknown())` (the drift guard requires it); the values are Scalar's own API surface, deliberately unmodeled.
   scalar?: Record<string, unknown>;
   /** One or more specs; each renders on its own route by default. */
   sources?: OpenApiSource[];

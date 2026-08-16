@@ -25,15 +25,26 @@ import {
 import { buildContentGraph } from "../src/core/graph.ts";
 import type { BlumeProject } from "../src/core/project-graph.ts";
 import { blumeConfigSchema, pageMetaSchema } from "../src/core/schema.ts";
-import type { AskAiConfig } from "../src/core/schema.ts";
-import type { PageRecord, RouteManifestEntry } from "../src/core/types.ts";
+import type { AskAiConfig, BlumeConfigInput } from "../src/core/schema.ts";
+import type {
+  BlumeManifest,
+  ContentGraph,
+  PageRecord,
+  ProjectContext,
+  RouteManifestEntry,
+} from "../src/core/types.ts";
+
+/** The `ai.ask` block as the config schema accepts it, pre-parse. */
+type AskConfigInput = NonNullable<NonNullable<BlumeConfigInput["ai"]>["ask"]>;
 
 /** Parse an `ai.ask` block through the full schema so defaults are applied. */
-const askConfig = (ask: Record<string, unknown>): AskAiConfig =>
+const askConfig = (ask: AskConfigInput): AskAiConfig =>
+  // SAFETY: an explicit `ask` block was just passed in, so the parsed config
+  // always carries `ai.ask`.
   blumeConfigSchema.parse({ ai: { ask } }).ai.ask as AskAiConfig;
 
 /** The runtime deps declared for a given `ai.ask` block (or default config). */
-const runtimeDeps = (ask?: Record<string, unknown>): string[] =>
+const runtimeDeps = (ask?: AskConfigInput): string[] =>
   runtimeDependencies({
     config: blumeConfigSchema.parse(ask ? { ai: { ask } } : {}),
     needsReact: false,
@@ -70,7 +81,7 @@ const makePage = (
 
 const makeProject = (
   pages: PageRecord[],
-  config: Record<string, unknown> = {}
+  config: BlumeConfigInput = {}
 ): BlumeProject => {
   const parsed = blumeConfigSchema.parse({
     deployment: { site: "https://example.com/" },
@@ -78,26 +89,29 @@ const makeProject = (
     title: "Docs",
     ...config,
   });
-  return {
+  const routes: Partial<RouteManifestEntry>[] = pages.map((page) => ({
+    path: page.route,
+    sourcePath: page.sourcePath,
+  }));
+  const project: Partial<BlumeProject> = {
     config: parsed,
-    context: { root },
+    // SAFETY: the ai builders under test read only `root` from the context.
+    context: { root } as ProjectContext,
     graph: buildContentGraph(pages, {
       folderMeta: new Map(),
       i18n: parsed.i18n,
       navigation: parsed.navigation,
     }),
-    manifest: {
-      routes: pages.map((page) => ({
-        path: page.route,
-        sourcePath: page.sourcePath,
-      })),
-    },
-  } as unknown as BlumeProject;
+    // SAFETY: the ai builders read only each route's path and sourcePath.
+    manifest: { routes } as BlumeManifest,
+  };
+  // SAFETY: the ai builders touch only config, context, graph, and manifest.
+  return project as BlumeProject;
 };
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "blume-ai-"));
-  const files: Record<string, string> = {
+  const files = {
     "a.md": "---\ntitle: Alpha\n---\n# Alpha\n\nBody A.\n",
     "b.md": "---\ntitle: Beta\n---\n# Beta\n\nBody B.\n",
     "c.md": "---\ntitle: Gamma\n---\n# Gamma\n\nDraft body.\n",
@@ -452,7 +466,7 @@ describe("buildLlmsFiles — visibility and encoding", () => {
   });
 });
 
-const sitelessProject = (config: Record<string, unknown> = {}): BlumeProject =>
+const sitelessProject = (config: BlumeConfigInput = {}): BlumeProject =>
   makeProject([makePage("a.md", "/a", "Alpha", { description: "First" })], {
     deployment: {},
     description: undefined,
@@ -582,7 +596,7 @@ describe("component downleveling in agent surfaces", () => {
           Callout: ({ children }: { children: string }) => `NOTE: ${children}`,
         },
       },
-    }) as BlumeProject["config"];
+    });
     const raw = await buildRawMarkdown(customized);
     expect(raw["/t"]?.md).toContain("NOTE: Mind the gap.");
     const { full } = await buildLlmsFiles(customized);
@@ -738,6 +752,8 @@ describe("applyAgentVisibility", () => {
 
 /** A route manifest entry backed by one of the temp fixture files. */
 const askRoute = (over: Partial<RouteManifestEntry>): RouteManifestEntry =>
+  // SAFETY: buildAskData reads only the fields set here; the omitted manifest
+  // entry fields (alternates, collection, …) are never touched.
   ({
     contentType: "doc",
     draft: false,
@@ -751,26 +767,32 @@ const askRoute = (over: Partial<RouteManifestEntry>): RouteManifestEntry =>
     ...over,
   }) as RouteManifestEntry;
 
-const askDataProject = (): BlumeProject =>
-  ({
+const askDataProject = (): BlumeProject => {
+  const fixture: Partial<BlumeProject> = {
     config: blumeConfigSchema.parse({
       deployment: { site: "https://example.com/" },
       title: "Docs",
     }),
-    context: { root },
+    // SAFETY: buildAskData reads only `root` from the context.
+    context: { root } as ProjectContext,
+    // SAFETY: buildAskData reads only `graph.pages`.
     graph: {
       pages: [
         makePage("a.md", "/a", "Alpha", { description: "First" }),
         makePage("b.md", "/b", "Beta"),
       ],
-    },
+    } as ContentGraph,
+    // SAFETY: buildAskData reads only the manifest routes.
     manifest: {
       routes: [
         askRoute({ id: "a.md", path: "/a", title: "Alpha" }),
         askRoute({ id: "b.md", path: "/b", title: "Beta" }),
       ],
-    },
-  }) as unknown as BlumeProject;
+    } as BlumeManifest,
+  };
+  // SAFETY: buildAskData touches only config, context, graph, and manifest.
+  return fixture as BlumeProject;
+};
 
 describe("buildAskData", () => {
   it("indexes page bodies with locale and the deployment site", async () => {
@@ -798,10 +820,13 @@ describe("buildAskData", () => {
   });
 
   it("resolves <Visibility> for the agents audience", async () => {
-    const proj = {
+    const proj: Partial<BlumeProject> = {
       config: blumeConfigSchema.parse({ title: "Docs" }),
-      context: { root },
-      graph: { pages: [makePage("v.md", "/v", "Vis")] },
+      // SAFETY: buildAskData reads only `root` from the context.
+      context: { root } as ProjectContext,
+      // SAFETY: buildAskData reads only `graph.pages`.
+      graph: { pages: [makePage("v.md", "/v", "Vis")] } as ContentGraph,
+      // SAFETY: buildAskData reads only the manifest routes.
       manifest: {
         routes: [
           askRoute({
@@ -811,9 +836,10 @@ describe("buildAskData", () => {
             title: "Vis",
           }),
         ],
-      },
-    } as unknown as BlumeProject;
-    const data = await buildAskData(proj);
+      } as BlumeManifest,
+    };
+    // SAFETY: buildAskData touches only config, context, graph, and manifest.
+    const data = await buildAskData(proj as BlumeProject);
     const doc = data.documents.find((entry) => entry.route === "/v");
     expect(doc?.content).toContain("Agent-only body.");
     expect(doc?.content).not.toContain("Web-only body.");
@@ -1059,15 +1085,18 @@ describe("relevantExcerpt", () => {
 
   it("falls back to regex term extraction without Intl.Segmenter", () => {
     const original = Intl.Segmenter;
-    // oxlint-disable-next-line no-explicit-any -- deliberate global stub
-    (Intl as any).Segmenter = undefined;
+    // SAFETY: deliberately unsetting the readonly global to exercise the
+    // regex fallback; it is restored in the finally block below.
+    (Intl as { Segmenter: typeof Intl.Segmenter | undefined }).Segmenter =
+      undefined;
     try {
       const content = `${"alpha ".repeat(120)}targetword closes the section. ${"tail ".repeat(60)}`;
       const excerpt = relevantExcerpt(content, "targetword", 100);
       expect(excerpt).toContain("targetword");
     } finally {
-      // oxlint-disable-next-line no-explicit-any -- deliberate global stub
-      (Intl as any).Segmenter = original;
+      // SAFETY: restoring the readonly global unset above.
+      (Intl as { Segmenter: typeof Intl.Segmenter | undefined }).Segmenter =
+        original;
     }
   });
 });
