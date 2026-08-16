@@ -190,6 +190,10 @@ describe("tailwindEntryTemplate", () => {
     // -0.05em was matched visually against the old Inter Tight default.
     expect(entry).toContain(`font-family: var(--font-display);
     letter-spacing: -0.05em;`);
+    // Prose headings must not reset it — a `letter-spacing: 0` in the
+    // higher-specificity `.prose :where(h1…)` rule silently undoes the
+    // tracking on every docs page.
+    expect(entry).not.toContain("letter-spacing: 0;");
   });
 
   it("routes font tokens through overridable indirection variables", () => {

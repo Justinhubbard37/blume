@@ -263,9 +263,10 @@ ${THEME_MAPPING}
   line-height: 1.7;
 }
 
+/* No letter-spacing here: prose headings inherit the base h1-h6 rule's
+   display tracking, same as headings outside the prose column. */
 .prose :where(h1, h2, h3, h4) {
   font-weight: 500;
-  letter-spacing: 0;
 }
 
 /* A heading can carry one long unbreakable token — an OpenAPI operation's title

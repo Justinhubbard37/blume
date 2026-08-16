@@ -340,7 +340,9 @@ export const renderOgImage = async (
         color: foreground,
         fontSize: titleSize(options.title),
         fontWeight: 600,
-        letterSpacing: "-0.03em",
+        // Matches the theme's heading tracking (entry.ts h1-h6 rule), tuned
+        // for Inter since the display default dropped Inter Tight.
+        letterSpacing: "-0.05em",
         lineHeight: 1.05,
         maxWidth: 1010,
         textWrap: "balance",
