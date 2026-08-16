@@ -290,7 +290,7 @@ lastModified: true,
 | `{ type: "git" }` | O mesmo que `true`, escrito explicitamente. |
 | `{ type: "frontmatter" }` | Nunca executa o git — usa apenas o campo `lastModified` do frontmatter. |
 
-A fonte git lê o commit mais recente que tocou em cada ficheiro, pelo que funciona em qualquer repositório git — incluindo monorepos — e precisa do histórico do repositório no momento da compilação (evita um checkout superficial com `--depth 1` no CI). O `lastModified` do frontmatter da própria página prevalece sempre, o que é útil para fixar uma data ou para ficheiros que ainda não foram commitados:
+A fonte git lê o commit mais recente que tocou em cada ficheiro, pelo que funciona em qualquer repositório git — incluindo monorepos — e precisa do histórico do repositório no momento da compilação. As plataformas de CI costumam fazer checkout de um clone superficial, o que descarta silenciosamente a maioria das datas (a compilação avisa com `BLUME_SHALLOW_GIT_HISTORY` quando isso acontece): na Vercel, define a variável de ambiente `VERCEL_DEEP_CLONE=true`; com o `actions/checkout`, define `fetch-depth: 0`. O `lastModified` do frontmatter da própria página prevalece sempre, o que é útil para fixar uma data ou para ficheiros que ainda não foram commitados:
 
 ```mdx page.mdx
 ---

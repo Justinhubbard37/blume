@@ -374,8 +374,9 @@ describe("astro config template", () => {
       'import { defineConfig, fontProviders } from "astro/config";'
     );
     expect(output).toContain("provider: fontProviders.google()");
-    expect(output).toContain('name: "Inter Tight"');
+    // Body and display both default to Inter, deduped into a single entry.
     expect(output).toContain('name: "Inter"');
+    expect(output).not.toContain('name: "Inter Tight"');
     expect(output).toContain('cssVariable: "--blume-ff-ibm-plex-mono"');
   });
 
@@ -384,7 +385,7 @@ describe("astro config template", () => {
       blumeConfigSchema.parse({ theme: { fonts: { body: "geist" } } })
     );
     expect(output).toContain('name: "Geist"');
-    expect(output).toContain('name: "Inter Tight"');
+    expect(output).toContain('name: "Inter"');
     expect(output).toContain('cssVariable: "--blume-ff-ibm-plex-mono"');
   });
 

@@ -61,7 +61,7 @@ import {
   examplesEntryTemplate,
   tailwindEntryTemplate,
 } from "../theme/entry.ts";
-import { buildFontsCss, configuredCssVars } from "../theme/fonts.ts";
+import { buildFontsCss, configuredFonts } from "../theme/fonts.ts";
 import { buildThemeCss } from "../theme/palette.ts";
 import { twoslashCss } from "../theme/twoslash.ts";
 import { planComponentSlots } from "./component-slots.ts";
@@ -1255,7 +1255,7 @@ export const buildRuntimeData = (project: BlumeProject): string => {
     })),
     // CSS variables for Astro's <Font> component; matches the astro.config
     // `fonts:` entries derived from the same theme.fonts config.
-    fontCssVars: configuredCssVars(config.theme.fonts),
+    fontCssVars: configuredFonts(config.theme.fonts),
     navigation: withRepoUrl(graph.navigation),
     // Per-locale navigation; the catch-all selects the active locale's tree.
     navigationByLocale,

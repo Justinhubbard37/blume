@@ -290,7 +290,7 @@ lastModified: true,
 | `{ type: "git" }` | Dasselbe wie `true`, nur explizit geschrieben. |
 | `{ type: "frontmatter" }` | Git nie ausführen — ausschließlich das Frontmatter-Feld `lastModified` verwenden. |
 
-Die Git-Quelle liest den jüngsten Commit, der die jeweilige Datei berührt hat, funktioniert also in jedem Git-Repository — auch in Monorepos — und benötigt die Historie des Repositorys zur Build-Zeit (vermeide einen flachen Checkout mit `--depth 1` in der CI). Das seiteneigene `lastModified`-Frontmatter gewinnt immer, was praktisch ist, um ein Datum festzuschreiben oder für Dateien, die noch nicht committet sind:
+Die Git-Quelle liest den jüngsten Commit, der die jeweilige Datei berührt hat, funktioniert also in jedem Git-Repository — auch in Monorepos — und benötigt die Historie des Repositorys zur Build-Zeit. CI-Plattformen checken üblicherweise einen flachen Klon aus, wodurch die meisten Daten stillschweigend verloren gehen (der Build warnt in diesem Fall mit `BLUME_SHALLOW_GIT_HISTORY`): Setze auf Vercel die Umgebungsvariable `VERCEL_DEEP_CLONE=true`; bei `actions/checkout` setze `fetch-depth: 0`. Das seiteneigene `lastModified`-Frontmatter gewinnt immer, was praktisch ist, um ein Datum festzuschreiben oder für Dateien, die noch nicht committet sind:
 
 ```mdx page.mdx
 ---

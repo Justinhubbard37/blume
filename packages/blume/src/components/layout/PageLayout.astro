@@ -24,6 +24,7 @@ import type {
 } from "../../core/data.ts";
 import { EN_UI } from "../../core/i18n-ui.ts";
 import type { UIStrings } from "../../core/i18n-ui.ts";
+import type { FontHead } from "../../theme/fonts.ts";
 import type { LocaleSwitchOption, Navigation } from "../../core/types.ts";
 import {
   OG_IMAGE_HEIGHT,
@@ -58,7 +59,7 @@ interface Props {
    */
   page?: { title?: string; description?: string; route?: string };
   themeMode: "system" | "light" | "dark";
-  fontCssVars?: string[];
+  fontCssVars?: (string | FontHead)[];
   searchEnabled: boolean;
   /**
    * Opt this page out of the header's Ask AI trigger. Defaults to whether Ask

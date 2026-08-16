@@ -179,7 +179,10 @@ ${THEME_MAPPING}
     scroll-padding-top: 4.5rem;
     text-rendering: optimizeLegibility;
   }
-  /* Headings use the display font (defaults to the body font when unset). */
+  /* Headings use the display font (defaults to the body font when unset).
+     The tightened tracking is part of the theme, not the font: display-tuned
+     families bake it into their metrics, but a text family promoted to
+     headings (including the Inter default) reads loose without it. */
   h1,
   h2,
   h3,
@@ -187,6 +190,7 @@ ${THEME_MAPPING}
   h5,
   h6 {
     font-family: var(--font-display);
+    letter-spacing: -0.025em;
   }
   :focus-visible {
     outline: 2px solid var(--blume-accent);

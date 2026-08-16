@@ -623,7 +623,7 @@ const themeConfigSchema = z.strictObject({
   fonts: z
     .strictObject({
       body: fontValueSchema.default("inter"),
-      display: fontValueSchema.default("inter-tight"),
+      display: fontValueSchema.default("inter"),
       mono: fontValueSchema.default("ibm-plex-mono"),
     })
     .prefault({}),

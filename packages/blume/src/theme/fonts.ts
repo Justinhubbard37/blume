@@ -352,6 +352,78 @@ export const buildFontsCss = (fonts: FontsConfig): string => {
     : "";
 };
 
-/** The CSS variables to feed Astro's `<Font>` component in the document head. */
-export const configuredCssVars = (fonts: FontsConfig): string[] =>
-  buildFontEntries(fonts).map((entry) => entry.cssVariable);
+/**
+ * Weights worth preloading per role — the faces above-the-fold text actually
+ * renders in: body copy and UI chrome at 400/500, headings at 500/600, code at
+ * 400. Every other face still loads on demand through its `@font-face` rule
+ * (and `font-display: swap` never blocks text on it), so preloading the long
+ * tail only competes with the critical CSS for bandwidth and pushes LCP out.
+ */
+const PRELOAD_WEIGHTS = {
+  body: [400, 500],
+  display: [500, 600],
+  mono: [400],
+} satisfies Record<FontSlot, number[]>;
+
+/** One `<Font>` render in the head: its CSS variable + weights to preload. */
+export interface FontHead {
+  cssVariable: string;
+  preloadWeights: number[];
+}
+
+/** The weights an entry's faces declare (`undefined` = inferred from files). */
+const entryWeights = (entry: FontEntry): (number | string | undefined)[] =>
+  entry.kind === "remote"
+    ? entry.weights
+    : entry.variants.map((variant) => variant.weight);
+
+/**
+ * The role's preferred preload weights, narrowed to faces the family loads.
+ * Variable ranges (`"100..900"`) and weight-inferred local files can serve any
+ * weight, so they keep the preferred list; a family whose numeric weights miss
+ * the preferred ones entirely preloads all of its faces instead — those are
+ * what its text renders in.
+ */
+const preloadWeightsFor = (slot: FontSlot, entry: FontEntry): number[] => {
+  const preferred = PRELOAD_WEIGHTS[slot];
+  const weights = entryWeights(entry);
+  const numeric = weights.filter(
+    (weight): weight is number => typeof weight === "number"
+  );
+  const hits = preferred.filter((weight) => numeric.includes(weight));
+  if (hits.length > 0) {
+    return hits;
+  }
+  return numeric.length === weights.length ? numeric : preferred;
+};
+
+/**
+ * The fonts to feed Astro's `<Font>` component in the document head, deduped
+ * by CSS variable with preload weights unioned across the roles that share a
+ * family (so `display` and `body` both set to Inter preload 400/500/600 once).
+ */
+export const configuredFonts = (fonts: FontsConfig): FontHead[] => {
+  if (!fonts) {
+    return [];
+  }
+  const heads = new Map<string, Set<number>>();
+  for (const slot of SLOTS) {
+    const value = fonts[slot];
+    if (value === undefined) {
+      continue;
+    }
+    const entry = resolveFontValue(slot, value);
+    if (!entry) {
+      continue;
+    }
+    const weights = heads.get(entry.cssVariable) ?? new Set();
+    for (const weight of preloadWeightsFor(slot, entry)) {
+      weights.add(weight);
+    }
+    heads.set(entry.cssVariable, weights);
+  }
+  return [...heads].map(([cssVariable, weights]) => ({
+    cssVariable,
+    preloadWeights: [...weights].toSorted((a, b) => a - b),
+  }));
+};

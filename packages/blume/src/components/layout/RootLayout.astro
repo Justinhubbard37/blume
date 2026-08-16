@@ -11,6 +11,7 @@ import type {
   NavSelector as NavSelectorType,
 } from "../../core/types.ts";
 import "blume:theme";
+import type { FontHead } from "../../theme/fonts.ts";
 import type { ComponentOverride } from "../../core/define-components.ts";
 import {
   OG_IMAGE_HEIGHT,
@@ -90,7 +91,7 @@ interface Props {
   imageZoom?: boolean;
   codeWrap?: boolean;
   themeMode: "system" | "light" | "dark";
-  fontCssVars?: string[];
+  fontCssVars?: (string | FontHead)[];
   searchEnabled: boolean;
   indexable: boolean;
   ogImage?: string | null;

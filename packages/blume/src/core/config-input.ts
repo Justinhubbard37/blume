@@ -510,7 +510,7 @@ export type FontInput =
 export interface FontsConfig {
   /** Body / prose font. Defaults to `inter`. */
   body?: FontInput;
-  /** Display / heading font. Defaults to `inter-tight`. */
+  /** Display / heading font. Defaults to `inter` (shared with the body). */
   display?: FontInput;
   /** Monospace / code font. Defaults to `ibm-plex-mono`. */
   mono?: FontInput;

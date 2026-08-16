@@ -1,3 +1,4 @@
+import type { FontHead } from "../theme/fonts.ts";
 import type { UIStrings } from "./i18n-ui.ts";
 import type { ResolvedConfig, SearchProvider } from "./schema.ts";
 import type { Navigation, RouteAlternate, VersionAlternate } from "./types.ts";
@@ -192,8 +193,8 @@ export interface BlumeClientData {
 export interface BlumeData {
   config: BlumeDataConfig;
   feeds: BlumeFeed[];
-  /** CSS variable names for the configured fonts (Astro `<Font>` integration). */
-  fontCssVars: string[];
+  /** Configured fonts for the head: CSS variable + preload weights per family. */
+  fontCssVars: FontHead[];
   /** Sidebar + tab tree for the default locale. */
   navigation: Navigation;
   /** Per-locale navigation trees, keyed by locale code (empty without i18n). */
