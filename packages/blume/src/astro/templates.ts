@@ -407,6 +407,11 @@ const resolveOptimizeDeps = (options: {
   const optimizeDepsInclude = [
     "blume > mermaid",
     "blume > epub-gen-memory/bundle",
+    // Astro's own client-router/prefetch virtual modules are deliberately NOT
+    // forced in here: they read Vite `define`-injected constants
+    // (__PREFETCH_PREFETCH_ALL__ and friends) that a pre-bundled copy loses,
+    // throwing ReferenceError on every page. Astro manages their optimization
+    // itself, without a mid-session reload.
     ...(options.needsReact && options.reactCompilerPath
       ? ["react/compiler-runtime"]
       : []),
@@ -695,10 +700,10 @@ ${userConfigSetup}export default defineConfig({
     },
   },
   devToolbar: { enabled: false },
-  // Navigations are full document loads (no client router), so the next page's
-  // HTML is fetched on hover/viewport to hide the request latency behind the
-  // user's intent. Pairs with the cross-document view-transition rule in the
-  // theme sheet, which smooths the swap itself.
+  // The layouts render Astro's <ClientRouter />, and its in-place swaps read
+  // from the prefetch cache — fetching every link on hover/viewport hides the
+  // request latency behind the user's intent, so most navigations swap
+  // instantly.
   prefetch: { prefetchAll: true },
   vite: {
     plugins: [tailwindcss(), prerenderDepsPlugin(), serverAppResolvePlugin()],

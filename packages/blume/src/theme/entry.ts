@@ -212,21 +212,12 @@ ${THEME_MAPPING}
   }
 }
 
-/* Same-origin navigations are full document loads (no client router); opting
-   into cross-document view transitions has the browser crossfade between the
-   old and new page instead of hard-swapping, in browsers that support it.
-   Pairs with the prefetch option in the generated Astro config. */
-@view-transition {
-  navigation: auto;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation: none !important;
-  }
-}
+/* Same-origin navigations ride Astro's client router (the layouts render
+   ClientRouter), which owns the page-transition styling — including its own
+   prefers-reduced-motion guard — so the theme declares nothing about it. The
+   cross-document view-transition opt-in that briefly lived here is
+   deliberately gone: mixing it with the client router double-animates the
+   full-load navigations the router hands back to the browser. */
 
 /* Code reads left-to-right regardless of page direction; only the surrounding
    chrome mirrors for RTL. Inline code is isolated so LTR identifiers don't

@@ -176,12 +176,12 @@ describe("tailwindEntryTemplate", () => {
     expect(userAt).toBeGreaterThan(configAt);
   });
 
-  it("opts into cross-document view transitions with a reduced-motion escape", () => {
-    expect(entry).toContain(`@view-transition {
-  navigation: auto;
-}`);
-    expect(entry).toContain("::view-transition-old(*)");
-    expect(entry).toContain("animation: none !important;");
+  it("declares no cross-document view transitions (the client router owns navigation)", () => {
+    // Astro's <ClientRouter /> in the layouts drives page transitions — and
+    // ships its own reduced-motion guard. A `@view-transition` opt-in here
+    // would double-animate the full-load navigations the router hands back
+    // to the browser.
+    expect(entry).not.toContain("@view-transition");
   });
 
   it("bakes display-grade tracking into headings, not the font", () => {

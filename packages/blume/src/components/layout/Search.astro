@@ -203,6 +203,7 @@ const kbd = "rounded border border-border bg-muted px-1 py-0.5 font-mono";
   />
 
   <script>
+    import { navigate } from "astro:transitions/client";
     import { chromeIcons as icons } from "../../theme/chrome-icons.ts";
     import { prefixBase } from "../islands/base-path.ts";
     import { escape as escapeHtml } from "html-escaper";
@@ -301,6 +302,36 @@ const kbd = "rounded border border-border bg-muted px-1 py-0.5 font-mono";
       version = "";
       allVersions = false;
 
+      // Document-level, so it outlives this element unless removed: each
+      // client-router swap rebuilds the header (and this element with it), and
+      // an orphaned copy would keep toggling a dialog that is no longer in the
+      // document. Held as a field so disconnectedCallback can detach it.
+      #onDocumentKeydown = (event: KeyboardEvent) => {
+        if (
+          (event.key === "k" || event.key === "K") &&
+          (event.metaKey || event.ctrlKey) &&
+          // Ctrl+Shift+K is Firefox's web console; a shifted or alted chord
+          // belongs to the browser, not the search dialog.
+          !event.shiftKey &&
+          !event.altKey
+        ) {
+          // ⌘K toggles, mirroring the Ask AI panel's ⌘I: pressing it with
+          // the dialog open must close it, not re-showModal an open dialog
+          // (an InvalidStateError on older engines).
+          event.preventDefault();
+          if (this.dialog.open) {
+            this.dialog.close();
+          } else {
+            this.open();
+          }
+        } else if (event.key === "/" && !this.isField(event.target)) {
+          // "/" stays open-only; the field guard keeps it inert while
+          // typing (including in the search input itself).
+          event.preventDefault();
+          this.open();
+        }
+      };
+
       connectedCallback() {
         this.devOnlyMsg =
           this.getAttribute("data-i18n-dev") || this.devOnlyMsg;
@@ -397,31 +428,7 @@ const kbd = "rounded border border-border bg-muted px-1 py-0.5 font-mono";
           () => this.open()
         );
 
-        document.addEventListener("keydown", (event) => {
-          if (
-            (event.key === "k" || event.key === "K") &&
-            (event.metaKey || event.ctrlKey) &&
-            // Ctrl+Shift+K is Firefox's web console; a shifted or alted chord
-            // belongs to the browser, not the search dialog.
-            !event.shiftKey &&
-            !event.altKey
-          ) {
-            // ⌘K toggles, mirroring the Ask AI panel's ⌘I: pressing it with
-            // the dialog open must close it, not re-showModal an open dialog
-            // (an InvalidStateError on older engines).
-            event.preventDefault();
-            if (this.dialog.open) {
-              this.dialog.close();
-            } else {
-              this.open();
-            }
-          } else if (event.key === "/" && !this.isField(event.target)) {
-            // "/" stays open-only; the field guard keeps it inert while
-            // typing (including in the search input itself).
-            event.preventDefault();
-            this.open();
-          }
-        });
+        document.addEventListener("keydown", this.#onDocumentKeydown);
 
         this.input.addEventListener("input", () => this.render());
         this.dialog.addEventListener("keydown", (event) =>
@@ -432,6 +439,10 @@ const kbd = "rounded border border-border bg-muted px-1 py-0.5 font-mono";
             this.dialog.close();
           }
         });
+      }
+
+      disconnectedCallback() {
+        document.removeEventListener("keydown", this.#onDocumentKeydown);
       }
 
       isField(target: EventTarget | null): boolean {
@@ -799,7 +810,11 @@ const kbd = "rounded border border-border bg-muted px-1 py-0.5 font-mono";
             new CustomEvent("blume:open-ask-ai", { detail: { query } })
           );
         } else if (item.url) {
-          window.location.href = item.url;
+          // Close first so the dialog isn't left open over the transition;
+          // navigate() rides the client router (and falls back to a normal
+          // full load on pages without it).
+          this.dialog.close();
+          navigate(item.url);
         }
       }
 

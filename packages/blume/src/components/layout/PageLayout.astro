@@ -35,6 +35,7 @@ import { buildStructuredData } from "../../seo/jsonld.ts";
 import { normalizeXHandle } from "../../seo/x-handle.ts";
 import { withBase } from "../islands/base-path.ts";
 import "blume:theme";
+import { ClientRouter } from "astro:transitions";
 import Analytics from "./Analytics.astro";
 import Banner from "./Banner.astro";
 import Favicon from "./Favicon.astro";
@@ -230,6 +231,10 @@ const bannerKey = banner?.dismissible ? banner.key : null;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/* Client-side navigation, matching RootLayout: same-origin link clicks
+        swap the DOM in place instead of tearing the document down, so no
+        browser paints a blank frame between pages. */}
+    <ClientRouter />
     <title>{pageTitle}</title>
     <Favicon appleIcon={appleIcon} favicon={favicon} />
     <Fonts cssVars={fontCssVars ?? []} />
