@@ -10,6 +10,27 @@ export interface ResolvedLastModified {
   source: "git" | "frontmatter";
 }
 
+/**
+ * Env for git invocations, with the repo-locating GIT_* variables stripped. A
+ * parent git process exports an absolute GIT_DIR (and friends) to its hooks —
+ * husky pre-commit in a linked worktree, post-merge, CI wrappers — and an
+ * inherited GIT_DIR overrides `-C` discovery, silently pointing every call at
+ * the parent's repository instead of the project's.
+ */
+const GIT_LOCATION_VARS = new Set([
+  "GIT_COMMON_DIR",
+  "GIT_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_PREFIX",
+  "GIT_WORK_TREE",
+]);
+
+const gitEnv = (): NodeJS.ProcessEnv =>
+  Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !GIT_LOCATION_VARS.has(key))
+  );
+
 /** Normalize the `lastModified` config union into `{ enabled, source }`. */
 export const resolveLastModifiedConfig = (
   value: boolean | { type: "git" | "frontmatter" }
@@ -66,7 +87,7 @@ export const gitLastModifiedTimes = (
       // oxlint-disable-next-line sonarjs/no-os-command-from-path -- git is a required dev-tool dependency resolved from PATH
       "git",
       ["-C", root, "rev-parse", "--show-toplevel"],
-      { encoding: "utf-8" }
+      { encoding: "utf-8", env: gitEnv() }
     ).trim();
     const output = execFileSync(
       // oxlint-disable-next-line sonarjs/no-os-command-from-path -- git is a required dev-tool dependency resolved from PATH
@@ -82,7 +103,7 @@ export const gitLastModifiedTimes = (
         "--",
         ...contentRoots,
       ],
-      { encoding: "utf-8", maxBuffer: 256 * 1024 * 1024 }
+      { encoding: "utf-8", env: gitEnv(), maxBuffer: 256 * 1024 * 1024 }
     );
     const byRepoPath = parseGitLog(output);
     const result = new Map<string, string>();
@@ -111,7 +132,11 @@ export const isShallowGitRepository = (root: string): boolean => {
         "git",
         ["-C", root, "rev-parse", "--is-shallow-repository"],
         // stderr silenced: outside a repository the probe fails by design.
-        { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }
+        {
+          encoding: "utf-8",
+          env: gitEnv(),
+          stdio: ["ignore", "pipe", "ignore"],
+        }
       ).trim() === "true"
     );
   } catch {

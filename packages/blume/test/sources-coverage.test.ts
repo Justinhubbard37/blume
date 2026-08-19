@@ -553,10 +553,25 @@ describe("scanProject: git last-modified branch", () => {
       "export default { lastModified: true };\n"
     );
     await writeFile(join(root, "docs", "index.md"), "# Home\n");
+    // Strip the repo-locating GIT_* variables a parent git process exports to
+    // its hooks: under the pre-commit hook in a linked worktree, an inherited
+    // absolute GIT_DIR overrides `-C` discovery and the fixture's
+    // `add -A`/`commit` would run against the real repository's branch.
+    const gitLocationVars = new Set([
+      "GIT_COMMON_DIR",
+      "GIT_DIR",
+      "GIT_INDEX_FILE",
+      "GIT_OBJECT_DIRECTORY",
+      "GIT_PREFIX",
+      "GIT_WORK_TREE",
+    ]);
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !gitLocationVars.has(key))
+    );
     const git = (args: string[]): void => {
       // Test fixture drives a real git repo; `git` is expected on PATH in CI/dev.
       // oxlint-disable-next-line sonarjs/no-os-command-from-path
-      execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
+      execFileSync("git", ["-C", root, ...args], { env, stdio: "ignore" });
     };
     git(["init"]);
     git(["config", "user.email", "test@blume.dev"]);
