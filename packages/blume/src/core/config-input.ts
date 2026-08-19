@@ -1,6 +1,7 @@
 import type { AstroIntegration } from "astro";
 import type { z } from "zod";
 
+import type { AskRetrievalOptions } from "../ai/ask-context.ts";
 import type { ComponentMarkdown } from "../ai/component-markdown.ts";
 import type { CodeTheme } from "../markdown/themes.ts";
 import type { FontSlug } from "../theme/fonts.ts";
@@ -636,6 +637,28 @@ export interface AskSuggestion {
 type AskProviderGateway = "gateway" | "openrouter" | "llmgateway";
 type AskProvider = AskProviderGateway | "inkeep" | "openai-compatible";
 
+/** How much retrieved documentation each Ask AI question carries. */
+export interface AskRetrievalConfig {
+  /**
+   * Total injected documentation characters, across all excerpts. Defaults to
+   * `10000`. The single biggest lever on time-to-first-token — the model reads
+   * every injected character before it emits a token.
+   */
+  contextBudget?: number;
+  /**
+   * Characters kept per excerpt. Defaults to `2000`. Raise it when one long
+   * page holds the whole answer (a table the excerpt cuts in half); the
+   * `contextBudget` still caps the total.
+   */
+  excerptChars?: number;
+  /**
+   * Documents retrieved per question. Defaults to `6`. The page the reader is
+   * viewing is injected on top of the retrieved ones, so an answer can cite up
+   * to one page more than this.
+   */
+  maxResults?: number;
+}
+
 export interface AskConfig {
   /**
    * Name of the env var holding the provider API key. Each provider has a
@@ -665,6 +688,12 @@ export interface AskConfig {
   model?: string;
   /** Which backend routes the request. Defaults to `gateway`. */
   provider?: AskProvider;
+  /**
+   * How much documentation each question carries into the model's prompt.
+   * Lower values cut time-to-first-token — which dominates on a self-hosted
+   * backend — at the cost of recall. Defaults keep the built-in behavior.
+   */
+  retrieval?: AskRetrievalConfig;
   /** Starter prompts shown before the first question. */
   suggestions?: AskSuggestion[];
 }
@@ -1464,4 +1493,18 @@ type _NoExtraOrMissingKeys = AssertExtends<
   | Exclude<keyof BlumeConfig, keyof SchemaInput>
   | Exclude<keyof SchemaInput, keyof BlumeConfig>,
   never
+>;
+// The retrieval shape lives in three places: this documented config interface,
+// the schema, and the runtime `AskRetrievalOptions` that `createAskContext`
+// reads (all-optional, so plain assignability is a weak-type check that a
+// renamed field slips through — the value would be baked into the generated
+// endpoint and silently ignored at request time). `Required` makes a rename in
+// either copy a missing property, which stops compiling.
+type _AskRetrievalMatchesRuntime = AssertExtends<
+  Required<AskRetrievalConfig>,
+  Required<AskRetrievalOptions>
+>;
+type _AskRuntimeMatchesRetrieval = AssertExtends<
+  Required<AskRetrievalOptions>,
+  Required<AskRetrievalConfig>
 >;

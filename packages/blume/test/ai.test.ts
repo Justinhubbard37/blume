@@ -872,6 +872,25 @@ const askData: AskData = {
   site: "https://example.com",
 };
 
+/** Four long, equally-matching pages, for the retrieval-size assertions. */
+const longAskData: AskData = {
+  documents: Array.from({ length: 4 }, (_, index) => ({
+    content: `Install guide ${index}. ${"Install the dev server and preview the docs. ".repeat(150)}`,
+    description: "How to install Blume",
+    locale: "",
+    route: `/guides/install-${index}`,
+    title: `Installation ${index}`,
+  })),
+  site: null,
+};
+
+/** The text between the `<docs>` markers — what the question actually carries. */
+const docsBlock = (system: string | undefined): string => {
+  const start = system?.indexOf("<docs>") ?? -1;
+  const end = system?.indexOf("</docs>") ?? -1;
+  return start === -1 || end === -1 ? "" : (system ?? "").slice(start + 6, end);
+};
+
 describe("createAskContext", () => {
   it("grounds the prompt in the retrieved page and asks the model to cite", async () => {
     const ground = createAskContext(askData);
@@ -902,6 +921,120 @@ describe("createAskContext", () => {
     expect(base).toBeGreaterThanOrEqual(0);
     expect(custom).toBeGreaterThan(base);
     expect(docs).toBeGreaterThan(custom);
+  });
+
+  it("keeps every retrieval size at its default when none are configured", async () => {
+    const ground = createAskContext(longAskData);
+    const injected = docsBlock(
+      await ground([{ content: "install guide", role: "user" }])
+    );
+    // Four matching pages, each cut to the 2000-character excerpt default and
+    // all of them inside the 10,000-character budget.
+    expect(injected.split("## ").length - 1).toBe(4);
+    expect(injected.length).toBeGreaterThan(7000);
+  });
+
+  it("caps the retrieved documents at `maxResults`", async () => {
+    const ground = createAskContext(longAskData, {
+      retrieval: { maxResults: 1 },
+    });
+    const injected = docsBlock(
+      await ground([{ content: "install guide", role: "user" }])
+    );
+    expect(injected.split("## ").length - 1).toBe(1);
+  });
+
+  it("caps each excerpt at `excerptChars`", async () => {
+    const ground = createAskContext(longAskData, {
+      retrieval: { excerptChars: 300, maxResults: 1 },
+    });
+    const injected = docsBlock(
+      await ground([{ content: "install guide", role: "user" }])
+    );
+    // 300 characters of body, plus the `## Title (/route)` heading and the
+    // ellipses marking the trimmed edges.
+    expect(injected.length).toBeLessThan(400);
+    expect(injected).toContain("install");
+  });
+
+  it("injects the page the reader is viewing on top of the `maxResults` hits", async () => {
+    const ground = createAskContext(
+      {
+        documents: [
+          ...longAskData.documents,
+          {
+            content: "Deploying to production.",
+            description: "How to deploy",
+            locale: "",
+            route: "/guides/deploy",
+            title: "Deploy",
+          },
+        ],
+        site: null,
+      },
+      { retrieval: { maxResults: 1 } }
+    );
+    const injected = docsBlock(
+      await ground([{ content: "install guide", role: "user" }], {
+        path: "/guides/deploy",
+      })
+    );
+    // The current page grounds first and doesn't count against `maxResults`,
+    // so up to `maxResults + 1` pages are injected (and citable).
+    expect(injected).toContain("the page the user is currently viewing");
+    expect(injected.split("## ").length - 1).toBe(2);
+  });
+
+  it("skips a page a small remaining budget would cut to a junk fragment", async () => {
+    const ground = createAskContext(longAskData, {
+      retrieval: { contextBudget: 2100 },
+    });
+    const injected = docsBlock(
+      await ground([{ content: "install guide", role: "user" }])
+    );
+    // The first excerpt leaves ~100 characters of budget — below the minimum
+    // useful excerpt, so no further long page gets a heading over a fragment.
+    expect(injected.split("## ").length - 1).toBe(1);
+  });
+
+  it("still injects a short page whole under a small remaining budget", async () => {
+    const ground = createAskContext(
+      {
+        documents: [
+          ...longAskData.documents,
+          {
+            content: "Install quickly with one command.",
+            description: "Quick install",
+            locale: "",
+            route: "/guides/quick",
+            title: "Quick install",
+          },
+        ],
+        site: null,
+      },
+      { retrieval: { contextBudget: 2100, maxResults: 5 } }
+    );
+    const injected = docsBlock(
+      await ground([{ content: "install guide", role: "user" }], {
+        path: "/guides/install-0",
+      })
+    );
+    // The current long page spends the budget down to ~100 characters: the
+    // other long pages are skipped, but the page that fits whole still lands.
+    expect(injected).toContain("Install quickly with one command.");
+    expect(injected.split("## ").length - 1).toBe(2);
+  });
+
+  it("caps the total injected text at `contextBudget`", async () => {
+    const ground = createAskContext(longAskData, {
+      retrieval: { contextBudget: 1000 },
+    });
+    const injected = docsBlock(
+      await ground([{ content: "install guide", role: "user" }])
+    );
+    // The first excerpt spends the whole budget, so no further page fits.
+    expect(injected.split("## ").length - 1).toBe(1);
+    expect(injected.length).toBeLessThan(1100);
   });
 
   it("returns undefined when there is no user message to ground on", async () => {
@@ -1045,6 +1178,17 @@ describe("createAskContext", () => {
 });
 
 describe("relevantExcerpt", () => {
+  it("keeps the window on the match when case mapping changes lengths", () => {
+    // Turkish İ lowercases to two characters ("i" + U+0307). Index math on a
+    // lowercased copy of the content would drift past the real position and
+    // slice a window that misses the matched region entirely.
+    const content = `${"İ".repeat(300)} The Config option lives here. ${"padding ".repeat(100)}`;
+    const excerpt = relevantExcerpt(content, "config", 200);
+    // Also exercises case-insensitive matching: the term is lowercase, the
+    // content capitalized.
+    expect(excerpt).toContain("Config option lives here");
+  });
+
   it("keeps the match in view when the window is narrower than the lead-in", () => {
     // A remaining context budget under EXCERPT_LEAD (160) shrinks the window
     // below the lead-in; the uncapped `best - 160` start used to end the slice
