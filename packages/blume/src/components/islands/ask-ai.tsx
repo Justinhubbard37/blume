@@ -144,7 +144,6 @@ const AskAI = ({
   // Merge per key (not `strings ?? …`) so a dictionary from a stale snapshot
   // that predates newer keys still resolves every label to its English default.
   const t = { ...DEFAULT_ASK, ...strings };
-  const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   // The streaming client — request shaping, optimistic assistant bubble,
@@ -164,10 +163,25 @@ const AskAI = ({
   // Where focus came from when the panel opened, restored on close.
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
-  // Portal target (document.body) only exists after mount; guards SSR. The
-  // one-time false→true flip is deliberate, so the initial `false` is required.
-  // oxlint-disable-next-line react/react-compiler, react-doctor/no-initialize-state -- deliberate post-mount portal guard
-  useEffect(() => setMounted(true), []);
+  // Where the panel portals to — the CURRENT document.body, held as state.
+  // Null until mount (guards SSR), then refreshed on every client-router swap:
+  // the island rides across navigations via transition:persist, but each swap
+  // installs a NEW <body>, discarding the portaled panel with the old one and
+  // resetting the `data-blume-ask` push attribute to the incoming page's
+  // server-rendered set. Reading document.body inline in render would NOT
+  // recover from that — it isn't a reactive value, so the memoized portal
+  // keeps its stale (detached) container. State identity is what re-anchors
+  // the portal and re-runs the body-scoped effects below.
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    // The initial null→body flip is deliberate (there is no body during SSR);
+    // it is the same one-time post-mount cascade the old `mounted` flag had.
+    // oxlint-disable-next-line react/react-compiler -- deliberate post-mount portal-target initialization
+    setPortalTarget(document.body);
+    const onSwap = () => setPortalTarget(document.body);
+    document.addEventListener("astro:after-swap", onSwap);
+    return () => document.removeEventListener("astro:after-swap", onSwap);
+  }, []);
 
   // The search modal forwards its query so "Ask AI: <query>" carries straight in.
   useEffect(() => {
@@ -239,6 +253,18 @@ const AskAI = ({
     };
   }, [open]);
 
+  // Re-stamp the push attribute after a swap while the panel is open — the new
+  // body arrives without it. Deliberately separate from the effect above: a
+  // navigation must not re-run the focus handling and yank focus out of the
+  // page the reader just moved to.
+  useEffect(() => {
+    // document.body (not portalTarget) so the compiler doesn't flag a state
+    // mutation; by the time this runs for a swap, they are the same element.
+    if (open && portalTarget) {
+      document.body.dataset.blumeAsk = "open";
+    }
+  }, [open, portalTarget]);
+
   // Below the desktop dock breakpoint the open panel is a full-width overlay,
   // so Tab must not escape into the page it covers: every other child of
   // <body> (the panel portals to body) turns inert until close. The desktop
@@ -299,12 +325,16 @@ const AskAI = ({
       media.removeEventListener("change", apply);
       release();
     };
-  }, [open]);
+    // portalTarget: each swap installs a new <body>, so the sweep and its
+    // observer must re-run against the new children (the old ones are
+    // detached).
+  }, [open, portalTarget]);
 
-  // Keep the newest message in view as it streams in.
+  // Keep the newest message in view as it streams in — and after a swap, when
+  // the re-portaled panel's scroll container is reborn at the top.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages]);
+  }, [messages, portalTarget]);
 
   const runQuestion = (raw: string) => {
     const question = raw.trim();
@@ -501,7 +531,7 @@ const AskAI = ({
       >
         <Glyph path={icons.chat} size={18} />
       </button>
-      {mounted && createPortal(panel, document.body)}
+      {portalTarget && createPortal(panel, portalTarget)}
     </>
   );
 };

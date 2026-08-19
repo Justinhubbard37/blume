@@ -223,14 +223,33 @@ interface FakeBody {
 }
 const fakeBody: FakeBody = { children: [], dataset: {} };
 
-/** The `document` fields the island's focus restore reads. */
+/**
+ * The `document` fields the island reads: focus restore, the portal target,
+ * and the `astro:after-swap` subscription that re-anchors the portal after a
+ * client-router navigation replaces `<body>`.
+ */
 interface FakeDocument {
   activeElement: FakeElement | null;
+  addEventListener: (type: string, listener: Listener) => void;
   body: FakeBody;
+  removeEventListener: (type: string, listener: Listener) => void;
 }
+const documentListeners = new Map<string, Listener[]>();
 const fakeDocument: FakeDocument = {
   activeElement: null,
+  addEventListener(type: string, listener: Listener) {
+    documentListeners.set(type, [
+      ...(documentListeners.get(type) ?? []),
+      listener,
+    ]);
+  },
   body: fakeBody,
+  removeEventListener(type: string, listener: Listener) {
+    documentListeners.set(
+      type,
+      (documentListeners.get(type) ?? []).filter((l) => l !== listener)
+    );
+  },
 };
 browserGlobals.document = fakeDocument;
 
@@ -324,12 +343,14 @@ const render = (): StubNode => {
 const fresh = (nextProps: AskProps = {}): StubNode => {
   runCleanups();
   windowListeners.clear();
+  documentListeners.clear();
   mediaMatches = true;
   mediaListeners = [];
   mutationObservers = [];
   fakeBody.children = [];
   delete fakeBody.dataset.blumeAsk;
   fakeDocument.activeElement = null;
+  fakeDocument.body = fakeBody;
   cells = [];
   props = nextProps;
   // Two passes: the first flips the post-mount portal guard, the second
@@ -341,6 +362,13 @@ const fresh = (nextProps: AskProps = {}): StubNode => {
 /** Deliver a window event to the island's live listeners. */
 const dispatch = (type: string, event: FakeEventInit) => {
   for (const listener of windowListeners.get(type) ?? []) {
+    listener(event);
+  }
+};
+
+/** Deliver a document event (the client-router swap events live here). */
+const dispatchDocument = (type: string, event: FakeEventInit) => {
+  for (const listener of documentListeners.get(type) ?? []) {
     listener(event);
   }
 };
@@ -628,6 +656,34 @@ describe("AskAI open/close", () => {
     });
     tree = render();
     expect(aside(tree).props.inert).toBe(true);
+  });
+
+  it("re-anchors onto the new body and re-stamps the push attribute after a client-router swap", () => {
+    let tree = fresh();
+    byLabel(tree, "Ask AI").props.onClick();
+    tree = render();
+    expect(fakeBody.dataset.blumeAsk).toBe("open");
+
+    // A swap installs a brand-new <body>: the push attribute arrives unset and
+    // the previous portal container is a detached element. The island's
+    // astro:after-swap subscription must adopt the new body and re-stamp it
+    // while the panel is open.
+    const swappedBody: FakeBody = { children: [], dataset: {} };
+    fakeDocument.body = swappedBody;
+    dispatchDocument("astro:after-swap", {});
+    tree = render();
+    expect(aside(tree).props.inert).toBe(false);
+    expect(swappedBody.dataset.blumeAsk).toBe("open");
+
+    // With the panel closed, a swap leaves the incoming body unstamped.
+    dispatch("keydown", { ctrlKey: false, key: "Escape", metaKey: false });
+    tree = render();
+    const closedSwapBody: FakeBody = { children: [], dataset: {} };
+    fakeDocument.body = closedSwapBody;
+    dispatchDocument("astro:after-swap", {});
+    tree = render();
+    expect(aside(tree).props.inert).toBe(true);
+    expect(closedSwapBody.dataset.blumeAsk).toBeUndefined();
   });
 
   it("accepts the search handoff event, with and without a forwarded query", () => {
