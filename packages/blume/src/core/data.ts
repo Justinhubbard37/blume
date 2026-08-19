@@ -30,6 +30,14 @@ export interface BlumeLogo {
 export interface BlumeFavicon {
   href: string;
   type?: string;
+  /**
+   * Dark-scheme variant: the `-dark` sibling of the resolved icon file (e.g.
+   * `icon.svg` → `icon-dark.svg`), or the bundled default pair. When set, the
+   * layout emits an unconditional light link plus both icons behind
+   * `media="(prefers-color-scheme: …)"` so a dark mark doesn't vanish against
+   * dark browser chrome.
+   */
+  dark?: { href: string; type?: string };
 }
 
 /** Announcement banner, normalized from its config (string shorthand or object). */

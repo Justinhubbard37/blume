@@ -705,6 +705,96 @@ describe("buildRuntimeData", () => {
     });
   });
 
+  it("pairs a public dark favicon with the light one", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "docs/index.md": "# Home\n",
+        "public/favicon-dark.svg": "<svg></svg>",
+        "public/favicon.svg": "<svg></svg>",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.favicon).toEqual({
+      dark: { href: "/favicon-dark.svg", type: "image/svg+xml" },
+      href: "/favicon.svg",
+      type: "image/svg+xml",
+    });
+  });
+
+  it("ignores a dark file that is not a sibling of the resolved icon", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "docs/index.md": "# Home\n",
+        "public/favicon-dark.png": "FAKEPNG",
+        "public/icon.svg": "<svg></svg>",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.favicon).toEqual({
+      href: "/icon.svg",
+      type: "image/svg+xml",
+    });
+  });
+
+  it("pairs a root dark favicon sibling as inline data uris", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "docs/index.md": "# Home\n",
+        "icon-dark.png": "FAKEDARKPNG",
+        "icon.png": "FAKEPNG",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.favicon.href.startsWith("data:image/png;base64,")).toBe(
+      true
+    );
+    expect(
+      data.config.favicon.dark.href.startsWith("data:image/png;base64,")
+    ).toBe(true);
+    expect(data.config.favicon.dark.href).not.toBe(data.config.favicon.href);
+  });
+
+  it("uses a dark-only favicon for both schemes", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "docs/index.md": "# Home\n",
+        "public/icon-dark.svg": "<svg></svg>",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.favicon).toEqual({
+      href: "/icon-dark.svg",
+      type: "image/svg+xml",
+    });
+  });
+
+  it("emits no dark variant when the project ships only a light icon", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "docs/index.md": "# Home\n",
+        "public/icon.svg": "<svg></svg>",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.favicon.dark).toBeUndefined();
+  });
+
+  it("falls back to the bundled light/dark favicon pair", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "docs/index.md": "# Home\n",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.favicon.href.startsWith("data:image/png;base64,")).toBe(
+      true
+    );
+    expect(
+      data.config.favicon.dark.href.startsWith("data:image/png;base64,")
+    ).toBe(true);
+    expect(data.config.favicon.dark.href).not.toBe(data.config.favicon.href);
+  });
+
   it("references a public apple touch icon by url", async () => {
     const project = await scanProject(
       await writeProject({

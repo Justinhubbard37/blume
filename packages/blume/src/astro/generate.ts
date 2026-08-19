@@ -964,6 +964,13 @@ const FAVICON_CANDIDATES = [
   "icon.ico",
 ];
 
+/**
+ * Derive the `-dark` sibling of an icon filename (`icon.svg` → `icon-dark.svg`),
+ * inserting the suffix before the extension.
+ */
+const darkSibling = (name: string): string =>
+  name.replace(/\.(?=[^.]+$)/u, "-dark.");
+
 /** `<link type>` MIME for the favicon extensions we recognize. */
 const FAVICON_TYPES = new Map([
   ["ico", "image/x-icon"],
@@ -983,8 +990,19 @@ const faviconType = (name: string): string | undefined => {
 const inlineDataUri = (file: string, type: string): string =>
   `data:${type};base64,${readFileSync(file).toString("base64")}`;
 
-/** The bundled Blume favicon, inlined as a data URI so it needs no public file. */
+/**
+ * The bundled Blume favicon, inlined as a data URI so it needs no public file.
+ * The mark is dark, so it ships with a light-on-transparent dark-scheme variant —
+ * otherwise it disappears against dark browser chrome.
+ */
 const defaultFavicon = (): BlumeFavicon => ({
+  dark: {
+    href: inlineDataUri(
+      join(BLUME_SRC, "assets", "icon-dark.png"),
+      "image/png"
+    ),
+    type: "image/png",
+  },
   href: inlineDataUri(join(BLUME_SRC, "assets", "icon.png"), "image/png"),
   type: "image/png",
 });
@@ -1029,16 +1047,52 @@ const resolveIconFile = (
 
 /**
  * Resolve the site favicon by convention, falling back to the bundled Blume mark
- * when the project ships no `icon.*`/`favicon.*` file.
+ * when the project ships no `icon.*`/`favicon.*` file. The dark-scheme variant
+ * is anchored to the resolved icon: its `-dark` sibling (e.g. `icon.svg` →
+ * `icon-dark.svg`) in the same directory — never an unrelated `-dark` file, so a
+ * stale or foreign `favicon-dark.*` can't silently pair with a different mark.
+ * A `-dark` file with no light sibling is the site's only mark and is used for
+ * both schemes, mirroring how `resolveLogo` treats a single-variant image.
  */
-const resolveFavicon = (project: BlumeProject): BlumeFavicon =>
-  resolveIconFile(project, FAVICON_CANDIDATES) ?? defaultFavicon();
+const resolveFavicon = (project: BlumeProject): BlumeFavicon => {
+  const { root } = project.context;
+  for (const name of FAVICON_CANDIDATES) {
+    if (existsSync(join(root, "public", name))) {
+      const type = faviconType(name);
+      const sibling = darkSibling(name);
+      return existsSync(join(root, "public", sibling))
+        ? { dark: { href: `/${sibling}`, type }, href: `/${name}`, type }
+        : { href: `/${name}`, type };
+    }
+  }
+  for (const name of FAVICON_CANDIDATES) {
+    const file = join(root, name);
+    if (existsSync(file)) {
+      const type = faviconType(name);
+      const mime = type ?? "image/x-icon";
+      const siblingFile = join(root, darkSibling(name));
+      return existsSync(siblingFile)
+        ? {
+            dark: { href: inlineDataUri(siblingFile, mime), type },
+            href: inlineDataUri(file, mime),
+            type,
+          }
+        : { href: inlineDataUri(file, mime), type };
+    }
+  }
+  return (
+    resolveIconFile(project, FAVICON_CANDIDATES.map(darkSibling)) ??
+    defaultFavicon()
+  );
+};
 
 /**
  * Resolve the Apple touch icon by convention, or null when the project ships
  * none (unlike the favicon, there's no bundled default). Note: iOS ignores
  * `data:`-URI apple-touch-icons, so a `public/` file (served by URL) is the
  * reliable path; a root-level file is still inlined for symmetry with favicons.
+ * Deliberately no `-dark` sibling detection here: iOS ignores `media` on
+ * `apple-touch-icon` links, so a dark variant could never be served.
  */
 const resolveAppleIcon = (project: BlumeProject): BlumeFavicon | null =>
   resolveIconFile(project, APPLE_ICON_CANDIDATES);
