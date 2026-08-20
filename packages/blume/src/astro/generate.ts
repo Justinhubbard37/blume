@@ -1285,6 +1285,7 @@ export const buildRuntimeData = (project: BlumeProject): string => {
         palette: config.seo.og.palette,
         site: resolveOgSite(config),
       },
+      openInChat: config.ai.openInChat,
       repoUrl,
       search: {
         enabled: config.search.provider !== "none",

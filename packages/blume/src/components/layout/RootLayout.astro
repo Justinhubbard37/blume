@@ -3,6 +3,7 @@ import { EN_UI } from "../../core/i18n-ui.ts";
 import type { UIStrings } from "../../core/i18n-ui.ts";
 import { resolveDateFormatOptions } from "../../core/date-format.ts";
 import type { ResolvedDateFormat } from "../../core/schema.ts";
+import type { OpenInChatProvider } from "../../core/open-in-chat.ts";
 import type { BlumeClientData, BlumeFavicon } from "../../core/data.ts";
 import type {
   Heading,
@@ -114,6 +115,11 @@ interface Props {
   feedback?: boolean;
   exportPdf?: boolean;
   exportEpub?: boolean;
+  /**
+   * "Open in chat" providers to list, in order; an empty list hides the
+   * action, and omitting the prop shows every provider.
+   */
+  openInChat?: readonly OpenInChatProvider[];
   feeds?: { title: string; href: string }[];
   /**
    * Which agent-discovery resources exist, advertised as `describedby` head
@@ -213,6 +219,7 @@ const {
   feedback = false,
   exportPdf,
   exportEpub,
+  openInChat,
   feeds,
   discovery,
   siteUrl,
@@ -715,6 +722,7 @@ const bannerKey = banner?.dismissible ? banner.key : null;
               exportPdf={exportPdf}
               mcpName={mcp?.name}
               mcpUrl={mcpUrl}
+              openInChat={openInChat}
               route={page.route}
               strings={strings.actions}
             />

@@ -1,6 +1,8 @@
 ---
 import { EN_UI } from "../../core/i18n-ui.ts";
 import type { UIStrings } from "../../core/i18n-ui.ts";
+import { openInChatProviders } from "../../core/open-in-chat.ts";
+import type { OpenInChatProvider } from "../../core/open-in-chat.ts";
 import { GITHUB_MARK } from "../github-mark.ts";
 import Icon from "../Icon.astro";
 
@@ -15,12 +17,25 @@ interface Props {
   mcpUrl?: string | null;
   /** Display name of the MCP server (defaults to the site title). */
   mcpName?: string | null;
+  /**
+   * "Open in chat" providers to list, in order; an empty list hides the
+   * action, and omitting the prop shows every provider.
+   */
+  openInChat?: readonly OpenInChatProvider[];
   /** Localized action labels. */
   strings?: UIStrings["actions"];
 }
 
-const { route, editUrl, exportPdf, exportEpub, mcpUrl, mcpName, strings } =
-  Astro.props;
+const {
+  route,
+  editUrl,
+  exportPdf,
+  exportEpub,
+  mcpUrl,
+  mcpName,
+  openInChat,
+  strings,
+} = Astro.props;
 // Merge over the English defaults so a label missing from a translation (or from
 // a not-yet-regenerated snapshot) still renders instead of coming out blank.
 const a = { ...EN_UI.actions, ...strings };
@@ -44,19 +59,27 @@ const LOGOS: Record<string, string> = {
   v0: '<svg class="size-4 shrink-0" fill="currentColor" viewBox="0 0 147 70" xmlns="http://www.w3.org/2000/svg"><path d="M56 50.2031V14H70V60.1562C70 65.5928 65.5928 70 60.1562 70C57.5605 70 54.9982 68.9992 53.1562 67.1573L0 14H19.7969L56 50.2031Z"/><path d="M147 56H133V23.9531L100.953 56H133V70H96.6875C85.8144 70 77 61.1856 77 50.3125V14H91V46.1562L123.156 14H91V0H127.312C138.186 0 147 8.81439 147 19.6875V56Z"/></svg>',
 };
 
+/** Display names for the "Open in chat" providers. */
+const PROVIDER_NAMES: Record<OpenInChatProvider, string> = {
+  chatgpt: "ChatGPT",
+  claude: "Claude",
+  cursor: "Cursor",
+  scira: "Scira",
+  t3: "T3 Chat",
+  v0: "v0",
+};
+
 // Brand names stay verbatim; the surrounding "Open in" phrase localizes via
-// the `actions.openIn` template.
-const PROVIDERS = [
-  { key: "v0", name: "v0" },
-  { key: "chatgpt", name: "ChatGPT" },
-  { key: "claude", name: "Claude" },
-  { key: "t3", name: "T3 Chat" },
-  { key: "scira", name: "Scira" },
-  { key: "cursor", name: "Cursor" },
-].map((provider) => ({
-  ...provider,
-  label: a.openIn.replace("{name}", provider.name),
+// the `actions.openIn` template. `ai.openInChat` picks and orders the list;
+// an empty list hides the action entirely.
+const providers = (openInChat ?? openInChatProviders).map((key) => ({
+  key,
+  label: a.openIn.replace("{name}", PROVIDER_NAMES[key]),
 }));
+
+// The default list opens with v0 and separates it from the chat assistants;
+// keep that separator only while a configured list preserves v0 first.
+const chatSeparator = providers.length > 1 && providers[0]?.key === "v0";
 
 // Top-level actions match the ToC links: flat, no background/padding, color
 // shift on hover only.
@@ -134,41 +157,45 @@ const menuRowClass =
     )
   }
 
-  <details class="group relative">
-    <summary
-      class={`${rowClass} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}
-    >
-      <Icon name="external-link" size={16} />
-      {a.openInChat}
-      <Icon
-        class="ms-auto transition-transform group-open:rotate-180"
-        name="chevron-down"
-        size={14}
-      />
-    </summary>
-    <div
-      class="absolute top-full right-2 z-50 mt-1 w-max min-w-[14rem] max-w-[22rem] rounded-blume border border-border bg-background p-1 shadow-xl"
-      data-blume-menu
-    >
-      {
-        PROVIDERS.map((provider, index) => (
-          <>
-            {index === 1 && <hr class="my-1 border-border border-t" />}
-            <a
-              class={menuRowClass}
-              data-open-in={provider.key}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <span set:html={LOGOS[provider.key]} />
-              <span class="flex-1">{provider.label}</span>
-              <Icon name="external-link" size={13} />
-            </a>
-          </>
-        ))
-      }
-    </div>
-  </details>
+  {
+    providers.length > 0 && (
+      <details class="group relative">
+        <summary
+          class={`${rowClass} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}
+        >
+          <Icon name="external-link" size={16} />
+          {a.openInChat}
+          <Icon
+            class="ms-auto transition-transform group-open:rotate-180"
+            name="chevron-down"
+            size={14}
+          />
+        </summary>
+        <div
+          class="absolute top-full right-2 z-50 mt-1 w-max min-w-[14rem] max-w-[22rem] rounded-blume border border-border bg-background p-1 shadow-xl"
+          data-blume-menu
+        >
+          {providers.map((provider, index) => (
+            <>
+              {index === 1 && chatSeparator && (
+                <hr class="my-1 border-border border-t" />
+              )}
+              <a
+                class={menuRowClass}
+                data-open-in={provider.key}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span set:html={LOGOS[provider.key]} />
+                <span class="flex-1">{provider.label}</span>
+                <Icon name="external-link" size={13} />
+              </a>
+            </>
+          ))}
+        </div>
+      </details>
+    )
+  }
 
   {
     mcpUrl && (

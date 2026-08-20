@@ -8,6 +8,7 @@ import { normalizeXHandle } from "../seo/x-handle.ts";
 import { FONT_SLUGS, isFontSlug } from "../theme/fonts.ts";
 import { normalizeBasePath } from "./base-path.ts";
 import { uiLocaleOverridesSchema } from "./i18n-ui.ts";
+import { openInChatProviders } from "./open-in-chat.ts";
 import type { ContentSource } from "./sources/types.ts";
 import { isStandardSchema } from "./standard-schema.ts";
 import type { StandardSchema } from "./standard-schema.ts";
@@ -891,6 +892,28 @@ const aiConfigSchema = z.strictObject({
   /** Expose the docs as an MCP server for connecting agents. */
   mcp: mcpConfigSchema.prefault({}),
   /**
+   * The "Open in chat" page action. `true` (the default) lists every
+   * provider, `false` hides the action entirely, and an array of provider
+   * keys shows just that subset, in the given order. Normalized to the
+   * provider list so consumers read a plain array.
+   */
+  openInChat: z
+    .union([
+      z.boolean(),
+      z
+        .array(z.enum(openInChatProviders))
+        .refine((value) => new Set(value).size === value.length, {
+          message: "ai.openInChat must not repeat a provider.",
+        }),
+    ])
+    .default(true)
+    .transform((value) => {
+      if (isBoolean(value)) {
+        return value ? [...openInChatProviders] : [];
+      }
+      return value;
+    }),
+  /**
    * Publish Agent Skills for discovery: a directory (resolved against the
    * project root) whose subdirectories each hold a `SKILL.md`. The build
    * copies each skill under `/.well-known/agent-skills/` — a lone `SKILL.md`
@@ -960,6 +983,8 @@ const navigationConfigSchema = z.strictObject({
 
 export type AskAiProvider = (typeof askAiProviders)[number];
 export type AskAiConfig = NonNullable<z.infer<typeof aiConfigSchema>["ask"]>;
+export { openInChatProviders } from "./open-in-chat.ts";
+export type { OpenInChatProvider } from "./open-in-chat.ts";
 
 // Reader-facing "Export" page action (PDF via print, EPUB via client-side
 // generation). Off by default. Accepts a shorthand boolean to toggle both

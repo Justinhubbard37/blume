@@ -8,6 +8,7 @@ import type { FontSlug } from "../theme/fonts.ts";
 import type {
   blumeConfigSchema,
   OpenApiSource,
+  OpenInChatProvider,
   SearchProvider,
   SidebarDisplay,
   SidebarItemConfig,
@@ -757,6 +758,19 @@ export interface AiConfig {
   markdownComponents?: Record<string, ComponentMarkdown>;
   /** Expose the docs as an MCP server for agents. */
   mcp?: McpConfig;
+  /**
+   * The "Open in chat" page action, which opens the current page in an AI
+   * assistant pre-filled with a prompt pointing at its raw Markdown.
+   * Defaults to `true` (every provider). Set `false` to hide the action, or
+   * list a subset of providers to show, in order.
+   *
+   * ```ts
+   * ai: {
+   *   openInChat: ["claude", "chatgpt", "cursor"],
+   * }
+   * ```
+   */
+  openInChat?: boolean | OpenInChatProvider[];
   /**
    * Publish Agent Skills for discovery: a directory (resolved against the
    * project root) whose subdirectories each hold a `SKILL.md`. Skills are

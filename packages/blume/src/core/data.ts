@@ -159,6 +159,11 @@ export interface BlumeDataConfig {
      */
     site?: string;
   };
+  /**
+   * "Open in chat" page-action providers (`ai.openInChat`), in display order;
+   * empty hides the action.
+   */
+  openInChat: ResolvedConfig["ai"]["openInChat"];
   /** Repository URL for header/edit links, or `null`. */
   repoUrl: string | null;
   search: {

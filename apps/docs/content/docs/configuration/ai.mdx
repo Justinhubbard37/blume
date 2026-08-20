@@ -101,6 +101,14 @@ The **Open in chat** action opens the current page in an AI assistant — v0, Ch
 
 Like Copy as Markdown, it needs no setup. The assistant fetches the page over its public URL, so it works as soon as the page is deployed.
 
+To tailor the action, set `ai.openInChat`. `false` hides it entirely, and an array of provider keys — `"v0"`, `"chatgpt"`, `"claude"`, `"t3"`, `"scira"`, `"cursor"` — shows just those providers, in the order you list them:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  openInChat: ["claude", "chatgpt", "cursor"],
+}
+```
+
 To embed a ready-to-copy prompt inline in your content — rather than a whole-page action — use the [Prompt component](/docs/content/components#prompt), which renders a labeled row with a **Copy prompt** button and an optional open-in-Cursor link.
 
 ## Ask AI

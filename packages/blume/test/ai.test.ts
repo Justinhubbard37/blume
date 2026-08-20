@@ -25,7 +25,11 @@ import {
 import { buildContentGraph } from "../src/core/graph.ts";
 import type { BlumeProject } from "../src/core/project-graph.ts";
 import { blumeConfigSchema, pageMetaSchema } from "../src/core/schema.ts";
-import type { AskAiConfig, BlumeConfigInput } from "../src/core/schema.ts";
+import type {
+  AskAiConfig,
+  BlumeConfigInput,
+  OpenInChatProvider,
+} from "../src/core/schema.ts";
 import type {
   BlumeManifest,
   ContentGraph,
@@ -421,6 +425,48 @@ describe("ai.llmsTxt schema", () => {
       blumeConfigSchema.parse({ ai: { llmsTxt: { openapi: false } } }).ai
         .llmsTxt
     ).toStrictEqual({ enabled: true, openapi: false });
+  });
+});
+
+describe("ai.openInChat schema", () => {
+  it("defaults to every provider, in display order", () => {
+    const expected: OpenInChatProvider[] = [
+      "v0",
+      "chatgpt",
+      "claude",
+      "t3",
+      "scira",
+      "cursor",
+    ];
+    expect(blumeConfigSchema.parse({}).ai.openInChat).toStrictEqual(expected);
+    expect(
+      blumeConfigSchema.parse({ ai: { openInChat: true } }).ai.openInChat
+    ).toStrictEqual(expected);
+  });
+
+  it("normalizes false to an empty list", () => {
+    expect(
+      blumeConfigSchema.parse({ ai: { openInChat: false } }).ai.openInChat
+    ).toStrictEqual([]);
+  });
+
+  it("keeps a provider subset in the configured order", () => {
+    expect(
+      blumeConfigSchema.parse({ ai: { openInChat: ["claude", "v0"] } }).ai
+        .openInChat
+    ).toStrictEqual(["claude", "v0"]);
+  });
+
+  it("rejects unknown providers", () => {
+    expect(() =>
+      blumeConfigSchema.parse({ ai: { openInChat: ["copilot"] } })
+    ).toThrow();
+  });
+
+  it("rejects a repeated provider", () => {
+    expect(() =>
+      blumeConfigSchema.parse({ ai: { openInChat: ["claude", "claude"] } })
+    ).toThrow("ai.openInChat must not repeat a provider.");
   });
 });
 
