@@ -1052,11 +1052,11 @@ describe("generateRuntime", () => {
     expect(notFound).toContain("noindex={true}");
   });
 
-  // Only a migrated (`.`-rooted) project keeps the dev watcher out of Astro's
-  // cache dir: its docs glob-loader would otherwise churn on Astro's own
-  // `.blume/.astro` writes. The trade-off (stale `.md` bodies until restart)
-  // is why the ignore must never leak into the normal layout above.
-  it("keeps the dev watcher out of Astro's cache dir for root-rooted content", async () => {
+  // A migrated (`.`-rooted) project's docs collection contains `.blume/`, but
+  // Astro's content watcher honors the collection's `!.blume/**` negation, so
+  // no `server.watch.ignored` escape hatch is emitted — `.md` body edits keep
+  // hot-reloading instead of needing a dev-server restart.
+  it("leaves the dev watcher on Astro's cache dir for root-rooted content", async () => {
     const project = await scanProject(
       await writeProject({
         "blume.config.ts": 'export default { content: { root: "." } };\n',
@@ -1068,7 +1068,12 @@ describe("generateRuntime", () => {
       join(project.context.outDir, "astro.config.mjs"),
       "utf-8"
     );
-    expect(astroConfig).toContain(".astro/**");
+    expect(astroConfig).not.toContain(".astro/**");
+    const contentConfig = await readFile(
+      join(project.context.outDir, "src/content.config.ts"),
+      "utf-8"
+    );
+    expect(contentConfig).toContain('"!.blume/**"');
   });
 
   it("skips the preview route when there are no examples", async () => {

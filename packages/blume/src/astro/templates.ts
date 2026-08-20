@@ -307,35 +307,6 @@ const reactIntegration = (compilerPath: string | null | undefined): string =>
     ? `react({ babel: { plugins: [[${JSON.stringify(compilerPath)}, { target: "19" }]] }, ${REACT_EXCLUDE} })`
     : `react({ ${REACT_EXCLUDE} })`;
 
-/**
- * The `server.watch` block for the generated dev config. Keeps the watcher out
- * of Astro's cache dir — but ONLY when the docs collection is rooted at a
- * directory containing the runtime dir (a migrated, `content.root: "."`
- * project). There, the glob loader's watcher match (`picomatch.isMatch(entry,
- * pattern)` with array-OR semantics, where any negated pattern matches
- * unrelated files) fires on every `.blume/.astro` write — "No entry type
- * found" noise, and a `data-store.json` event can re-ingest the store file as
- * a JSON entry and loop the sync. Everywhere else the watcher MUST see
- * `.astro/data-store.json`: its change events are the only trigger for
- * Astro's dev-time content invalidation (see vite-plugin-content-virtual-mod),
- * and `.md` bodies are rendered into the store at load time — so ignoring the
- * file serves stale `.md` HTML on every request until the server restarts,
- * even though the loader logs a reload.
- */
-const devWatchOption = (
-  outDir: string,
-  contentWatchesRuntimeDir: boolean | undefined
-): string =>
-  contentWatchesRuntimeDir
-    ? `
-      // Astro's cache dir sits inside the docs collection, whose watcher would
-      // otherwise churn (and can loop) on Astro's own writes. Trade-off: .md
-      // body edits need a dev-server restart in this layout.
-      watch: {
-        ignored: ${JSON.stringify([join(outDir, ".astro", "**")])},
-      },`
-    : "";
-
 interface IntegrationBridgeOptions {
   /** Config path relative to the generated Astro config. */
   configFile: string;
@@ -444,13 +415,6 @@ export const astroConfigTemplate = (options: {
   reactCompilerPath?: string | null;
   /** Project tsconfig path aliases (`find` -> absolute dir), e.g. `@` -> src. */
   aliases?: Record<string, string>;
-  /**
-   * Whether the filesystem `docs` collection is rooted at a directory that
-   * contains the runtime dir (a migrated, `content.root: "."` project) — the
-   * only layout where the dev watcher must be kept out of Astro's cache dir.
-   * See {@link devWatchOption} for why this must stay scoped.
-   */
-  contentWatchesRuntimeDir?: boolean;
   /** Bridge used to load configured integrations without serializing them. */
   integrationBridge?: IntegrationBridgeOptions;
 }): string => {
@@ -656,10 +620,6 @@ export const astroConfigTemplate = (options: {
     })})`
   );
 
-  const watchOption = devWatchOption(
-    context.outDir,
-    options.contentWatchesRuntimeDir
-  );
   const {
     configSourceMarker,
     userConfigImports,
@@ -763,7 +723,7 @@ ${userConfigSetup}export default defineConfig({
     server: {
       fs: {
         allow: ${JSON.stringify(fsAllow)},
-      },${watchOption}
+      },
     },
   },
 });
@@ -777,14 +737,11 @@ export const stagedContentDir = (outDir: string): string =>
 /**
  * The runtime dir relative to the docs collection `base` when it sits inside
  * it (a migrated, `content.root: "."` project) — null when it lives elsewhere.
- * Drives both the collection's negative glob (`contentConfigTemplate`) and
- * whether the dev watcher is kept out of Astro's cache dir (the
- * `contentWatchesRuntimeDir` option of `astroConfigTemplate`).
+ * Drives the collection's negative glob in `contentConfigTemplate`, which both
+ * keeps runtime-dir files out of the collection and (Astro's watcher honors
+ * negated patterns) keeps the content watcher off Astro's own `.astro` writes.
  */
-export const runtimeDirWithin = (
-  base: string,
-  outDir: string
-): string | null => {
+const runtimeDirWithin = (base: string, outDir: string): string | null => {
   const rel = relative(base, outDir);
   return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel : null;
 };
@@ -835,15 +792,11 @@ export const contentConfigTemplate = (options: {
   const outDirRel = runtimeDirWithin(collectionBase, context.outDir);
   const outDirIgnore = outDirRel ? [`!${outDirRel}/**`] : [];
 
-  // With no filesystem source, no route renders through `docs`, so glob nothing.
-  // Beyond skipping wasted work, this is the only thing that keeps Astro's
-  // content-layer *watcher* out of `.blume/`: an all-staged project roots the
-  // collection at the project dir (which contains `.blume/.astro/fonts`, rewritten on every
-  // request), and the watcher's match test is `picomatch.isMatch(path, pattern)`
-  // — with array-OR semantics, any `!ignored/**` negation *matches* unrelated
-  // files, so negative patterns can't exclude a subtree there. An empty pattern
-  // matches nothing, so the watcher stays silent. The collection is still
-  // declared below so `getCollection("docs")` / `getEntry` resolve (to empty).
+  // With no filesystem source, no route renders through `docs`, so glob
+  // nothing: an all-staged project roots the collection at the project dir,
+  // and a patterned glob would scan (and watch) the whole project for nothing.
+  // The collection is still declared below so `getCollection("docs")` /
+  // `getEntry` resolve (to empty).
   const filesystem = options.filesystem ?? true;
   const docsPattern = filesystem
     ? [

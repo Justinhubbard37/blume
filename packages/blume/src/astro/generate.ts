@@ -45,7 +45,7 @@ import type { BlumeProject } from "../core/project-graph.ts";
 import type { ResolvedConfig } from "../core/schema.ts";
 import { resolveDocsCollection } from "../core/sources/resolve.ts";
 import { resolveTsconfigAliases } from "../core/tsconfig-aliases.ts";
-import type { Diagnostic, Navigation, ProjectContext } from "../core/types.ts";
+import type { Diagnostic, Navigation } from "../core/types.ts";
 import { buildRssFeeds, renderRssFeed } from "../deploy/rss.ts";
 import { missingFontFiles, resolveOgFonts } from "../og/derive.ts";
 import type { DerivedOgFonts } from "../og/derive.ts";
@@ -98,7 +98,6 @@ import {
   playgroundProxyTemplate,
   rawMarkdownEndpointTemplate,
   rssEndpointTemplate,
-  runtimeDirWithin,
   staticJsonEndpointTemplate,
   runtimeDependencies,
   runtimePackageTemplate,
@@ -1574,20 +1573,6 @@ const buildComponentSlots = async (
   };
 };
 
-/**
- * Whether the docs glob-loader's watcher observes the runtime dir: a
- * filesystem collection whose base contains it (a migrated, `content.root:
- * "."` project) — the one layout where the dev watcher must be kept out of
- * Astro's cache dir. See `devWatchOption` in templates.ts.
- */
-const contentWatchesRuntimeDir = (
-  hasFilesystemSource: boolean,
-  collectionBase: string,
-  context: ProjectContext
-): boolean =>
-  hasFilesystemSource &&
-  runtimeDirWithin(collectionBase, context.outDir) !== null;
-
 /** The OG endpoint fonts for a scanned project (see {@link resolveOgFonts}). */
 const projectOgFonts = (project: BlumeProject): DerivedOgFonts =>
   resolveOgFonts(
@@ -1764,11 +1749,6 @@ export const generateRuntime = async (
           askPath,
           config,
           contentRoutes: markdownRoutePaths(project),
-          contentWatchesRuntimeDir: contentWatchesRuntimeDir(
-            hasFilesystemSource,
-            docsCollection.base,
-            context
-          ),
           context,
           dataPath,
           examplesPath,
