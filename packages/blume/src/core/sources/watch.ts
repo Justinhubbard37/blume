@@ -17,9 +17,8 @@ import type { WatchListener } from "node:fs";
  * render (e.g. `.blume/.astro/data-store.json`). Left unfiltered, each such write
  * re-triggers a rescan + runtime regeneration whose writes land back under
  * `.blume/` and fire the watcher again: a self-sustaining loop that stalls page
- * renders and floods the console (and, mid-render, corrupts Astro's dev module
- * graph so `astro:server-app.js` fails to load). `fs.watch` has no ignore
- * option, so we filter by the changed path in the callback.
+ * renders and floods the console. `fs.watch` has no ignore option, so we filter
+ * by the changed path in the callback.
  */
 export const BLUME_IGNORE_DIRS = [
   ".blume",

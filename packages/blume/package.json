@@ -90,7 +90,7 @@
     "@types/mdast": "^4.0.4",
     "@vercel/analytics": "^2.0.1",
     "ai": "^7.0.42",
-    "astro": "^7.1.0",
+    "astro": "^7.2.3",
     "babel-plugin-react-compiler": "^1.0.0",
     "chokidar": "^5.0.0",
     "citty": "^0.1.6",

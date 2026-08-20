@@ -512,47 +512,6 @@ export const prerenderDepsPlugin = (
   },
 });
 
-/** The subset of Rollup's plugin context `blume:server-app-resolve` needs. */
-interface ServerAppResolveContext {
-  resolve: (source: string) => Promise<{ id: string } | null>;
-}
-
-/**
- * Work around an Astro + Vite dev bug that breaks content renames.
- *
- * Astro's dev SSR entry is the virtual module `astro:server-app`, but its
- * resolver only matches the exact id (`/^astro:server-app$/`). Whenever the
- * route set changes — a content add, remove, or rename — Astro triggers a full
- * page reload, during which Vite re-requests the entry as `astro:server-app.js`.
- * The trailing `.js` misses Astro's filter, so the load fails ("Failed to load
- * url astro:server-app.js") and Vite's SSR module runner is left corrupted: the
- * in-memory content store never reconnects, so `getEntry` returns undefined and
- * the renamed page 404s until the dev server is manually restarted.
- *
- * Stripping the spurious `.js` and delegating back to Astro's resolver lets the
- * reload complete cleanly, so the renamed route resolves without a restart.
- */
-export interface ServerAppResolvePlugin {
-  enforce: "pre";
-  name: string;
-  resolveId: (
-    this: ServerAppResolveContext,
-    id: string
-  ) => Promise<string | null>;
-}
-
-export const serverAppResolvePlugin = (): ServerAppResolvePlugin => ({
-  enforce: "pre",
-  name: "blume:server-app-resolve",
-  async resolveId(id) {
-    if (id === "astro:server-app.js") {
-      const resolved = await this.resolve("astro:server-app");
-      return resolved?.id ?? null;
-    }
-    return null;
-  },
-});
-
 /** Astro integration package each non-React island framework needs installed. */
 const ISLAND_FRAMEWORK_DEPS = new Map([
   ["svelte", "@astrojs/svelte"],

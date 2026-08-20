@@ -607,7 +607,6 @@ export const astroConfigTemplate = (options: {
   const blumeImports = [
     "blumeIntegration",
     "prerenderDepsPlugin",
-    "serverAppResolvePlugin",
     ...(adapterOption.includes("withAdapterRoot") ? ["withAdapterRoot"] : []),
   ];
   const blumeImport = `import { ${blumeImports.join(", ")} } from "blume/astro";\n`;
@@ -706,7 +705,7 @@ ${userConfigSetup}export default defineConfig({
   // instantly.
   prefetch: { prefetchAll: true },
   vite: {
-    plugins: [tailwindcss(), prerenderDepsPlugin(), serverAppResolvePlugin()],
+    plugins: [tailwindcss(), prerenderDepsPlugin()],
     // Everything hydration can reach must be part of the dev dep optimizer's
     // FIRST run. The Vite root is the generated runtime, so user pages,
     // islands, and aliased components live outside it and are only crawled

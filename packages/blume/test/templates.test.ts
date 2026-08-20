@@ -675,14 +675,11 @@ describe("astroConfigTemplate", () => {
     expect(out).not.toContain('import react from "@astrojs/react"');
     expect(out).toContain("blumeIntegration(");
     // The prerender dep-link plugin is wired into the Vite config so isolated
-    // linkers can resolve externalized deps when generating static pages, and the
-    // server-app resolve shim keeps dev full reloads (route renames) from
-    // corrupting Astro's SSR module runner.
+    // linkers can resolve externalized deps when generating static pages.
     expect(out).toContain(
-      'import { blumeIntegration, prerenderDepsPlugin, serverAppResolvePlugin } from "blume/astro"'
+      'import { blumeIntegration, prerenderDepsPlugin } from "blume/astro"'
     );
     expect(out).toContain("prerenderDepsPlugin()");
-    expect(out).toContain("serverAppResolvePlugin()");
     // The client router's in-place swaps read from the prefetch cache, so
     // every link prefetches on hover/viewport to hide the request latency
     // behind user intent.

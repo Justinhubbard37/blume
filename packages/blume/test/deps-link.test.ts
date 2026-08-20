@@ -20,7 +20,6 @@ import {
   blumeDepsDir,
   ensureDepsLink,
   prerenderDepsPlugin,
-  serverAppResolvePlugin,
 } from "../src/astro/generate.ts";
 
 // `ensureDepsLink` proves out by making Astro resolvable from `.blume/`. We
@@ -544,39 +543,5 @@ describe("prerenderDepsPlugin", () => {
     await prerenderDepsPlugin(pkgDir).writeBundle({ dir });
 
     expect(existsSync(join(dir, "node_modules"))).toBe(false);
-  });
-});
-
-// Astro's own resolver would turn the bare id into the dev SSR entry path; the
-// stubbed `this.resolve` lets us observe that the plugin strips the spurious
-// `.js` and delegates the bare id back through the pipeline.
-const runResolve = (id: string): Promise<string | null> =>
-  serverAppResolvePlugin().resolveId.call(
-    {
-      resolve: (source: string) =>
-        Promise.resolve(
-          source === "astro:server-app"
-            ? { id: "/astro/dist/vite-plugin-app/createAstroServerApp.js" }
-            : null
-        ),
-    },
-    id
-  );
-
-describe("serverAppResolvePlugin", () => {
-  it("is a pre-plugin so it intercepts before Vite's default loader", () => {
-    expect(serverAppResolvePlugin().enforce).toBe("pre");
-  });
-
-  it("resolves the `.js`-suffixed dev SSR entry Astro's own filter misses", async () => {
-    expect(await runResolve("astro:server-app.js")).toBe(
-      "/astro/dist/vite-plugin-app/createAstroServerApp.js"
-    );
-  });
-
-  it("ignores every other id so normal resolution is untouched", async () => {
-    expect(await runResolve("astro:server-app")).toBeNull();
-    expect(await runResolve("virtual:some-other-module")).toBeNull();
-    expect(await runResolve("./relative.ts")).toBeNull();
   });
 });
