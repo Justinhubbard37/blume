@@ -182,6 +182,18 @@ export const openApiSource = (
       const { document, warnings, operations, tags, extractWarnings } =
         await parseReference(reference, ctx);
       const info = document.info ?? { title: reference.label, version: "" };
+      // The playground proxy resolves here, not client-side: `true` selects
+      // the built-in `/_api-proxy` route (mounted under the site `basePath`,
+      // like every served URL this module emits), a non-empty string is an
+      // external proxy used verbatim, and anything else (`false`, `""`)
+      // means the Send button fetches the API directly.
+      const { proxy: configuredProxy } = reference.display.playground;
+      let proxy: string | false = false;
+      if (configuredProxy === true) {
+        proxy = withBasePath(reference.basePath, "/_api-proxy");
+      } else if (configuredProxy !== false && configuredProxy !== "") {
+        proxy = configuredProxy;
+      }
       const spec: ApiSpecData = {
         codeSamples: reference.display.codeSamples,
         description: info.description ?? "",
@@ -202,6 +214,7 @@ export const openApiSource = (
             },
           ])
         ),
+        playground: { enabled: reference.display.playground.enabled, proxy },
         route: reference.route,
         slug: reference.slug,
         tags,

@@ -460,6 +460,27 @@ const componentSource = (path: string): Promise<string> =>
 const layoutSource = (name: string): Promise<string> =>
   componentSource(`layout/${name}`);
 
+/**
+ * Every `.astro` file under `src/` that imports the named component. The
+ * single-importer tests below use it to pin which pages can ever carry a
+ * lazy panel's loader script.
+ */
+const astroImportersOf = async (component: string): Promise<string[]> => {
+  const srcRoot = new URL("../src/", import.meta.url).pathname;
+  const importPattern = new RegExp(
+    String.raw`from\s+"[^"]*${component}\.astro"`,
+    "u"
+  );
+  const importers: string[] = [];
+  for await (const file of new Bun.Glob("**/*.astro").scan(srcRoot)) {
+    const source = await readFile(join(srcRoot, file), "utf-8");
+    if (importPattern.test(source)) {
+      importers.push(file);
+    }
+  }
+  return importers;
+};
+
 describe("layout chrome sources", () => {
   it("toggles the search dialog on ⌘K and guards re-entrant opens", async () => {
     const source = await layoutSource("Search.astro");
@@ -587,5 +608,59 @@ describe("buildStructuredData — dateModified and locale", () => {
     expect(article?.dateModified).toBe("2026-02-01T00:00:00.000Z");
     expect(article?.inLanguage).toBe("fr");
     expect(article?.datePublished).toBeUndefined();
+  });
+});
+
+describe("openapi playground sources", () => {
+  it("loads the playground client lazily behind the details toggle", async () => {
+    // The client module must stay a dynamic import: it becomes its own chunk,
+    // downloaded only when a reader actually opens the Try It panel.
+    const source = await componentSource("openapi/Playground.astro");
+    expect(source).toContain('await import("./playground-client.ts")');
+    expect(source).toContain("initPlayground(this)");
+    expect(source).toContain("{ once: true }");
+  });
+
+  it("keeps Operation.astro the only importer of Playground.astro", async () => {
+    // The no-playground-JS-on-non-operation-pages guarantee: any other .astro
+    // importing the panel would pull its loader script onto that page too.
+    expect(await astroImportersOf("Playground")).toEqual([
+      "components/openapi/Operation.astro",
+    ]);
+  });
+
+  it("tags each request-sample pane with its language for live sync", async () => {
+    // The playground client re-renders samples by [data-sample-lang]; the
+    // attribute must ride the same element as the tab-switcher's data-panel,
+    // and only request samples opt in (response/message panels pass no lang).
+    expect(await componentSource("openapi/PanelTabs.astro")).toMatch(
+      /data-panel=\{panel\.key\}\s+data-sample-lang=\{panel\.lang\}/u
+    );
+    expect(await componentSource("openapi/RequestPanel.astro")).toContain(
+      "lang: language.id"
+    );
+  });
+});
+
+describe("asyncapi composer sources", () => {
+  it("loads the composer client lazily behind the details toggle", async () => {
+    // Same island discipline as the OpenAPI panel: its own chunk, downloaded
+    // only when a reader actually opens the composer.
+    const source = await componentSource("openapi/MessageComposer.astro");
+    expect(source).toContain('await import("./message-composer.ts")');
+    expect(source).toContain("initComposer(this)");
+    expect(source).toContain("{ once: true }");
+  });
+
+  it("keeps AsyncApiOperation.astro the only importer of MessageComposer.astro", async () => {
+    expect(await astroImportersOf("MessageComposer")).toEqual([
+      "components/openapi/AsyncApiOperation.astro",
+    ]);
+  });
+
+  it("tags each event-sample pane with its tool id for live sync", async () => {
+    expect(await componentSource("openapi/AsyncApiOperation.astro")).toContain(
+      "lang: language.id"
+    );
   });
 });

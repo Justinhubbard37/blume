@@ -50,6 +50,7 @@ import { buildRssFeeds, renderRssFeed } from "../deploy/rss.ts";
 import { missingFontFiles, resolveOgFonts } from "../og/derive.ts";
 import type { DerivedOgFonts } from "../og/derive.ts";
 import { resolveOgLogo } from "../og/logo.ts";
+import type { OpenApiData } from "../openapi/model.ts";
 import { hasScalarReferences, referenceRoutes } from "../openapi/references.ts";
 import { buildReferenceFiles } from "../openapi/scalar.ts";
 import { isOpenApiSource } from "../openapi/source.ts";
@@ -94,6 +95,7 @@ import {
   mixedbreadSearchEndpointTemplate,
   notFoundPageTemplate,
   ogEndpointTemplate,
+  playgroundProxyTemplate,
   rawMarkdownEndpointTemplate,
   rssEndpointTemplate,
   runtimeDirWithin,
@@ -1450,6 +1452,76 @@ const writeMcpFiles = async (
 };
 
 /**
+ * Decide whether to generate the playground's built-in CORS proxy endpoint.
+ * Only the Blume renderer's playground with `proxy: true` needs it — a proxy
+ * URL string points at an external service, and `false` sends requests
+ * directly. Injected at `/_api-proxy` (rather than written under `pages/`)
+ * because Astro treats `_`-prefixed page files as private; the endpoint's own
+ * `prerender = false` export wins over the injection default.
+ */
+const planPlaygroundProxy = (config: ResolvedConfig, srcDir: string) => ({
+  enabled:
+    config.openapi.enabled &&
+    config.openapi.renderer === "blume" &&
+    config.openapi.playground.enabled &&
+    config.openapi.playground.proxy === true,
+  entrypoint: join(srcDir, "blume-openapi", "api-proxy.ts"),
+  pattern: "/_api-proxy",
+});
+
+/**
+ * The origins the built-in proxy is allowed to reach: one per absolute
+ * `servers[].url` across the parsed specs. This is the endpoint's whole trust
+ * boundary — the client sends the target as a query parameter, and a reader's
+ * custom base URL is not a documented server — so it is derived here, at build
+ * time, from the same documents the operation pages render.
+ *
+ * Relative (`/v1`) and templated (`{env}.api.example.com`) server URLs carry no
+ * origin to allow and are skipped; AsyncAPI documents declare `servers` as a
+ * map and contribute nothing (the proxy is OpenAPI-only).
+ */
+const specOrigins = (data: OpenApiData): string[] => {
+  const origins = new Set<string>();
+  for (const spec of Object.values(data)) {
+    // SAFETY: `document` is arbitrary parsed JSON; the assertion only names
+    // the optional `servers` shape, and every access below re-checks it —
+    // `Array.isArray(servers)` guards the list and `server.url ?? ""` the url.
+    const { servers } = spec.document as { servers?: { url?: string }[] };
+    for (const server of Array.isArray(servers) ? servers : []) {
+      const url = server.url ?? "";
+      // `new URL("https://{region}.api.example.com")` parses — the braces land
+      // in the hostname — so templated URLs need an explicit check or their
+      // junk literal becomes an allowlist entry no real request can match.
+      if (url.includes("{")) {
+        continue;
+      }
+      try {
+        origins.add(new URL(url).origin);
+      } catch {
+        // Not an absolute URL: nothing to allow.
+      }
+    }
+  }
+  return [...origins].toSorted();
+};
+
+/**
+ * The build-time diagnostic for a proxy whose allowlist came out empty. The
+ * allowlist comes solely from absolute `servers[].url` entries — relative and
+ * templated ones carry no origin — and with none at all the endpoint would
+ * 403 every playground send with nothing pointing the author at the spec.
+ */
+const proxyAllowlistWarnings = (
+  enabled: boolean,
+  origins: string[]
+): string[] =>
+  enabled && origins.length === 0
+    ? [
+        "openapi.playground.proxy is enabled, but no spec declares an absolute servers[].url (relative and templated URLs carry no origin), so the proxy's allowlist is empty and it will refuse every request. Add an absolute server URL to the spec, or point playground.proxy at an external proxy URL.",
+      ]
+    : [];
+
+/**
  * Write the Ask AI endpoint and, unless the backend runs its own retrieval
  * (Inkeep), the grounding snapshot the endpoint queries at request time. A no-op
  * when Ask AI is disabled.
@@ -1693,6 +1765,25 @@ export const generateRuntime = async (
   const mcp = planMcp(project, srcDir, pages);
   pages.push(...mcp.discoveryPages);
 
+  // The parsed OpenAPI specs behind the `blume:openapi` alias, also the source
+  // of the proxy's origin allowlist below. The source parsed them during the
+  // scan, so reading them here is free.
+  const openApiSource = project.sources.find(isOpenApiSource);
+  const openApiData = openApiSource ? openApiSource.openApiData() : {};
+
+  // The playground's built-in CORS proxy rides the same injection path as the
+  // MCP discovery docs; the endpoint itself opts out of prerendering.
+  const playgroundProxy = planPlaygroundProxy(config, srcDir);
+  if (playgroundProxy.enabled) {
+    pages.push({
+      entrypoint: playgroundProxy.entrypoint,
+      pattern: playgroundProxy.pattern,
+    });
+  }
+  // Computed once: the endpoint template bakes it in below, and an empty list
+  // is worth a diagnostic — the proxy would refuse every request it gets.
+  const proxyOrigins = specOrigins(openApiData);
+
   const hasStaged = staged.size > 0;
   // Only emit a project-scanning `docs` collection when a filesystem source
   // actually feeds it. An all-staged project (openapi/notion/…) has only staged
@@ -1838,6 +1929,9 @@ export const generateRuntime = async (
     ),
     writeAskFiles(project, srcDir, write),
     writeMcpFiles(project, mcp, write),
+    playgroundProxy.enabled
+      ? write(playgroundProxy.entrypoint, playgroundProxyTemplate(proxyOrigins))
+      : Promise.resolve(false),
   ]);
 
   if (config.seo.og.enabled) {
@@ -1953,6 +2047,7 @@ export const generateRuntime = async (
   // regenerated each run.
   const warnings: string[] = [
     ...(depsLinkWarning ? [depsLinkWarning] : []),
+    ...proxyAllowlistWarnings(playgroundProxy.enabled, proxyOrigins),
     ...reactCompilerWarnings(config, needsReact, reactCompilerPath),
     ...mcp.warnings,
     ...islandDiscovery.warnings,
@@ -2019,20 +2114,16 @@ export const generateRuntime = async (
     );
   }
 
-  // The parsed OpenAPI specs behind the `blume:openapi` alias. Always written
-  // (even as `{}`) so the alias resolves whether or not a reference is enabled;
-  // the source parsed the specs during the scan, so this is just serialization.
-  const openApiSource = project.sources.find(isOpenApiSource);
+  // `openapi.json` (the `blume:openapi` alias) is always written — even as `{}`
+  // — so the alias resolves whether or not a reference is enabled; the specs
+  // were parsed during the scan, so this is just serialization.
   // These write to distinct trees and never read one another, so they batch.
   // `data.json`/`openapi.json` and the manifest are not "structural" for Astro;
   // they hot-reload. `writeStagedContent` owns the `.blume/content` tree (its
   // own pruning), outside `.blume/src`, so a removed remote entry doesn't linger.
   await Promise.all([
     write(join(srcDir, "generated", "data.json"), buildRuntimeData(project)),
-    write(
-      openapiPath,
-      `${JSON.stringify(openApiSource ? openApiSource.openApiData() : {})}\n`
-    ),
+    write(openapiPath, `${JSON.stringify(openApiData)}\n`),
     write(
       join(out, "blume.manifest.json"),
       `${JSON.stringify(project.manifest, null, 2)}\n`

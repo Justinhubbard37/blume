@@ -11,6 +11,7 @@ const spec: ApiSpecData = {
   kind: "openapi",
   label: "Petstore",
   operations: {},
+  playground: { enabled: true, proxy: false },
   route: "/api",
   slug: "api",
   tags: [],

@@ -25,6 +25,12 @@ export interface ReferenceDisplay {
   codeSamples: string[];
   /** Whether nested schema rows start expanded. */
   expandSchemas: boolean;
+  /**
+   * The "Try it" playground: whether operation pages render it, and the CORS
+   * proxy the Send button routes through (`false` off, a URL string, or
+   * `true` for the built-in `/_api-proxy` endpoint).
+   */
+  playground: { enabled: boolean; proxy: string | boolean };
 }
 
 /** A spec source resolved to a concrete route, label, and renderer. */
@@ -190,6 +196,7 @@ export const resolveReferences = (
     {
       codeSamples: config.openapi.codeSamples,
       expandSchemas: config.openapi.expandSchemas,
+      playground: config.openapi.playground,
     },
     config.basePath
   ),
@@ -201,6 +208,7 @@ export const resolveReferences = (
     {
       codeSamples: config.asyncapi.codeSamples,
       expandSchemas: config.asyncapi.expandSchemas,
+      playground: config.asyncapi.playground,
     },
     config.basePath
   ),

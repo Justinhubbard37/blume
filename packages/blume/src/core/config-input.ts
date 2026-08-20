@@ -1218,6 +1218,15 @@ interface ReferenceConfig {
   enabled?: boolean;
   /** Start nested schema rows expanded (Blume renderer). Defaults to `false`. */
   expandSchemas?: boolean;
+  /**
+   * The interactive "Try it" panel on operation pages (Blume renderer). On by
+   * default; `false` hides it. `proxy` is the CORS escape hatch the OpenAPI
+   * Send button routes requests through: a proxy URL, or `true` for the
+   * built-in `/_api-proxy` endpoint (which requires
+   * `deployment.output: "server"`). `proxy` is OpenAPI-only — an event
+   * composer's WebSocket connect is direct.
+   */
+  playground?: boolean | { enabled?: boolean; proxy?: boolean | string };
   /** Who renders the reference. Defaults to `blume`. */
   renderer?: "blume" | "scalar";
   /**

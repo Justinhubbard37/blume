@@ -13,6 +13,12 @@ interface Panel {
   html?: string | null;
   /** Plain-text fallback when there is nothing to highlight. */
   text?: string;
+  /**
+   * Code-sample language id for a request-sample panel. Tags the panel with
+   * `data-sample-lang` so the playground client can re-render it live; panels
+   * that aren't samples leave it off.
+   */
+  lang?: string;
 }
 
 interface Props {
@@ -88,6 +94,7 @@ const TAB_CLASS =
             aria-labelledby={idFor("tab", panel.key)}
             class:list={[index === 0 ? "" : "hidden"]}
             data-panel={panel.key}
+            data-sample-lang={panel.lang}
             id={idFor("panel", panel.key)}
             role="tabpanel"
           >
