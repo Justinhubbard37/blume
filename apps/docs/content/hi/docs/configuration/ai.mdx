@@ -102,6 +102,14 @@ export default defineConfig({
 
 Copy as Markdown की तरह, इसे किसी सेटअप की ज़रूरत नहीं है। सहायक पेज को उसके सार्वजनिक URL से लाता है, इसलिए यह पेज डिप्लॉय होते ही काम करने लगता है।
 
+क्रिया को अनुकूलित करने के लिए, `ai.openInChat` सेट करें। `false` इसे पूरी तरह छिपा देता है, और प्रदाता कुंजियों की एक सरणी — `"v0"`, `"chatgpt"`, `"claude"`, `"t3"`, `"scira"`, `"cursor"` — केवल उन्हीं प्रदाताओं को दिखाती है, उसी क्रम में जिस क्रम में आप उन्हें सूचीबद्ध करते हैं:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  openInChat: ["claude", "chatgpt", "cursor"],
+}
+```
+
 अपनी सामग्री में इनलाइन एक कॉपी-करने-योग्य प्रॉम्प्ट एम्बेड करने के लिए — पूरे-पेज की क्रिया के बजाय — [Prompt कंपोनेंट](/docs/content/components#prompt) का उपयोग करें, जो एक **Copy prompt** बटन और एक वैकल्पिक open-in-Cursor लिंक के साथ एक लेबल की गई पंक्ति रेंडर करता है।
 
 ## Ask AI
@@ -482,7 +490,7 @@ ai: {
 }
 ```
 
-फिर Blume हर बिल्ड सतह पर JWKS को `/.well-known/http-message-signatures-directory` पर उसके पंजीकृत मीडिया प्रकार के साथ सर्व करता है। निर्देशिका परिभाषा से ही सार्वजनिक है, इसलिए कॉन्फ़िग केवल सार्वजनिक कुंजियाँ ही स्वीकार करता है — निजी सामग्री (`d`, `p`, `q`, …) वाली JWK एक लीक हुई क्रेडेंशियल भेजने के बजाय एक त्रुटि के साथ सत्���ापन में विफल हो जाती है। एक Ed25519 जोड़ी इस तरह जनरेट करें:
+फिर Blume हर बिल्ड सतह पर JWKS को `/.well-known/http-message-signatures-directory` पर उसके पंजीकृत मीडिया प्रकार के साथ सर्व करता है। निर्देशिका परिभाषा से ही सार्वजनिक है, इसलिए कॉन्फ़िग केवल सार्वजनिक कुंजियाँ ही स्वीकार करता है — निजी सामग्री (`d`, `p`, `q`, …) वाली JWK एक लीक हुई क्रेडेंशियल भेजने के बजाय एक त्रुटि के साथ सत्यापन में विफल हो जाती है। एक Ed25519 जोड़ी इस तरह जनरेट करें:
 
 ```bash
 node -e 'const { generateKeyPairSync } = require("node:crypto"); const { publicKey, privateKey } = generateKeyPairSync("ed25519"); console.log("public: ", JSON.stringify(publicKey.export({ format: "jwk" }))); console.log("private:", JSON.stringify(privateKey.export({ format: "jwk" })))'

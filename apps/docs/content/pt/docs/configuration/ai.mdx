@@ -102,6 +102,14 @@ A ação **Abrir no chat** abre a página atual em um assistente de IA — v0, C
 
 Assim como Copiar como Markdown, não precisa de configuração. O assistente busca a página pela URL pública dela, então funciona assim que a página estiver publicada.
 
+Para ajustar a ação, defina `ai.openInChat`. `false` a esconde por completo, e um array de chaves de provedor — `"v0"`, `"chatgpt"`, `"claude"`, `"t3"`, `"scira"`, `"cursor"` — mostra apenas esses provedores, na ordem em que você os listar:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  openInChat: ["claude", "chatgpt", "cursor"],
+}
+```
+
 Para incorporar um prompt pronto para copiar direto no seu conteúdo — em vez de uma ação de página inteira — use o [componente Prompt](/docs/content/components#prompt), que renderiza uma linha rotulada com um botão **Copiar prompt** e um link opcional para abrir no Cursor.
 
 ## Ask AI

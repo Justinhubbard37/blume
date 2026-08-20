@@ -102,6 +102,14 @@ export default defineConfig({
 
 Copy as Markdown と同様、セットアップは不要です。アシスタントは公開 URL 経由でページを取得するため、ページがデプロイされればすぐに機能します。
 
+このアクションを調整するには `ai.openInChat` を設定します。`false` にすると完全に非表示になり、プロバイダーキーの配列（`"v0"`、`"chatgpt"`、`"claude"`、`"t3"`、`"scira"`、`"cursor"`）を指定すると、列挙した順序でそれらのプロバイダーだけが表示されます。
+
+```ts blume.config.ts lineNumbers
+ai: {
+  openInChat: ["claude", "chatgpt", "cursor"],
+}
+```
+
 ページ全体のアクションではなく、コンテンツ内にコピーしてすぐ使えるプロンプトを埋め込みたい場合は、[Prompt コンポーネント](/docs/content/components#prompt)を使ってください。**Copy prompt** ボタンと、任意で Cursor で開くリンクを備えたラベル付きの行をレンダリングします。
 
 ## Ask AI

@@ -102,6 +102,14 @@ Die Aktion **Im Chat öffnen** öffnet die aktuelle Seite in einem KI-Assistente
 
 Wie "Als Markdown kopieren" erfordert dies keine Einrichtung. Der Assistent ruft die Seite über ihre öffentliche URL ab, es funktioniert also, sobald die Seite bereitgestellt ist.
 
+Um die Aktion anzupassen, setze `ai.openInChat`. `false` blendet sie vollständig aus, und ein Array von Anbieter-Schlüsseln — `"v0"`, `"chatgpt"`, `"claude"`, `"t3"`, `"scira"`, `"cursor"` — zeigt genau diese Anbieter, in der Reihenfolge, in der du sie aufführst:
+
+```ts blume.config.ts lineNumbers
+ai: {
+  openInChat: ["claude", "chatgpt", "cursor"],
+}
+```
+
 Um einen kopierfertigen Prompt direkt in deine Inhalte einzubetten — statt einer seitenweiten Aktion —, verwende die [Prompt-Komponente](/docs/content/components#prompt), die eine beschriftete Zeile mit einer Schaltfläche **Prompt kopieren** und einem optionalen Link zum Öffnen in Cursor rendert.
 
 ## Ask AI
