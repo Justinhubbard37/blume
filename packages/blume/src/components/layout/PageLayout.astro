@@ -40,7 +40,11 @@ import Analytics from "./Analytics.astro";
 import Banner from "./Banner.astro";
 import Favicon from "./Favicon.astro";
 import Fonts from "./Fonts.astro";
-import { BANNER_INIT_SCRIPT, THEME_INIT_SCRIPT } from "./head-scripts.ts";
+import {
+  BANNER_INIT_SCRIPT,
+  SWAP_STYLESHEET_INIT_SCRIPT,
+  THEME_INIT_SCRIPT,
+} from "./head-scripts.ts";
 import Header from "./Header.astro";
 import { currentTabForRoute } from "./nav-utils.ts";
 import WebMcp from "./WebMcp.astro";
@@ -235,6 +239,9 @@ const bannerKey = banner?.dismissible ? banner.key : null;
         swap the DOM in place instead of tearing the document down, so no
         browser paints a blank frame between pages. */}
     <ClientRouter />
+    {/* Loads a next page's body-hoisted CSS before the router swaps it in —
+        see SWAP_STYLESHEET_INIT_SCRIPT for the unstyled-frame failure mode. */}
+    <script is:inline set:html={SWAP_STYLESHEET_INIT_SCRIPT} />
     <title>{pageTitle}</title>
     <Favicon appleIcon={appleIcon} favicon={favicon} />
     <Fonts cssVars={fontCssVars ?? []} />

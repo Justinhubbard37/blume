@@ -33,6 +33,7 @@ import Fonts from "./Fonts.astro";
 import {
   BANNER_INIT_SCRIPT,
   SIDEBAR_SCROLL_INIT_SCRIPT,
+  SWAP_STYLESHEET_INIT_SCRIPT,
   THEME_INIT_SCRIPT,
 } from "./head-scripts.ts";
 import Header from "./Header.astro";
@@ -414,6 +415,9 @@ const bannerKey = banner?.dismissible ? banner.key : null;
         supported, with Astro's simulated fade elsewhere; pairs with the
         prefetch option in the generated Astro config. */}
     <ClientRouter />
+    {/* Loads a next page's body-hoisted CSS before the router swaps it in —
+        see SWAP_STYLESHEET_INIT_SCRIPT for the unstyled-frame failure mode. */}
+    <script is:inline set:html={SWAP_STYLESHEET_INIT_SCRIPT} />
     <title>{pageTitle}</title>
     <Favicon favicon={favicon} appleIcon={appleIcon} />
     <Fonts cssVars={fontCssVars ?? []} />

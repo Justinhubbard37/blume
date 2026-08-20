@@ -42,6 +42,29 @@ export const THEME_INIT_SCRIPT = `(()=>{const m=document.currentScript?.dataset.
 export const BANNER_INIT_SCRIPT = `(()=>{const k=document.currentScript?.dataset.key;if(!k){return;}const apply=()=>{if(localStorage.getItem("blume-banner:"+k)){document.documentElement.setAttribute("data-blume-banner-hidden","");}};apply();document.addEventListener("astro:after-swap",apply);})();`;
 
 /**
+ * Keep the page styled across client-router swaps. Astro hoists the CSS of a
+ * component rendered after the head has streamed (the page's MDX content, the
+ * WebMcp island) into the **body** as `<link rel="stylesheet">` tags — and the
+ * client router only preloads and persists stylesheets it finds in the head.
+ * A swapped-in body `<link>` applies asynchronously, so every navigation to a
+ * page with body CSS painted one or two completely unstyled frames (giant raw
+ * SVG logo, default link colors) before the sheet kicked in — even when the
+ * same sheet was already loaded on the outgoing page, because the swap throws
+ * the old body (and its link element) away.
+ *
+ * Two listeners close the gap. `astro:before-preparation` wraps the router's
+ * loader: after the next document is fetched, any of its body stylesheets not
+ * already in the live head are appended there and awaited, so their rules
+ * apply before the swap. `astro:before-swap` then moves the incoming
+ * document's body stylesheets into its head, where the router's head diff
+ * keeps the already-loaded copy (matched by `href`) instead of re-inserting a
+ * fresh, not-yet-applied link — and drops it again on a later navigation to a
+ * page that doesn't use it. A sheet that fails to load resolves rather than
+ * wedging the navigation; the page renders as it would have without this.
+ */
+export const SWAP_STYLESHEET_INIT_SCRIPT = `(()=>{const sel='body link[rel="stylesheet"]';document.addEventListener("astro:before-preparation",(e)=>{const load=e.loader;e.loader=async()=>{await load();const links=[...e.newDocument.querySelectorAll(sel)].filter((l)=>!document.head.querySelector('link[rel="stylesheet"][href="'+l.getAttribute("href")+'"]'));await Promise.all(links.map((l)=>new Promise((done)=>{const c=document.createElement("link");for(const a of l.attributes){c.setAttribute(a.name,a.value);}c.onload=done;c.onerror=done;document.head.append(c);})));};});document.addEventListener("astro:before-swap",(e)=>{for(const l of e.newDocument.querySelectorAll(sel)){e.newDocument.head.append(l);}});})();`;
+
+/**
  * Keep the sidebar's scroll useful across page changes. The sidebar is its own
  * scroll container, reborn scrolled to the top whenever its markup is rebuilt —
  * on a long sidebar the viewport would visibly jump away from the link you just
