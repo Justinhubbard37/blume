@@ -8,6 +8,7 @@ import { askBackendRuntimeDep } from "../ai/ask.ts";
 import type { AskBackend } from "../ai/ask.ts";
 import { buildHomeLinkHeader } from "../ai/link-headers.ts";
 import { normalizeBasePath } from "../core/base-path.ts";
+import { TOC_HIDDEN_KEY } from "../core/heading-markers.ts";
 import type { ResolvedConfig } from "../core/schema.ts";
 import { BLUME_IGNORE_DIRS } from "../core/sources/watch.ts";
 import { trimChar } from "../core/trim.ts";
@@ -1738,7 +1739,18 @@ const entry = await getEntry(collection as CollectionKey, entryId);
 if (!entry) {
   return new Response(null, { status: 404 });
 }
-const { Content, headings } = await render(entry);
+const { Content, headings: allHeadings, remarkPluginFrontmatter } = await render(entry);
+// \`[!toc]\`-marked headings render on the page but stay out of the table of
+// contents; the heading plugin reports their slugs through the render's
+// frontmatter (see markdown/heading-anchors.ts). Only the plugin's array
+// counts: \`frontmatter.extend\` can declare the same key, and on a page with
+// no headings that user-supplied value would pass straight through.
+const tocHiddenRaw = remarkPluginFrontmatter?.${TOC_HIDDEN_KEY};
+const tocHidden = new Set(Array.isArray(tocHiddenRaw) ? tocHiddenRaw : []);
+const headings =
+  tocHidden.size > 0
+    ? allHeadings.filter((heading) => !tocHidden.has(heading.slug))
+    : allHeadings;
 const frontmatter = entry.data ?? {};
 
 const seo = frontmatter.seo ?? {};
