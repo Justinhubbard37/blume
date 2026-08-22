@@ -359,8 +359,11 @@ interface OptimizeDepsConfig {
  * the Vite root is the generated runtime, so user pages, convention islands,
  * and alias-reachable components all live outside it and are otherwise only
  * crawled when first requested. The compiler runtime rides the include list
- * because it is Babel-injected and no source scan can see it. See the
- * optimizeDeps comment in the generated config for the failure this prevents.
+ * because it is Babel-injected and no source scan can see it. @vitejs/plugin-react
+ * would add it itself, but only when the babel plugin is passed by its bare
+ * name (`getReactCompilerPlugin` is an exact string match) — Blume passes an
+ * absolute path (see `reactIntegration`), which that check never matches. See
+ * the optimizeDeps comment in the generated config for the failure this prevents.
  */
 const resolveOptimizeDeps = (options: {
   aliases: Record<string, string> | undefined;
