@@ -36,6 +36,7 @@ import { BlumeError } from "../core/diagnostics.ts";
 import { writeTextAtomic } from "../core/fs-atomic.ts";
 import { EN_UI, resolveUIStrings } from "../core/i18n-ui.ts";
 import { resolveFallbackLocale } from "../core/i18n.ts";
+import { buildIncludeGraph } from "../core/includes.ts";
 import {
   validateNavTargets,
   validateSearchPopularIcons,
@@ -1772,6 +1773,7 @@ export const generateRuntime = async (
           aliases: resolveTsconfigAliases(context.root),
           askPath,
           config,
+          contentRoot: docsCollection.base,
           contentRoutes: markdownRoutePaths(project),
           context,
           dataPath,
@@ -1955,6 +1957,14 @@ export const generateRuntime = async (
       mixedbreadSearchEndpointTemplate(config.search.mixedbread?.storeId ?? "")
     );
   }
+
+  // The include graph (partial → including pages) behind `includeHmrPlugin`:
+  // editing a partial invalidates every page that splices it. Written even
+  // when empty so the plugin's configured path always resolves.
+  await write(
+    join(srcDir, "generated", "includes.json"),
+    `${JSON.stringify(buildIncludeGraph(project.graph.pages))}\n`
+  );
 
   const rawMarkdown = await buildRawMarkdown(project);
   // The originals behind the rewritten `/blume-assets/content/…` references in

@@ -130,41 +130,42 @@ const mapRoute = (relativePath: string): MappedRoute => {
   return { groups, route, segments };
 };
 
-// CommonMark allows backtick *and* tilde fences. The scanners track which
-// delimiter opened the current fence (`null` when outside one) so a ``` line
-// inside a ~~~ block is content, not a toggle — see `nextFenceState`.
-const CODE_FENCE = /^(?<delimiter>```|~~~)/u;
+// CommonMark allows backtick *and* tilde fences, three or more characters
+// long. The scanners track which delimiter opened the current fence and how
+// long its run was (`null` when outside one), so a ``` line inside a ~~~
+// block — or inside a ````-delimited block (the wrapper `codeBlockLines`
+// emits around code that contains its own ``` fence) — is content, not a
+// toggle. See `nextFenceState`.
+const CODE_FENCE = /^(?<run>`{3,}|~{3,})/u;
 
-/** The fence delimiter opening the current code block, or null outside one. */
-export type FenceState = "```" | "~~~" | null;
+/** The open fence's delimiter char and run length, or null outside one. */
+export type FenceState = { delimiter: "`" | "~"; length: number } | null;
 
 /**
  * Advance the fenced-code state for one line: an opening fence records its
- * delimiter, only the matching delimiter closes it, and any other line leaves
- * the state untouched.
+ * delimiter and run length, only a run of the same character at least as long
+ * closes it (CommonMark), and any other line leaves the state untouched.
  */
 export const nextFenceState = (line: string, fence: FenceState): FenceState => {
   const trimmed = line.trimStart();
-  const delimiter = trimmed.match(CODE_FENCE)?.groups?.delimiter;
-  // The `delimiter` group matches exactly ``` or ~~~; comparing against both
-  // narrows it without a cast.
-  if (delimiter !== "```" && delimiter !== "~~~") {
+  const run = trimmed.match(CODE_FENCE)?.groups?.run;
+  if (run === undefined) {
     return fence;
   }
+  const delimiter = run.startsWith("`") ? ("`" as const) : ("~" as const);
   if (fence === null) {
     // A backtick fence's info string cannot itself contain a backtick
     // (CommonMark) — a line-leading ```inline``` span is a paragraph, and
     // opening a phantom fence on it would swallow every heading and link
     // after it. Tilde fences carry no such rule.
-    if (delimiter === "```") {
-      const run = trimmed.match(/^`+/u)?.[0].length ?? 0;
-      if (trimmed.slice(run).includes("`")) {
-        return fence;
-      }
+    if (delimiter === "`" && trimmed.slice(run.length).includes("`")) {
+      return fence;
     }
-    return delimiter;
+    return { delimiter, length: run.length };
   }
-  return fence === delimiter ? null : fence;
+  return fence.delimiter === delimiter && run.length >= fence.length
+    ? null
+    : fence;
 };
 // A closing hash sequence must be preceded by whitespace (CommonMark), so a
 // heading like `## What is C#` keeps its trailing `#`. Up to 3 leading spaces
@@ -578,8 +579,58 @@ export const extractComponentTags = (body: string): string[] => {
  * extracted from the stripped body, but diagnostics point into the raw
  * document — recorded lines must shift by this offset to match it.
  */
-const strippedLineOffset = (raw: string | undefined, body: string): number =>
+export const strippedLineOffset = (
+  raw: string | undefined,
+  body: string
+): number =>
   raw ? Math.max(0, raw.split("\n").length - body.split("\n").length) : 0;
+
+/**
+ * Map links extracted from include-expanded text back to the file and raw
+ * line each expanded line came from, so a broken link inside a partial is
+ * reported against the partial. Links whose origin is the page's own source
+ * carry no `file` override (origins already hold raw-file lines).
+ */
+const remapExpandedLinks = (
+  links: PageLink[],
+  origins: { file: string; line: number }[],
+  sourcePath: string | undefined
+): PageLink[] =>
+  links.map((link) => {
+    const origin = origins[link.line - 1];
+    if (!origin) {
+      return link;
+    }
+    const remapped: PageLink = { ...link, line: origin.line };
+    if (origin.file !== sourcePath) {
+      remapped.file = origin.file;
+    }
+    return remapped;
+  });
+
+/** The entry's transitively included files, when the scan expanded any. */
+const entryIncludes = (entry: SourceEntry): string[] | undefined =>
+  entry.expanded && entry.expanded.includes.length > 0
+    ? entry.expanded.includes
+    : undefined;
+
+/**
+ * Extract an entry's links for validation. When the scan expanded includes,
+ * extraction runs over the expanded text (origins already hold raw-file
+ * lines); otherwise over the stripped body, shifted by the stripped front
+ * matter block's height.
+ */
+const entryLinks = (entry: SourceEntry): PageLink[] =>
+  entry.expanded
+    ? remapExpandedLinks(
+        extractLinks(entry.expanded.text),
+        entry.expanded.origins,
+        entry.sourcePath
+      )
+    : extractLinks(
+        entry.body.text,
+        strippedLineOffset(entry.raw, entry.body.text)
+      );
 
 const deriveTitle = (
   meta: PageMeta,
@@ -821,14 +872,18 @@ export const normalizeEntry = (
   // version-specific for free.
   const { segments, groups, route: versionKey } = mapRoute(routeInput);
   const logicalRoute = versionizeRoute(versionKey, version);
-  const headings = extractHeadings(entry.body.text);
+  // Extraction runs on the include-expanded body when the scan expanded one,
+  // so a partial's headings anchor-index and TOC under every including page
+  // and its components register for the runtime import map.
+  const bodyText = entry.expanded?.text ?? entry.body.text;
+  const headings = extractHeadings(bodyText);
   const { staged } = ctx.source;
 
   const base = {
     body: staged ? { format, text: entry.raw ?? entry.body.text } : undefined,
     collection: staged ? "staged" : undefined,
     componentsUsed:
-      format === "mdx" ? extractComponentTags(entry.body.text) : undefined,
+      format === "mdx" ? extractComponentTags(bodyText) : undefined,
     contentType: meta.type ?? ctx.defaultType,
     custom: parsed.custom,
     description: meta.description,
@@ -838,11 +893,9 @@ export const normalizeEntry = (
     groups,
     headings,
     id: `${ctx.source.name}:${entry.ref}`,
+    includes: entryIncludes(entry),
     lastModified: meta.lastModified ?? entry.lastModified,
-    links: extractLinks(
-      entry.body.text,
-      strippedLineOffset(entry.raw, entry.body.text)
-    ),
+    links: entryLinks(entry),
     meta,
     navPath,
     segments,
