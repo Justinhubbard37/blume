@@ -2310,6 +2310,24 @@ const localeMeta = i18n
   : null;
 const dir = localeMeta?.dir ?? "ltr";
 const htmlLang = i18n ? i18n.defaultLocale : "en";
+
+// Recovery links, so a reader — or an agent that followed a stale URL — can
+// get back on track without guessing: every top-level section, then the
+// machine-readable indexes the build emits (the sitemap only exists with a
+// \`deployment.site\`; llms.txt only when \`ai.llmsTxt\` is on). Tabs link to
+// their resolved target when the section has no index page of its own.
+const suggestions = [
+  ...data.navigation.tabs.map((tab) => ({
+    href: withBase(tab.href ?? tab.path),
+    label: tab.label,
+  })),
+  ...(data.config.discovery.sitemap
+    ? [{ href: withBase("/sitemap.xml"), label: nf.sitemap }]
+    : []),
+  ...(data.config.discovery.llmsTxt
+    ? [{ href: withBase("/llms.txt"), label: nf.llms }]
+    : []),
+];
 ---
 
 <PageLayout
@@ -2339,6 +2357,25 @@ const htmlLang = i18n ? i18n.defaultLocale : "en";
       class="mt-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
       href={withBase("/")}>{nf.home}</a
     >
+    {
+      suggestions.length > 0 && (
+        <nav aria-label={nf.suggestions} class="mt-8 text-sm">
+          <h2 class="font-medium text-foreground">{nf.suggestions}</h2>
+          <ul class="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2">
+            {suggestions.map((link) => (
+              <li>
+                <a
+                  class="text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                  href={link.href}
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )
+    }
   </div>
 </PageLayout>
 `;

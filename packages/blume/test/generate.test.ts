@@ -234,7 +234,60 @@ describe("buildRuntimeData", () => {
     expect(data.config.discovery).toStrictEqual({
       agentReadability: true,
       llmsTxt: true,
+      sitemap: false,
     });
+  });
+
+  it("serializes the JSON-LD identity, null when neither node is configured", async () => {
+    const plain = JSON.parse(
+      buildRuntimeData(
+        await scanProject(await writeProject({ "docs/index.md": "# Home\n" }))
+      )
+    );
+    expect(plain.config.identity).toBeNull();
+
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": `export default {
+  seo: {
+    organization: { email: "hello@example.com", logo: "/logo.svg" },
+    software: { license: "MIT", price: 0 },
+  },
+};
+`,
+        "docs/index.md": "# Home\n",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.identity).toStrictEqual({
+      organization: {
+        contactType: "customer support",
+        email: "hello@example.com",
+        logo: "/logo.svg",
+        sameAs: [],
+      },
+      software: {
+        applicationCategory: "DeveloperApplication",
+        license: "MIT",
+        price: 0,
+        priceCurrency: "USD",
+        sameAs: [],
+      },
+    });
+  });
+
+  it("flags the sitemap for the 404 page only when a site makes one possible", async () => {
+    const project = await scanProject(
+      await writeProject({
+        "blume.config.ts": `export default {
+  deployment: { site: "https://docs.example.com" },
+};
+`,
+        "docs/index.md": "# Home\n",
+      })
+    );
+    const data = JSON.parse(buildRuntimeData(project));
+    expect(data.config.discovery.sitemap).toBe(true);
   });
 
   it("carries discovery opt-outs into runtime data", async () => {
@@ -252,6 +305,7 @@ describe("buildRuntimeData", () => {
     expect(data.config.discovery).toStrictEqual({
       agentReadability: false,
       llmsTxt: false,
+      sitemap: false,
     });
   });
 

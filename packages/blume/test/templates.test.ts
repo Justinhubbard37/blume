@@ -529,6 +529,29 @@ describe("notFoundPageTemplate", () => {
     expect(out).toContain("{nf.home}");
   });
 
+  it("offers recovery links: every tab, then the sitemap and llms.txt when they exist", () => {
+    const out = notFoundPageTemplate();
+    // Tabs link to their resolved target (a section without an index page
+    // resolves to its first page), falling back to the section path.
+    expect(out).toContain(
+      "...data.navigation.tabs.map((tab) => ({\n    href: withBase(tab.href ?? tab.path),\n    label: tab.label,\n  }))"
+    );
+    expect(out).toContain(
+      '...(data.config.discovery.sitemap\n    ? [{ href: withBase("/sitemap.xml"), label: nf.sitemap }]\n    : [])'
+    );
+    expect(out).toContain(
+      '...(data.config.discovery.llmsTxt\n    ? [{ href: withBase("/llms.txt"), label: nf.llms }]\n    : [])'
+    );
+    // Rendered as a labeled nav under its own heading, and skipped entirely
+    // when nothing is linkable.
+    expect(out).toContain("suggestions.length > 0 && (");
+    expect(out).toContain(
+      '<nav aria-label={nf.suggestions} class="mt-8 text-sm">'
+    );
+    expect(out).toContain("{nf.suggestions}</h2>");
+    expect(out).toContain("{suggestions.map((link) => (");
+  });
+
   it("routes the home link through withBase, like the catch-all", () => {
     const out = notFoundPageTemplate();
     expect(out).toContain(

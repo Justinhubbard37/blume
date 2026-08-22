@@ -794,6 +794,20 @@ const askEndpointSchema = z
     }
   );
 
+/** The object form of `ai.llmsTxt`; a bare boolean normalizes onto it. */
+const llmsTxtObjectSchema = z.strictObject({
+  /**
+   * Markdown inserted after the title and summary, before the page sections:
+   * the llms.txt spec's "details" slot. The place to tell agents when to use
+   * the product and how to call it; trimmed, and dropped when blank.
+   */
+  details: z.string().trim().min(1).optional(),
+  enabled: z.boolean().default(true),
+  openapi: z.boolean().default(true),
+});
+
+type LlmsTxtResolved = z.output<typeof llmsTxtObjectSchema>;
+
 const aiConfigSchema = z.strictObject({
   ask: z
     .strictObject({
@@ -857,19 +871,16 @@ const aiConfigSchema = z.strictObject({
   /**
    * `llms.txt`/`llms-full.txt` emission. A bare boolean toggles it; the object
    * form adds `openapi: false` to keep generated API reference pages out of
-   * both files (e.g. when the configured spec is example content).
+   * both files (e.g. when the configured spec is example content) and
+   * `details`, free-form Markdown placed after the summary — the llms.txt
+   * spec's details block, where a site tells agents when to reach for it.
    */
   llmsTxt: z
-    .union([
-      z.boolean(),
-      z.strictObject({
-        enabled: z.boolean().default(true),
-        openapi: z.boolean().default(true),
-      }),
-    ])
+    .union([z.boolean(), llmsTxtObjectSchema])
     .default(true)
-    .transform((value) =>
-      isBoolean(value) ? { enabled: value, openapi: true } : value
+    .transform(
+      (value): LlmsTxtResolved =>
+        isBoolean(value) ? { enabled: value, openapi: true } : value
     ),
   // Serializers for the agent-facing Markdown downlevel (the `.md` mirror,
   // llms-full.txt, MCP get_page), keyed by JSX name. Functions live here —
@@ -1346,6 +1357,50 @@ const contentSignalsSchema = z
     return value;
   });
 
+/** A schema.org `PostalAddress`, any part of which may be given. */
+const postalAddressSchema = z.strictObject({
+  addressCountry: z.string().optional(),
+  addressLocality: z.string().optional(),
+  addressRegion: z.string().optional(),
+  postalCode: z.string().optional(),
+  streetAddress: z.string().optional(),
+});
+
+/**
+ * `seo.organization`: the organization behind the site, emitted on every page
+ * as a schema.org `Organization` node (see `seo/jsonld.ts`). Name and URL
+ * default to the site's; contact details become a `ContactPoint`, the address
+ * a `PostalAddress` — what agents check to verify a business.
+ */
+const organizationConfigSchema = z.strictObject({
+  address: postalAddressSchema.optional(),
+  contactType: z.string().default("customer support"),
+  email: z.email().optional(),
+  logo: z.string().optional(),
+  name: z.string().optional(),
+  sameAs: z.array(z.url()).default([]),
+  telephone: z.string().optional(),
+  url: z.url().optional(),
+});
+
+/**
+ * `seo.software`: the product the site documents, emitted on the homepage as
+ * a schema.org `SoftwareApplication` node. `true` takes every default (name
+ * and description from the site, category `DeveloperApplication`).
+ */
+const softwareConfigSchema = z.strictObject({
+  applicationCategory: z.string().default("DeveloperApplication"),
+  description: z.string().optional(),
+  license: z.string().optional(),
+  name: z.string().optional(),
+  operatingSystem: z.string().optional(),
+  price: z.union([z.number().nonnegative(), z.string()]).optional(),
+  priceCurrency: z.string().default("USD"),
+  sameAs: z.array(z.url()).default([]),
+});
+
+type SoftwareResolved = z.output<typeof softwareConfigSchema>;
+
 /** Discoverability features: OG images, feeds, sitemap, structured data. */
 const seoConfigSchema = z.strictObject({
   /**
@@ -1357,11 +1412,23 @@ const seoConfigSchema = z.strictObject({
   /** robots.txt `Content-Signal` usage declaration (on by default). */
   contentSignals: contentSignalsSchema.prefault(true),
   og: ogConfigSchema.default({}),
+  /** The organization behind the site, as an `Organization` JSON-LD node. */
+  organization: organizationConfigSchema.optional(),
   /** Generate robots.txt (with a Sitemap reference when available). */
   robots: z.boolean().default(true),
   rss: rssConfigSchema.prefault({}),
   /** Generate sitemap.xml (requires deployment.site). */
   sitemap: z.boolean().default(true),
+  /** The documented product, as a homepage `SoftwareApplication` node. */
+  software: z
+    .union([z.boolean(), softwareConfigSchema])
+    .optional()
+    .transform((value): SoftwareResolved | undefined => {
+      if (value === true) {
+        return softwareConfigSchema.parse({});
+      }
+      return value === false ? undefined : value;
+    }),
   /** Emit schema.org JSON-LD in each page's <head>. */
   structuredData: z.boolean().default(true),
   /** X (Twitter) account attribution for share cards. */

@@ -702,6 +702,22 @@ export interface AskConfig {
 
 /** What the `llms.txt`/`llms-full.txt` files include. */
 export interface LlmsTxtConfig {
+  /**
+   * Markdown placed after the title and summary in `llms.txt`, before the
+   * page sections — the llms.txt spec's "details" block. Use it to tell
+   * agents when to reach for the product and how to call it (a "When to use"
+   * heading, the install command, the package name). Blank values are
+   * dropped.
+   *
+   * ```ts
+   * ai: {
+   *   llmsTxt: {
+   *     details: "## When to use Acme\n\nUse Acme when…",
+   *   },
+   * }
+   * ```
+   */
+  details?: string;
   /** Emit `llms.txt` and `llms-full.txt`. Defaults to `true`. */
   enabled?: boolean;
   /**
@@ -1109,6 +1125,68 @@ export interface OgConfig {
   titles?: Record<string, string>;
 }
 
+/** A schema.org `PostalAddress`; give whichever parts apply. */
+export interface PostalAddressConfig {
+  /** Country name or ISO 3166-1 alpha-2 code (`"US"`). */
+  addressCountry?: string;
+  /** City or locality. */
+  addressLocality?: string;
+  /** State, province, or region. */
+  addressRegion?: string;
+  postalCode?: string;
+  streetAddress?: string;
+}
+
+/**
+ * The organization behind the site, emitted in every page's JSON-LD as an
+ * `Organization` node that the WebSite and article nodes cite as publisher.
+ * Contact details become a `ContactPoint` and the address a `PostalAddress` —
+ * the fields AI agents check to verify a business before recommending it.
+ * Requires `deployment.site` (the node needs an absolute identifier).
+ */
+export interface OrganizationConfig {
+  /** Postal address, emitted as a `PostalAddress` when any part is given. */
+  address?: PostalAddressConfig;
+  /** `ContactPoint.contactType` for the email/telephone. Defaults to `"customer support"`. */
+  contactType?: string;
+  /** Public contact email. */
+  email?: string;
+  /** Logo: an absolute URL or a root-relative path (`"/logo.svg"`). */
+  logo?: string;
+  /** Organization name. Defaults to the site title. */
+  name?: string;
+  /** Profile URLs that identify the organization (GitHub, X, LinkedIn, …). */
+  sameAs?: string[];
+  /** Public contact telephone number. */
+  telephone?: string;
+  /** Organization website. Defaults to the site origin. */
+  url?: string;
+}
+
+/**
+ * The product the site documents, emitted on the homepage as a
+ * `SoftwareApplication` JSON-LD node — the identity type that tells agents
+ * what the site is about. Requires `deployment.site`.
+ */
+export interface SoftwareConfig {
+  /** schema.org application category. Defaults to `"DeveloperApplication"`. */
+  applicationCategory?: string;
+  /** Product description. Defaults to the site description. */
+  description?: string;
+  /** License URL or SPDX identifier (`"MIT"`). */
+  license?: string;
+  /** Product name. Defaults to the site title. */
+  name?: string;
+  /** Supported platform(s), e.g. `"Node.js 22+"`. */
+  operatingSystem?: string;
+  /** Price, emitted as an `Offer`; `0` marks the software free. */
+  price?: number | string;
+  /** Currency of `price` (ISO 4217). Defaults to `"USD"`. */
+  priceCurrency?: string;
+  /** Package registry, repository, and profile URLs for the product. */
+  sameAs?: string[];
+}
+
 /** Discoverability: OG images, feeds, sitemap, robots, and structured data. */
 export interface SeoConfig {
   /**
@@ -1120,12 +1198,39 @@ export interface SeoConfig {
   contentSignals?: ContentSignalsConfig;
   /** Per-page Open Graph image generation. */
   og?: OgConfig;
+  /**
+   * The organization behind the site, added to every page's JSON-LD as an
+   * `Organization` node with contact point and address.
+   *
+   * ```ts
+   * seo: {
+   *   organization: {
+   *     email: "hello@acme.com",
+   *     logo: "/logo.svg",
+   *     sameAs: ["https://github.com/acme", "https://x.com/acme"],
+   *   },
+   * }
+   * ```
+   */
+  organization?: OrganizationConfig;
   /** Generate robots.txt (with a Sitemap reference when available). Defaults to `true`. */
   robots?: boolean;
   /** RSS/Atom feeds. */
   rss?: RssConfig;
   /** Generate sitemap.xml (requires `deployment.site`). Defaults to `true`. */
   sitemap?: boolean;
+  /**
+   * The documented product, added to the homepage's JSON-LD as a
+   * `SoftwareApplication` node. `true` takes every default (name and
+   * description from the site); the object form fills in the rest.
+   *
+   * ```ts
+   * seo: {
+   *   software: { license: "MIT", operatingSystem: "Node.js 22+", price: 0 },
+   * }
+   * ```
+   */
+  software?: boolean | SoftwareConfig;
   /** Emit schema.org JSON-LD in each page's `<head>`. Defaults to `true`. */
   structuredData?: boolean;
   /**

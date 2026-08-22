@@ -1214,6 +1214,8 @@ export const buildRuntimeData = (project: BlumeProject): string => {
       discovery: {
         agentReadability: config.seo.agentReadability,
         llmsTxt: config.ai.llmsTxt.enabled,
+        // Mirrors `buildSitemapFiles`: no site, no sitemap.
+        sitemap: config.seo.sitemap && Boolean(config.deployment.site),
       },
       favicon: resolveFavicon(project),
       feedback: config.feedback,
@@ -1231,6 +1233,15 @@ export const buildRuntimeData = (project: BlumeProject): string => {
             })),
           }
         : null,
+      // `undefined` members drop out of the JSON snapshot; the null keeps the
+      // "nothing configured" case explicit for the layouts.
+      identity:
+        config.seo.organization || config.seo.software
+          ? {
+              organization: config.seo.organization,
+              software: config.seo.software,
+            }
+          : null,
       imageZoom: config.markdown.imageZoom,
       logo,
       mcp: config.ai.mcp.enabled

@@ -30,6 +30,7 @@
     "@astrojs/vercel": "^11.0.0",
     "@changesets/cli": "^2.27.0",
     "@mixedbread/sdk": "^0.76.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@notionhq/client": "^2.2.15",
     "@openrouter/ai-sdk-provider": "^3.0.0",
     "@orama/orama": "^3.1.18",
@@ -44,6 +45,7 @@
     "algoliasearch": "^5.55.0",
     "astro": "^7.2.3",
     "flexsearch": "^0.8.0",
+    "html-escaper": "^3.0.3",
     "husky": "^9.1.7",
     "katex": "^0.18.1",
     "oxfmt": "^0.61.0",
@@ -57,7 +59,9 @@
     "turbo": "^2.3.0",
     "typescript": "^6.0.3",
     "typesense": "^3.0.0",
-    "ultracite": "^7.10.5"
+    "ufo": "^1.6.4",
+    "ultracite": "^7.10.5",
+    "zod": "^4.3.6"
   },
   "engines": {
     "node": ">=22.12.0"
